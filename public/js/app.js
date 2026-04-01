@@ -470,6 +470,21 @@ function switchTab(tabName) {
     if (tabName === 'proxies') loadProxies();
 }
 
+// ==================== TEST MESSAGE ====================
+
+function sendTestMessage() {
+    fetch('/api/test-message', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`Teste enviado: ${data.from} → ${data.to}`, 'success');
+            } else {
+                showToast(data.error || 'Erro ao enviar teste', 'danger');
+            }
+        })
+        .catch(() => showToast('Erro de conexao', 'danger'));
+}
+
 // ==================== PROXIES ====================
 
 function loadProxies() {

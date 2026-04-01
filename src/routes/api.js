@@ -128,6 +128,38 @@ module.exports = function(sessionManager, warmingEngine) {
         res.json(db.getWarmingGroups());
     });
 
+    // ==================== TEST ====================
+
+    // Send a test message between two chips
+    router.post('/test-message', async (req, res) => {
+        try {
+            const chips = db.getAllChips().filter(c => c.status === 'warming' || c.status === 'connected');
+            const connected = chips.filter(c => sessionManager.isConnected(c.session_id) && c.phone);
+            if (connected.length < 2) {
+                return res.status(400).json({ error: 'Precisa de pelo menos 2 chips conectados com numero' });
+            }
+            const sender = connected[0];
+            const receiver = connected[1];
+            const socket = sessionManager.getSocket(sender.session_id);
+            if (!socket?.user) return res.status(400).json({ error: 'Socket do remetente nao encontrado' });
+
+            const msg = 'Oi! Teste de aquecimento funcionando 🔥';
+            const jid = receiver.phone + '@s.whatsapp.net';
+
+            await socket.sendPresenceUpdate('composing', jid);
+            await new Promise(r => setTimeout(r, 1500));
+            await socket.sendPresenceUpdate('paused', jid);
+            await socket.sendMessage(jid, { text: msg });
+
+            db.incrementMessagesSent(sender.id);
+            db.logActivity(sender.id, 'private_chat', receiver.phone, msg);
+
+            res.json({ success: true, from: sender.phone, to: receiver.phone, message: msg });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // ==================== PROXIES ====================
 
     // List all proxies
