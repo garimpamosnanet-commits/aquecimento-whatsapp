@@ -89,11 +89,9 @@ body::before {
 }
 
 .header-left .logo-img {
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
-    object-fit: cover;
-    box-shadow: var(--shadow-sm);
+    height: 38px;
+    width: auto;
+    object-fit: contain;
 }
 
 .header-left .brand {
