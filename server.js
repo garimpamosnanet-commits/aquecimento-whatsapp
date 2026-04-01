@@ -72,7 +72,7 @@ app.get('/login', (req, res) => {
 // Auth middleware - protect everything except login
 app.use((req, res, next) => {
     // Allow login page and its assets
-    if (req.path === '/login' || req.path === '/login.html' || req.path === '/api/login') {
+    if (req.path === '/login' || req.path === '/login.html' || req.path === '/api/login' || req.path === '/ks-logo.png' || req.path === '/css/style.css') {
         return next();
     }
     if (!isAuthenticated(req)) {
