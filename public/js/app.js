@@ -414,6 +414,13 @@ function showToast(message, type = 'accent') {
     }, 4000);
 }
 
+// ==================== LOGOUT ====================
+
+function doLogout() {
+    fetch('/api/logout', { method: 'POST' })
+        .then(() => window.location.href = '/login');
+}
+
 // ==================== KEYBOARD SHORTCUTS ====================
 
 document.addEventListener('keydown', (e) => {

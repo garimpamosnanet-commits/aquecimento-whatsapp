@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 const path = require('path');
 
@@ -14,8 +15,82 @@ const io = new Server(server, {
     cors: { origin: '*' }
 });
 
+// ==================== AUTH CONFIG ====================
+const AUTH_USER = process.env.AUTH_USER || 'admin';
+const AUTH_PASS = process.env.AUTH_PASS || 'admin123';
+const sessions = new Map(); // token -> expiry
+
+function generateToken() {
+    return crypto.randomBytes(32).toString('hex');
+}
+
+function parseCookies(cookieHeader) {
+    const cookies = {};
+    if (!cookieHeader) return cookies;
+    cookieHeader.split(';').forEach(c => {
+        const [key, val] = c.trim().split('=');
+        if (key && val) cookies[key] = val;
+    });
+    return cookies;
+}
+
+function isAuthenticated(req) {
+    const cookies = parseCookies(req.headers.cookie);
+    const token = cookies.auth_token;
+    if (!token || !sessions.has(token)) return false;
+    if (sessions.get(token) < Date.now()) {
+        sessions.delete(token);
+        return false;
+    }
+    return true;
+}
+
 // Middleware
 app.use(express.json());
+
+// Login endpoint (before auth middleware)
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    if (username === AUTH_USER && password === AUTH_PASS) {
+        const token = generateToken();
+        const expiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
+        sessions.set(token, expiry);
+        res.setHeader('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${7 * 24 * 60 * 60}`);
+        return res.json({ ok: true });
+    }
+    res.status(401).json({ error: 'Credenciais invalidas' });
+});
+
+// Login page (public)
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Auth middleware - protect everything except login
+app.use((req, res, next) => {
+    // Allow login page and its assets
+    if (req.path === '/login' || req.path === '/login.html' || req.path === '/api/login') {
+        return next();
+    }
+    if (!isAuthenticated(req)) {
+        // API calls get 401, page requests get redirected
+        if (req.path.startsWith('/api/') || req.path.startsWith('/socket.io/')) {
+            return res.status(401).json({ error: 'Nao autorizado' });
+        }
+        return res.redirect('/login');
+    }
+    next();
+});
+
+// Logout endpoint
+app.post('/api/logout', (req, res) => {
+    const cookies = parseCookies(req.headers.cookie);
+    if (cookies.auth_token) sessions.delete(cookies.auth_token);
+    res.setHeader('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Max-Age=0');
+    res.json({ ok: true });
+});
+
+// Static files (after auth middleware)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize components
@@ -24,6 +99,17 @@ const warmingEngine = new WarmingEngine(sessionManager, io);
 
 // Routes
 app.use('/api', apiRoutes(sessionManager, warmingEngine));
+
+// WebSocket auth
+io.use((socket, next) => {
+    const cookieHeader = socket.handshake.headers.cookie;
+    const cookies = parseCookies(cookieHeader);
+    const token = cookies.auth_token;
+    if (token && sessions.has(token) && sessions.get(token) > Date.now()) {
+        return next();
+    }
+    next(new Error('Nao autorizado'));
+});
 
 // WebSocket
 setupWebSocket(io, sessionManager, warmingEngine);
