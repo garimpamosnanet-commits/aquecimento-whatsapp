@@ -424,7 +424,7 @@ class WarmingEngine {
         const daysDiff = Math.floor((now - connectedDate) / (1000 * 60 * 60 * 24));
 
         let newPhase = chip.phase;
-        if (daysDiff >= 15) newPhase = 4;
+        if (daysDiff >= 13) newPhase = 4;
         else if (daysDiff >= 8) newPhase = 3;
         else if (daysDiff >= 4) newPhase = 2;
         else newPhase = 1;

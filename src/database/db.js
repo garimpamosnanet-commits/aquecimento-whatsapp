@@ -13,10 +13,10 @@ function loadDb() {
             warming_groups: [],
             warming_group_members: [],
             warming_config: [
-                { id: 1, phase: 1, daily_limit: 15, min_delay_seconds: 120, max_delay_seconds: 600, active_hour_start: 9, active_hour_end: 22, enabled_actions: 'private_chat', description: 'Fase 1 (Dia 1-3): Leve - poucas mensagens de texto' },
-                { id: 2, phase: 2, daily_limit: 40, min_delay_seconds: 60, max_delay_seconds: 300, active_hour_start: 8, active_hour_end: 23, enabled_actions: 'private_chat,audio,group_chat', description: 'Fase 2 (Dia 4-7): Medio - mais mensagens, audio, grupos' },
-                { id: 3, phase: 3, daily_limit: 80, min_delay_seconds: 30, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 23, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction', description: 'Fase 3 (Dia 8-14): Intenso - todos os tipos' },
-                { id: 4, phase: 4, daily_limit: 50, min_delay_seconds: 60, max_delay_seconds: 300, active_hour_start: 9, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction', description: 'Fase 4 (Dia 15+): Manutencao - atividade moderada' }
+                { id: 1, phase: 1, daily_limit: 50, min_delay_seconds: 60, max_delay_seconds: 300, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat', description: 'Fase 1 (Dia 1-3): Inicio - textos entre chips' },
+                { id: 2, phase: 2, daily_limit: 150, min_delay_seconds: 30, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 23, enabled_actions: 'private_chat,audio,group_chat', description: 'Fase 2 (Dia 4-7): Medio - audio, grupos' },
+                { id: 3, phase: 3, daily_limit: 250, min_delay_seconds: 20, max_delay_seconds: 120, active_hour_start: 7, active_hour_end: 23, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction', description: 'Fase 3 (Dia 8-12): Intenso - todos os tipos' },
+                { id: 4, phase: 4, daily_limit: 200, min_delay_seconds: 30, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction', description: 'Fase 4 (Dia 13-15): Finalizacao + manutencao' }
             ],
             proxies: [],
             _nextId: { chips: 1, activity_log: 1, warming_groups: 1, proxies: 1 }
@@ -34,7 +34,19 @@ function saveDb(data) {
 }
 
 function getDb() {
-    return loadDb();
+    const data = loadDb();
+    // Migrate: update warming config to 15-day schedule
+    if (data.warming_config && data.warming_config[0] && data.warming_config[0].daily_limit === 15) {
+        data.warming_config = [
+            { id: 1, phase: 1, daily_limit: 50, min_delay_seconds: 60, max_delay_seconds: 300, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat', description: 'Fase 1 (Dia 1-3): Inicio - textos entre chips' },
+            { id: 2, phase: 2, daily_limit: 150, min_delay_seconds: 30, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 23, enabled_actions: 'private_chat,audio,group_chat', description: 'Fase 2 (Dia 4-7): Medio - audio, grupos' },
+            { id: 3, phase: 3, daily_limit: 250, min_delay_seconds: 20, max_delay_seconds: 120, active_hour_start: 7, active_hour_end: 23, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction', description: 'Fase 3 (Dia 8-12): Intenso - todos os tipos' },
+            { id: 4, phase: 4, daily_limit: 200, min_delay_seconds: 30, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction', description: 'Fase 4 (Dia 13-15): Finalizacao + manutencao' }
+        ];
+        saveDb(data);
+        console.log('[DB] Config migrada para schedule de 15 dias');
+    }
+    return data;
 }
 
 function nextId(collection) {
