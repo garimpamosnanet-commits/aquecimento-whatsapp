@@ -1,19 +1,43 @@
-// ==================== SOCKET CONNECTION ====================
+// ==================== KS DIGITAL — COMMAND CENTER ====================
 const socket = io();
 let chips = [];
 let currentQRSessionId = null;
 
-// ==================== SOCKET EVENTS ====================
+// ==================== ANIMATED COUNTER ====================
+function animateValue(el, start, end, duration) {
+    if (start === end) return;
+    const range = end - start;
+    const startTime = performance.now();
+    function update(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // easeOutExpo
+        const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+        const current = Math.round(start + range * ease);
+        el.textContent = formatNumber(current);
+        if (progress < 1) requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+}
 
+function updateStat(id, newValue) {
+    const el = document.getElementById(id);
+    const current = parseInt(el.dataset.raw || '0');
+    el.dataset.raw = newValue;
+    animateValue(el, current, newValue, 600);
+}
+
+// ==================== SOCKET EVENTS ====================
 socket.on('connect', () => {
-    console.log('Conectado ao servidor');
+    console.log('[KS] Conectado ao servidor');
+    addFeedItem('system', 'Sistema', 'Conectado ao servidor', 'connect');
 });
 
 socket.on('stats', (stats) => {
-    document.getElementById('stat-total').textContent = stats.total;
-    document.getElementById('stat-connected').textContent = stats.connected;
-    document.getElementById('stat-warming').textContent = stats.warming;
-    document.getElementById('stat-messages').textContent = formatNumber(stats.totalMessages);
+    updateStat('stat-total', stats.total);
+    updateStat('stat-connected', stats.connected);
+    updateStat('stat-warming', stats.warming);
+    updateStat('stat-messages', stats.totalMessages);
 });
 
 socket.on('chips_list', (list) => {
@@ -45,31 +69,50 @@ socket.on('qr', ({ sessionId, chipId, qr }) => {
 socket.on('connected', ({ sessionId, chipId, phone }) => {
     if (currentQRSessionId === sessionId) {
         const qrImage = document.getElementById('qr-image');
-        qrImage.innerHTML = `<div style="color:#34a853;font-size:48px">✓</div><div style="margin-top:8px;color:#333">Conectado!<br><small>${phone || ''}</small></div>`;
+        qrImage.innerHTML = `<div style="color:#22C55E;font-size:48px">✓</div><div style="margin-top:8px;color:#666;font-size:14px">Conectado!<br><small>${phone || ''}</small></div>`;
         document.getElementById('btn-next-qr').style.display = 'inline-flex';
     }
     showToast(`Chip ${phone || 'novo'} conectado!`, 'success');
+    addFeedItem(phone || 'Novo chip', 'Conectado com sucesso', null, 'connect');
 });
 
 socket.on('logged_out', ({ sessionId, chipId }) => {
     showToast('Chip deslogado pelo WhatsApp', 'danger');
+    addFeedItem('Chip', 'Deslogado pelo WhatsApp', null, 'error');
 });
 
 socket.on('activity', (data) => {
     addActivityItem(data);
+    // Also add to live feed
+    const chip = chips.find(c => c.id === data.chipId);
+    const label = chip?.phone || chip?.name || `Chip ${data.chipId}`;
+    addFeedItem(label, getActionLabel(data.action), data.message, getActionClass(data.action));
 });
 
 socket.on('phase_change', ({ chipId, phase, days }) => {
     const chip = chips.find(c => c.id === chipId);
-    showToast(`${chip?.phone || 'Chip'} avancou para Fase ${phase} (${days} dias)`, 'warning');
+    const name = chip?.phone || 'Chip';
+    showToast(`${name} avancou para Fase ${phase} (${days} dias)`, 'warning');
+    addFeedItem(name, `Fase ${phase} (${days}d)`, null, 'system');
 });
 
 socket.on('error', ({ message }) => {
     showToast(message, 'danger');
 });
 
-// ==================== RENDER CHIPS ====================
+// ==================== TEMPERATURE SYSTEM ====================
+function getTemperature(chip) {
+    const progress = chip.messages_target > 0
+        ? Math.min(100, Math.round((chip.messages_sent / chip.messages_target) * 100))
+        : 0;
 
+    if (progress < 15) return { level: 'cold', label: 'Frio', fires: '❄️', cls: 'cold' };
+    if (progress < 40) return { level: 'warming', label: 'Aquecendo', fires: '🔥', cls: 'warming' };
+    if (progress < 75) return { level: 'hot', label: 'Quente', fires: '🔥🔥', cls: 'hot' };
+    return { level: 'ready', label: 'Pronto', fires: '🔥🔥🔥', cls: 'ready' };
+}
+
+// ==================== RENDER CHIPS ====================
 function renderChips() {
     const grid = document.getElementById('chips-grid');
 
@@ -78,7 +121,7 @@ function renderChips() {
             <div class="empty-state">
                 <div class="empty-icon">📱</div>
                 <h3>Nenhum chip cadastrado</h3>
-                <p>Clique em "+ Adicionar Chip" para comecar</p>
+                <p>Clique em "+ Chip" para conectar o primeiro</p>
             </div>`;
         return;
     }
@@ -88,34 +131,49 @@ function renderChips() {
             ? Math.min(100, Math.round((chip.messages_sent / chip.messages_target) * 100))
             : 0;
         const remaining = Math.max(0, chip.messages_target - chip.messages_sent);
+        const temp = getTemperature(chip);
+        const initial = (chip.phone || chip.name || 'C')[0].toUpperCase();
+        const avatarClass = chip.status === 'warming' ? 'warming' : chip.status === 'disconnected' ? 'disconnected' : '';
 
         return `
-        <div class="chip-card" id="chip-${chip.id}">
+        <div class="chip-card status-${chip.status}" id="chip-${chip.id}">
             <div class="chip-header">
-                <div>
-                    <div class="chip-name">${chip.name || 'Chip ' + chip.id}</div>
-                    <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>
+                <div class="chip-info">
+                    <div class="chip-avatar ${avatarClass}">${initial}</div>
+                    <div>
+                        <div class="chip-name">${chip.name || 'Chip ' + chip.id}</div>
+                        <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>
+                    </div>
                 </div>
-                <div class="chip-status status-${chip.status}">
+                <div class="chip-status">
                     <span class="dot"></span>
                     ${getStatusLabel(chip.status)}
                 </div>
             </div>
 
-            <div class="chip-meta">
-                <span>📊 Fase <span class="badge badge-phase-${chip.phase}">${chip.phase}</span></span>
-                <span>💬 ${formatNumber(chip.messages_sent)} msgs</span>
-                ${chip.connected_at ? `<span>📅 ${formatDate(chip.connected_at)}</span>` : ''}
+            <div class="chip-temp">
+                <div class="temp-bar-wrapper">
+                    <div class="temp-label">
+                        <span>Temperatura</span>
+                        <span class="temp-status">${temp.label} — ${progress}%</span>
+                    </div>
+                    <div class="temp-bar">
+                        <div class="temp-fill ${temp.cls}" style="width: ${progress}%"></div>
+                    </div>
+                </div>
+                <div class="temp-fires">${temp.fires}</div>
             </div>
 
-            <div class="chip-progress">
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${progress}%"></div>
-                </div>
-                <div class="progress-info">
-                    <span>Progresso: ${progress}%</span>
-                    <span>Faltam ${formatNumber(remaining)} msgs</span>
-                </div>
+            <div class="chip-meta">
+                <span class="chip-meta-item">
+                    <span class="meta-icon">📊</span>
+                    Fase <span class="badge badge-phase-${chip.phase}">${chip.phase}</span>
+                </span>
+                <span class="chip-meta-item">
+                    <span class="meta-icon">💬</span>
+                    ${formatNumber(chip.messages_sent)} msgs
+                </span>
+                ${chip.connected_at ? `<span class="chip-meta-item"><span class="meta-icon">📅</span>${formatDate(chip.connected_at)}</span>` : ''}
             </div>
 
             <div class="chip-actions">
@@ -136,9 +194,9 @@ function renderChips() {
 
 function getStatusLabel(status) {
     const labels = {
-        'connected': 'Conectado',
+        'connected': 'Online',
         'warming': 'Aquecendo',
-        'disconnected': 'Desconectado',
+        'disconnected': 'Offline',
         'qr_pending': 'QR Pendente',
         'paused': 'Pausado'
     };
@@ -146,7 +204,6 @@ function getStatusLabel(status) {
 }
 
 // ==================== ACTIONS ====================
-
 function openQRModal() {
     document.getElementById('qr-modal').classList.add('active');
     document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
@@ -179,12 +236,12 @@ function stopWarming(chipId) {
 
 function startAll() {
     socket.emit('start_all');
-    showToast('Aquecimento iniciado para todos os chips conectados', 'success');
+    showToast('Escala iniciada para todos os chips', 'success');
 }
 
 function stopAll() {
     socket.emit('stop_all');
-    showToast('Aquecimento parado para todos os chips', 'warning');
+    showToast('Aquecimento parado', 'warning');
 }
 
 function disconnectChip(chipId) {
@@ -194,7 +251,7 @@ function disconnectChip(chipId) {
 }
 
 function deleteChip(chipId) {
-    if (confirm('Excluir este chip? A sessao sera removida permanentemente.')) {
+    if (confirm('Excluir este chip? A sessao sera removida.')) {
         socket.emit('delete_chip', { chipId });
         showToast('Chip excluido', 'danger');
     }
@@ -217,16 +274,65 @@ function refreshChips() {
         .then(stats => socket.emit('stats', stats));
 }
 
-// ==================== ACTIVITY LOG ====================
+// ==================== LIVE FEED (SIDEBAR) ====================
+const feedItems = [];
+const MAX_FEED = 50;
 
+function addFeedItem(chipLabel, detail, message, iconType) {
+    const now = new Date();
+    const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const icon = getFeedIcon(iconType);
+
+    feedItems.unshift({ chipLabel, detail, message, iconType, icon, time });
+    if (feedItems.length > MAX_FEED) feedItems.pop();
+    renderFeed();
+}
+
+function renderFeed() {
+    const feed = document.getElementById('live-feed');
+    if (feedItems.length === 0) return;
+
+    feed.innerHTML = feedItems.map((item, i) => `
+        <div class="feed-item" ${i === 0 ? 'style="animation:feedFadeIn 0.4s ease"' : ''}>
+            <div class="feed-icon ${item.iconType || 'system'}">${item.icon}</div>
+            <div class="feed-content">
+                <div class="feed-chip">${item.chipLabel}</div>
+                <div class="feed-detail">${item.detail}${item.message ? ' — ' + truncate(item.message, 40) : ''}</div>
+            </div>
+            <div class="feed-time">${item.time}</div>
+        </div>
+    `).join('');
+}
+
+function getFeedIcon(type) {
+    const icons = {
+        'chat': '💬', 'audio': '🎤', 'group': '👥',
+        'status': '📱', 'sticker': '🏷️', 'reaction': '👍',
+        'error': '❌', 'connect': '🟢', 'system': '⚡'
+    };
+    return icons[type] || '📝';
+}
+
+function getActionLabel(action) {
+    const labels = {
+        'private_chat': 'Mensagem enviada',
+        'audio': 'Audio enviado',
+        'group_chat': 'Msg em grupo',
+        'group_create': 'Grupo criado',
+        'status': 'Status publicado',
+        'sticker': 'Sticker enviado',
+        'reaction': 'Reagiu a msg'
+    };
+    return labels[action] || action;
+}
+
+// ==================== ACTIVITY LOG (TAB) ====================
 const activityItems = [];
 const MAX_ACTIVITY = 100;
 
 function addActivityItem(data) {
     activityItems.unshift(data);
     if (activityItems.length > MAX_ACTIVITY) activityItems.pop();
-
-    // Only render if activity tab is visible
     if (document.getElementById('tab-activity').classList.contains('active')) {
         renderActivity();
     }
@@ -238,8 +344,8 @@ function renderActivity() {
         log.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📊</div>
-                <h3>Sem atividade ainda</h3>
-                <p>A atividade aparecera aqui quando o aquecimento iniciar</p>
+                <h3>Sem atividade</h3>
+                <p>Eventos aparecerao aqui quando o aquecimento iniciar</p>
             </div>`;
         return;
     }
@@ -255,9 +361,9 @@ function renderActivity() {
             <div class="activity-icon ${iconClass}">${icon}</div>
             <div class="activity-content">
                 <span class="activity-chip">${chipLabel}</span>
-                ${item.target ? `→ <span class="activity-target">${item.target}</span>` : ''}
-                ${item.message ? `<br><small style="color:var(--text-secondary)">${truncate(item.message, 60)}</small>` : ''}
-                ${!item.success ? '<br><small style="color:var(--danger)">❌ Erro</small>' : ''}
+                ${item.target ? ` → <span class="activity-target">${item.target}</span>` : ''}
+                ${item.message ? `<br><small style="color:var(--text-muted)">${truncate(item.message, 60)}</small>` : ''}
+                ${!item.success ? '<br><small style="color:var(--danger)">Erro</small>' : ''}
             </div>
             <div class="activity-time">${item.time || ''}</div>
         </div>`;
@@ -302,7 +408,6 @@ function getActionClass(action) {
 }
 
 // ==================== CONFIG ====================
-
 function loadConfig() {
     fetch('/api/config')
         .then(r => r.json())
@@ -347,11 +452,10 @@ function updateConfig(phase, field, value) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
-    }).then(() => showToast('Configuracao atualizada', 'success'));
+    }).then(() => showToast('Config atualizada', 'success'));
 }
 
 // ==================== TABS ====================
-
 function switchTab(tabName) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -365,8 +469,13 @@ function switchTab(tabName) {
     if (tabName === 'config') loadConfig();
 }
 
-// ==================== UTILITIES ====================
+// ==================== LOGOUT ====================
+function doLogout() {
+    fetch('/api/logout', { method: 'POST' })
+        .then(() => window.location.href = '/login');
+}
 
+// ==================== UTILITIES ====================
 function formatNumber(n) {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
     if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
@@ -382,7 +491,7 @@ function formatDate(dateStr) {
 
     if (diffDays === 0) return 'Hoje';
     if (diffDays === 1) return 'Ontem';
-    if (diffDays < 7) return `${diffDays} dias`;
+    if (diffDays < 7) return `${diffDays}d`;
     return d.toLocaleDateString('pt-BR');
 }
 
@@ -396,16 +505,24 @@ function showToast(message, type = 'accent') {
     const toast = document.createElement('div');
     toast.className = 'toast';
 
+    const icons = {
+        'success': '✓', 'danger': '✕',
+        'warning': '⚠', 'accent': 'ℹ'
+    };
     const colors = {
+        'success': 'rgba(34,197,94,0.12)', 'danger': 'rgba(239,68,68,0.12)',
+        'warning': 'rgba(249,115,22,0.12)', 'accent': 'rgba(59,130,246,0.12)'
+    };
+    const textColors = {
         'success': 'var(--success)', 'danger': 'var(--danger)',
         'warning': 'var(--warming)', 'accent': 'var(--accent)'
     };
 
-    toast.style.borderLeftColor = colors[type] || colors.accent;
-    toast.style.borderLeftWidth = '3px';
-    toast.innerHTML = `<span>${message}</span>`;
-    container.appendChild(toast);
+    toast.innerHTML = `
+        <div class="toast-icon" style="background:${colors[type] || colors.accent};color:${textColors[type] || textColors.accent}">${icons[type] || 'ℹ'}</div>
+        <span>${message}</span>`;
 
+    container.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(100%)';
@@ -414,20 +531,11 @@ function showToast(message, type = 'accent') {
     }, 4000);
 }
 
-// ==================== LOGOUT ====================
-
-function doLogout() {
-    fetch('/api/logout', { method: 'POST' })
-        .then(() => window.location.href = '/login');
-}
-
 // ==================== KEYBOARD SHORTCUTS ====================
-
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeQRModal();
 });
 
-// Click outside modal to close
 document.getElementById('qr-modal').addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-overlay')) closeQRModal();
 });

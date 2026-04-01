@@ -3,99 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Aquecimento WhatsApp</title>
+    <title>Login — KS Digital</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg-primary: #0f1117;
-            --bg-card: #1e2130;
-            --text-primary: #e8eaed;
-            --text-secondary: #9aa0a6;
-            --accent: #4285f4;
-            --accent-hover: #5a9cf5;
-            --danger: #ea4335;
-            --border: #2d3142;
+            --bg-base: #07080d;
+            --bg-card: rgba(15, 18, 30, 0.6);
+            --bg-card-solid: #12151f;
+            --text-primary: #f0f2f5;
+            --text-muted: #4a5064;
+            --accent: #3B82F6;
+            --accent-hover: #60a5fa;
+            --danger: #EF4444;
+            --border: rgba(255, 255, 255, 0.06);
         }
         body {
-            font-family: 'Segoe UI', -apple-system, sans-serif;
-            background: var(--bg-primary);
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-base);
             color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
+            -webkit-font-smoothing: antialiased;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(249, 115, 22, 0.05) 0%, transparent 60%);
+            pointer-events: none;
         }
         .login-box {
             background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 40px;
-            width: 380px;
+            border-radius: 18px;
+            padding: 44px 40px;
+            width: 400px;
             max-width: 90vw;
             text-align: center;
+            position: relative;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+            animation: fadeUp 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .login-logo { font-size: 48px; margin-bottom: 12px; }
-        .login-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-        .login-subtitle { font-size: 14px; color: var(--text-secondary); margin-bottom: 28px; }
-        .form-group { margin-bottom: 16px; text-align: left; }
+        .login-box::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+        }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .login-logo {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--accent), #6366f1);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin: 0 auto 16px;
+            box-shadow: 0 0 24px rgba(59, 130, 246, 0.25);
+        }
+        .login-title {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #f0f2f5, #a0a8b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .login-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            margin-bottom: 28px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
         .form-group label {
             display: block;
-            font-size: 13px;
-            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
             margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .form-group input {
             width: 100%;
-            padding: 10px 14px;
-            background: var(--bg-primary);
+            padding: 11px 14px;
+            background: rgba(255,255,255,0.04);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 10px;
             color: var(--text-primary);
             font-size: 14px;
+            font-family: 'Inter', sans-serif;
             outline: none;
-            transition: border-color 0.2s;
+            transition: all 0.25s;
         }
-        .form-group input:focus { border-color: var(--accent); }
+        .form-group input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .form-group input::placeholder { color: var(--text-muted); }
         .btn-login {
             width: 100%;
             padding: 12px;
-            background: var(--accent);
+            background: linear-gradient(135deg, var(--accent), #6366f1);
             color: white;
             border: none;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: 600;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.25s;
             margin-top: 8px;
+            box-shadow: 0 2px 12px rgba(59, 130, 246, 0.3);
+            position: relative;
+            overflow: hidden;
         }
-        .btn-login:hover { background: var(--accent-hover); }
-        .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-login:hover {
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+            transform: translateY(-1px);
+        }
+        .btn-login:active { transform: scale(0.98); }
+        .btn-login:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
         .error-msg {
             color: var(--danger);
             font-size: 13px;
-            margin-top: 12px;
+            font-weight: 500;
+            margin-top: 14px;
             display: none;
         }
-        .error-msg.visible { display: block; }
+        .error-msg.visible { display: block; animation: shake 0.4s ease; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-6px); }
+            75% { transform: translateX(6px); }
+        }
     </style>
 </head>
 <body>
     <div class="login-box">
-        <div class="login-logo">🔥</div>
-        <div class="login-title">Aquecimento WhatsApp</div>
-        <div class="login-subtitle">Faca login para acessar o painel</div>
+        <div class="login-logo"><img src="/ks-logo.png" alt="KS" style="width:32px;height:32px;border-radius:6px"></div>
+        <div class="login-title">KS Digital</div>
+        <div class="login-subtitle">Command Center — Aquecimento WhatsApp</div>
         <form id="login-form" onsubmit="doLogin(event)">
             <div class="form-group">
-                <label>Usuario</label>
-                <input type="text" id="username" autocomplete="username" required autofocus>
+                <label>E-mail</label>
+                <input type="email" id="email" placeholder="seu@email.com" autocomplete="email" required autofocus>
             </div>
             <div class="form-group">
                 <label>Senha</label>
-                <input type="password" id="password" autocomplete="current-password" required>
+                <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required>
             </div>
             <button type="submit" class="btn-login" id="btn-login">Entrar</button>
-            <div class="error-msg" id="error-msg">Usuario ou senha incorretos</div>
+            <div class="error-msg" id="error-msg">E-mail ou senha incorretos</div>
         </form>
     </div>
 
@@ -113,7 +190,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        username: document.getElementById('username').value,
+                        email: document.getElementById('email').value,
                         password: document.getElementById('password').value
                     })
                 });
@@ -131,11 +208,6 @@
             btn.disabled = false;
             btn.textContent = 'Entrar';
         }
-
-        // Enter to submit
-        document.getElementById('password').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') doLogin(e);
-        });
     </script>
 </body>
 </html>

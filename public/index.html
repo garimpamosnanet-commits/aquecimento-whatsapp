@@ -3,99 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aquecimento de Chips WhatsApp</title>
+    <title>KS Digital — Command Center</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
 </head>
 <body>
 
 <!-- HEADER -->
 <div class="header">
     <div class="header-left">
-        <span class="logo">🔥</span>
-        <h1>Aquecimento WhatsApp</h1>
+        <img src="/ks-logo.png" alt="KS" class="logo-img">
+        <div class="brand">
+            <span class="brand-name">KS Digital</span>
+            <span class="brand-tag">Command Center</span>
+        </div>
     </div>
     <div class="header-right">
-        <button class="btn btn-success" onclick="startAll()">▶ Iniciar Todos</button>
-        <button class="btn btn-danger" onclick="stopAll()">⏹ Parar Todos</button>
-        <button class="btn btn-primary" onclick="openQRModal()">+ Adicionar Chip</button>
-        <button class="btn btn-outline" onclick="doLogout()" title="Sair">Sair</button>
+        <div class="live-indicator">
+            <div class="live-dot"></div>
+            LIVE
+        </div>
+        <div class="header-divider"></div>
+        <button class="btn btn-scale active-glow" onclick="startAll()" data-tooltip="Iniciar aquecimento em todos os chips">🔥 <span class="btn-text">INICIAR ESCALA</span></button>
+        <button class="btn btn-outline" onclick="stopAll()" data-tooltip="Parar todos">⏹ <span class="btn-text">Parar</span></button>
+        <button class="btn btn-primary" onclick="openQRModal()" data-tooltip="Conectar novo chip">+ <span class="btn-text">Chip</span></button>
+        <div class="header-divider"></div>
+        <button class="btn btn-ghost" onclick="doLogout()" title="Sair">Sair</button>
     </div>
 </div>
 
-<!-- STATS -->
-<div class="stats-bar">
-    <div class="stat-card accent">
-        <div class="stat-value" id="stat-total">0</div>
-        <div class="stat-label">Total de Chips</div>
-    </div>
-    <div class="stat-card success">
-        <div class="stat-value" id="stat-connected">0</div>
-        <div class="stat-label">Conectados</div>
-    </div>
-    <div class="stat-card warming">
-        <div class="stat-value" id="stat-warming">0</div>
-        <div class="stat-label">Aquecendo</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="stat-messages">0</div>
-        <div class="stat-label">Mensagens Enviadas</div>
-    </div>
-</div>
+<!-- LAYOUT -->
+<div class="app-layout">
 
-<!-- TABS -->
-<div class="main">
-    <div class="tabs">
-        <div class="tab active" onclick="switchTab('chips')">Chips</div>
-        <div class="tab" onclick="switchTab('activity')">Atividade</div>
-        <div class="tab" onclick="switchTab('config')">Configuracao</div>
-    </div>
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
 
-    <!-- TAB: CHIPS -->
-    <div id="tab-chips" class="tab-content active">
-        <div class="section-header">
-            <h2>Meus Chips</h2>
-            <div style="display:flex;gap:8px">
+        <!-- STATS -->
+        <div class="stats-bar">
+            <div class="stat-card accent">
+                <div class="stat-header">
+                    <span class="stat-label">Total Chips</span>
+                    <div class="stat-icon">📱</div>
+                </div>
+                <div class="stat-value" id="stat-total">0</div>
+                <div class="stat-sub">Chips cadastrados</div>
+            </div>
+            <div class="stat-card success">
+                <div class="stat-header">
+                    <span class="stat-label">Conectados</span>
+                    <div class="stat-icon">🟢</div>
+                </div>
+                <div class="stat-value" id="stat-connected">0</div>
+                <div class="stat-sub">Online agora</div>
+            </div>
+            <div class="stat-card warming">
+                <div class="stat-header">
+                    <span class="stat-label">Aquecendo</span>
+                    <div class="stat-icon">🔥</div>
+                </div>
+                <div class="stat-value" id="stat-warming">0</div>
+                <div class="stat-sub">Em aquecimento</div>
+            </div>
+            <div class="stat-card neutral">
+                <div class="stat-header">
+                    <span class="stat-label">Mensagens</span>
+                    <div class="stat-icon">💬</div>
+                </div>
+                <div class="stat-value" id="stat-messages">0</div>
+                <div class="stat-sub">Total enviadas</div>
+            </div>
+        </div>
+
+        <!-- TABS -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('chips')">Chips</div>
+            <div class="tab" onclick="switchTab('activity')">Atividade</div>
+            <div class="tab" onclick="switchTab('config')">Config</div>
+        </div>
+
+        <!-- TAB: CHIPS -->
+        <div id="tab-chips" class="tab-content active">
+            <div class="section-header">
+                <h2>Meus Chips</h2>
                 <button class="btn btn-outline btn-sm" onclick="refreshChips()">↻ Atualizar</button>
             </div>
+            <div id="chips-grid" class="chips-grid">
+                <div class="empty-state">
+                    <div class="empty-icon">📱</div>
+                    <h3>Nenhum chip cadastrado</h3>
+                    <p>Clique em "+ Chip" para conectar o primeiro</p>
+                </div>
+            </div>
         </div>
-        <div id="chips-grid" class="chips-grid">
-            <div class="empty-state">
-                <div class="empty-icon">📱</div>
-                <h3>Nenhum chip cadastrado</h3>
-                <p>Clique em "+ Adicionar Chip" para comecar</p>
+
+        <!-- TAB: ACTIVITY -->
+        <div id="tab-activity" class="tab-content">
+            <div class="section-header">
+                <h2>Atividade Recente</h2>
+                <button class="btn btn-outline btn-sm" onclick="loadActivity()">↻ Atualizar</button>
+            </div>
+            <div id="activity-log" class="activity-log">
+                <div class="empty-state">
+                    <div class="empty-icon">📊</div>
+                    <h3>Sem atividade</h3>
+                    <p>Eventos aparecerao aqui quando o aquecimento iniciar</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: CONFIG -->
+        <div id="tab-config" class="tab-content">
+            <div class="section-header">
+                <h2>Configuracao de Fases</h2>
+            </div>
+            <div id="config-grid" class="config-grid"></div>
+        </div>
+
+    </div>
+
+    <!-- SIDEBAR: REAL-TIME FEED -->
+    <div class="sidebar-feed">
+        <div class="sidebar-header">
+            <h3>Feed ao vivo</h3>
+            <div class="live-indicator" style="padding:3px 8px;font-size:10px">
+                <div class="live-dot" style="width:5px;height:5px"></div>
+                LIVE
+            </div>
+        </div>
+        <div class="sidebar-body" id="live-feed">
+            <div class="empty-state" style="padding:30px 16px">
+                <div class="empty-icon" style="font-size:28px">📡</div>
+                <p style="font-size:12px">Aguardando eventos...</p>
             </div>
         </div>
     </div>
 
-    <!-- TAB: ACTIVITY -->
-    <div id="tab-activity" class="tab-content">
-        <div class="section-header">
-            <h2>Atividade Recente</h2>
-            <button class="btn btn-outline btn-sm" onclick="loadActivity()">↻ Atualizar</button>
-        </div>
-        <div id="activity-log" class="activity-log">
-            <div class="empty-state">
-                <div class="empty-icon">📊</div>
-                <h3>Sem atividade ainda</h3>
-                <p>A atividade aparecera aqui quando o aquecimento iniciar</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- TAB: CONFIG -->
-    <div id="tab-config" class="tab-content">
-        <div class="section-header">
-            <h2>Configuracao de Fases</h2>
-        </div>
-        <div id="config-grid" class="config-grid"></div>
-    </div>
 </div>
 
 <!-- QR CODE MODAL -->
 <div class="modal-overlay" id="qr-modal">
     <div class="modal">
         <h3>Conectar Chip</h3>
-        <p>Escaneie o QR Code com o WhatsApp do chip</p>
+        <p>Escaneie o QR Code com WhatsApp > Aparelhos conectados</p>
         <div class="qr-container">
             <div id="qr-image" class="qr-waiting">Aguardando QR Code...</div>
         </div>
@@ -106,7 +155,7 @@
     </div>
 </div>
 
-<!-- TOAST CONTAINER -->
+<!-- TOAST -->
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>

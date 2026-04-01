@@ -16,9 +16,11 @@ const io = new Server(server, {
 });
 
 // ==================== AUTH CONFIG ====================
-const AUTH_USER = process.env.AUTH_USER || 'admin';
-const AUTH_PASS = process.env.AUTH_PASS || 'admin123';
-const sessions = new Map(); // token -> expiry
+const USERS = [
+    { email: 'souzamktonline@gmail.com', password: 'K@zame12', name: 'Gabriel' },
+    { email: 'sabaziuscp@gmail.com', password: 'Net@2019@', name: 'Mário' }
+];
+const sessions = new Map(); // token -> { expiry, name }
 
 function generateToken() {
     return crypto.randomBytes(32).toString('hex');
@@ -38,7 +40,7 @@ function isAuthenticated(req) {
     const cookies = parseCookies(req.headers.cookie);
     const token = cookies.auth_token;
     if (!token || !sessions.has(token)) return false;
-    if (sessions.get(token) < Date.now()) {
+    if (sessions.get(token).expiry < Date.now()) {
         sessions.delete(token);
         return false;
     }
@@ -50,13 +52,14 @@ app.use(express.json());
 
 // Login endpoint (before auth middleware)
 app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    if (username === AUTH_USER && password === AUTH_PASS) {
+    const { email, password } = req.body;
+    const user = USERS.find(u => u.email === email && u.password === password);
+    if (user) {
         const token = generateToken();
         const expiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
-        sessions.set(token, expiry);
+        sessions.set(token, { expiry, name: user.name });
         res.setHeader('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${7 * 24 * 60 * 60}`);
-        return res.json({ ok: true });
+        return res.json({ ok: true, name: user.name });
     }
     res.status(401).json({ error: 'Credenciais invalidas' });
 });
@@ -105,7 +108,7 @@ io.use((socket, next) => {
     const cookieHeader = socket.handshake.headers.cookie;
     const cookies = parseCookies(cookieHeader);
     const token = cookies.auth_token;
-    if (token && sessions.has(token) && sessions.get(token) > Date.now()) {
+    if (token && sessions.has(token) && sessions.get(token).expiry > Date.now()) {
         return next();
     }
     next(new Error('Nao autorizado'));
