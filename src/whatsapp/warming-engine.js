@@ -136,6 +136,12 @@ class WarmingEngine {
                 case 'reaction':
                     await this.doReaction(chip);
                     break;
+                case 'location':
+                    await this.doLocation(chip);
+                    break;
+                case 'image':
+                    await this.doImage(chip);
+                    break;
                 default:
                     await this.doPrivateChat(chip);
             }
@@ -163,8 +169,8 @@ class WarmingEngine {
         const partnerJid = partner.phone + '@s.whatsapp.net';
         const flow = MessageFactory.getConversationFlow();
 
-        // Send first message
-        const msg = MessageFactory.getRandomMessage(flow[0]);
+        // Send first message (com sufixo anti-detecção)
+        const msg = MessageFactory.getMessageWithSuffix(flow[0]);
 
         // Simulate typing
         await socket.presenceSubscribe(partnerJid);
@@ -191,7 +197,7 @@ class WarmingEngine {
                     const delay = MessageFactory.getRandomDelay(5, 30);
                     await new Promise(r => setTimeout(r, delay));
 
-                    const replyMsg = MessageFactory.getRandomMessage(flow[i]);
+                    const replyMsg = MessageFactory.getMessageWithSuffix(flow[i]);
                     const sender = i % 2 === 1 ? partnerSocket : socket;
                     const targetJid = i % 2 === 1 ? chipJid : partnerJid;
                     const senderId = i % 2 === 1 ? partner.id : chip.id;
@@ -381,7 +387,7 @@ class WarmingEngine {
 
         // Send a message first, then react from partner
         const partnerJid = partner.phone + '@s.whatsapp.net';
-        const msg = MessageFactory.getRandomMessage('casual');
+        const msg = MessageFactory.getMessageWithSuffix('casual');
 
         const sent = await socket.sendMessage(partnerJid, { text: msg });
         db.incrementMessagesSent(chip.id);
@@ -402,6 +408,72 @@ class WarmingEngine {
         this.io.emit('activity', {
             chipId: chip.id, action: 'reaction',
             target: partner.phone, message: '👍 Mensagem + Reação', success: true,
+            time: new Date().toLocaleTimeString()
+        });
+
+        this.sessionManager.emitChipUpdate(chip.id);
+    }
+
+    async doLocation(chip) {
+        const partner = this.getRandomPartner(chip.id);
+        if (!partner) return this.doPrivateChat(chip);
+
+        const socket = this.sessionManager.getSocket(chip.session_id);
+        if (!socket?.user) return;
+
+        const partnerJid = partner.phone + '@s.whatsapp.net';
+        const location = MessageFactory.getRandomLocation();
+
+        await socket.sendMessage(partnerJid, {
+            location: {
+                degreesLatitude: location.degreesLatitude,
+                degreesLongitude: location.degreesLongitude,
+                name: location.name,
+                address: location.address
+            }
+        });
+
+        db.incrementMessagesSent(chip.id);
+        db.logActivity(chip.id, 'location', partner.phone, location.name);
+
+        this.io.emit('activity', {
+            chipId: chip.id, action: 'location',
+            target: partner.phone, message: `📍 ${location.name}`, success: true,
+            time: new Date().toLocaleTimeString()
+        });
+
+        this.sessionManager.emitChipUpdate(chip.id);
+    }
+
+    async doImage(chip) {
+        const imagePath = MessageFactory.getRandomMedia('images');
+        if (!imagePath) {
+            // Fallback to private chat if no images available
+            return this.doPrivateChat(chip);
+        }
+
+        const partner = this.getRandomPartner(chip.id);
+        if (!partner) return;
+
+        const socket = this.sessionManager.getSocket(chip.session_id);
+        if (!socket?.user) return;
+
+        const partnerJid = partner.phone + '@s.whatsapp.net';
+        const imageBuffer = fs.readFileSync(imagePath);
+        const caption = Math.random() < 0.5 ? MessageFactory.getMessageWithSuffix('casual') : '';
+
+        await socket.sendMessage(partnerJid, {
+            image: imageBuffer,
+            caption: caption,
+            mimetype: 'image/jpeg'
+        });
+
+        db.incrementMessagesSent(chip.id);
+        db.logActivity(chip.id, 'image', partner.phone, path.basename(imagePath));
+
+        this.io.emit('activity', {
+            chipId: chip.id, action: 'image',
+            target: partner.phone, message: '🖼️ Imagem enviada', success: true,
             time: new Date().toLocaleTimeString()
         });
 
