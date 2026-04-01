@@ -5,6 +5,24 @@ const fs = require('fs');
 const QRCode = require('qrcode');
 const db = require('../database/db');
 
+// Proxy support
+let HttpsProxyAgent, SocksProxyAgent;
+try { HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent; } catch(e) {}
+try { SocksProxyAgent = require('socks-proxy-agent').SocksProxyAgent; } catch(e) {}
+
+function createProxyAgent(proxyUrl) {
+    if (!proxyUrl) return undefined;
+    try {
+        if (proxyUrl.startsWith('socks')) {
+            return SocksProxyAgent ? new SocksProxyAgent(proxyUrl) : undefined;
+        }
+        return HttpsProxyAgent ? new HttpsProxyAgent(proxyUrl) : undefined;
+    } catch(e) {
+        console.log(`[Proxy] Erro ao criar agent: ${e.message}`);
+        return undefined;
+    }
+}
+
 const SESSIONS_DIR = path.join(__dirname, '..', '..', 'sessions');
 const logger = pino({ level: 'silent' });
 
@@ -34,6 +52,11 @@ class SessionManager {
     async createSession(name = '') {
         const sessionId = `chip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
         const chip = db.createChip(sessionId, name);
+        // Auto-assign proxy if available
+        const proxy = db.assignProxyToChip(chip.id);
+        if (proxy) {
+            console.log(`[SessionManager] Proxy atribuido ao chip ${chip.id}: ${proxy.url}`);
+        }
         await this.connect(sessionId);
         return chip;
     }
@@ -51,7 +74,15 @@ class SessionManager {
         const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
         const { version } = await fetchLatestBaileysVersion();
 
-        const socket = makeWASocket({
+        // Check for proxy
+        const chip = db.getChipBySession(sessionId);
+        const proxyData = chip ? db.getProxyForChip(chip.id) : null;
+        const agent = proxyData ? createProxyAgent(proxyData.url) : undefined;
+        if (agent) {
+            console.log(`[SessionManager] Usando proxy para ${sessionId}: ${proxyData.url.replace(/\/\/.*@/, '//***@')}`);
+        }
+
+        const socketOptions = {
             version,
             auth: {
                 creds: state.creds,
@@ -65,9 +96,13 @@ class SessionManager {
             keepAliveIntervalMs: 30000,
             emitOwnEvents: true,
             generateHighQualityLinkPreview: false
-        });
+        };
 
-        const chip = db.getChipBySession(sessionId);
+        if (agent) {
+            socketOptions.agent = agent;
+        }
+
+        const socket = makeWASocket(socketOptions);
 
         this.sessions.set(sessionId, { socket, chip });
 
@@ -182,6 +217,7 @@ class SessionManager {
         await this.disconnect(sessionId);
         const chip = db.getChipBySession(sessionId);
         if (chip) {
+            db.releaseProxy(chip.id);
             db.deleteChip(chip.id);
         }
         // Remove session files

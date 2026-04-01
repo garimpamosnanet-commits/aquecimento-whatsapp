@@ -79,6 +79,7 @@
             <div class="tab active" onclick="switchTab('chips')">Chips</div>
             <div class="tab" onclick="switchTab('activity')">Atividade</div>
             <div class="tab" onclick="switchTab('config')">Config</div>
+            <div class="tab" onclick="switchTab('proxies')">Proxies</div>
         </div>
 
         <!-- TAB: CHIPS -->
@@ -117,6 +118,28 @@
                 <h2>Configuracao de Fases</h2>
             </div>
             <div id="config-grid" class="config-grid"></div>
+        </div>
+
+        <!-- TAB: PROXIES -->
+        <div id="tab-proxies" class="tab-content">
+            <div class="section-header">
+                <h2>Gerenciar Proxies</h2>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <span id="proxy-stats" style="font-size:12px;color:var(--text-muted)"></span>
+                    <button class="btn btn-danger btn-sm" onclick="deleteAllProxies()">Limpar todos</button>
+                </div>
+            </div>
+            <div style="margin-bottom:16px">
+                <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">
+                    Cole seus proxies abaixo (um por linha). Formatos aceitos:<br>
+                    <code style="font-size:11px;background:var(--bg-secondary);padding:2px 6px;border-radius:4px">http://user:pass@ip:port</code> ou
+                    <code style="font-size:11px;background:var(--bg-secondary);padding:2px 6px;border-radius:4px">socks5://user:pass@ip:port</code>
+                </p>
+                <textarea id="proxy-input" rows="5" placeholder="http://user:pass@123.45.67.89:8080
+socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-family:'Inter',monospace;font-size:13px;resize:vertical;outline:none"></textarea>
+                <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="addProxies()">Adicionar Proxies</button>
+            </div>
+            <div id="proxy-list"></div>
         </div>
 
     </div>

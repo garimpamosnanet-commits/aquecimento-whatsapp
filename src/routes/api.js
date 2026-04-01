@@ -128,5 +128,39 @@ module.exports = function(sessionManager, warmingEngine) {
         res.json(db.getWarmingGroups());
     });
 
+    // ==================== PROXIES ====================
+
+    // List all proxies
+    router.get('/proxies', (req, res) => {
+        res.json(db.getAllProxies());
+    });
+
+    // Get proxy stats
+    router.get('/proxies/stats', (req, res) => {
+        res.json(db.getProxyStats());
+    });
+
+    // Add proxies (bulk - one per line)
+    router.post('/proxies', (req, res) => {
+        const { proxies } = req.body;
+        if (!proxies || !Array.isArray(proxies)) {
+            return res.status(400).json({ error: 'Envie um array de proxies' });
+        }
+        const added = db.addProxiesBulk(proxies);
+        res.json({ success: true, added: added.length, proxies: added });
+    });
+
+    // Delete one proxy
+    router.delete('/proxies/:id', (req, res) => {
+        db.deleteProxy(parseInt(req.params.id));
+        res.json({ success: true });
+    });
+
+    // Delete all proxies
+    router.delete('/proxies', (req, res) => {
+        db.deleteAllProxies();
+        res.json({ success: true });
+    });
+
     return router;
 };

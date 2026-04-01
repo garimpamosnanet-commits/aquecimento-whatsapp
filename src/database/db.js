@@ -18,7 +18,8 @@ function loadDb() {
                 { id: 3, phase: 3, daily_limit: 80, min_delay_seconds: 30, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 23, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction', description: 'Fase 3 (Dia 8-14): Intenso - todos os tipos' },
                 { id: 4, phase: 4, daily_limit: 50, min_delay_seconds: 60, max_delay_seconds: 300, active_hour_start: 9, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction', description: 'Fase 4 (Dia 15+): Manutencao - atividade moderada' }
             ],
-            _nextId: { chips: 1, activity_log: 1, warming_groups: 1 }
+            proxies: [],
+            _nextId: { chips: 1, activity_log: 1, warming_groups: 1, proxies: 1 }
         };
         saveDb(initial);
         return initial;
@@ -210,6 +211,104 @@ function getGroupMembers(groupId) {
     return data.chips.filter(c => memberIds.includes(c.id));
 }
 
+// ==================== PROXIES ====================
+
+function addProxy(url) {
+    const data = loadDb();
+    if (!data.proxies) data.proxies = [];
+    if (!data._nextId.proxies) data._nextId.proxies = 1;
+    const id = data._nextId.proxies;
+    data._nextId.proxies = id + 1;
+    const proxy = { id, url, assigned_chip_id: null, status: 'available', created_at: now() };
+    data.proxies.push(proxy);
+    saveDb(data);
+    return proxy;
+}
+
+function addProxiesBulk(urls) {
+    const data = loadDb();
+    if (!data.proxies) data.proxies = [];
+    if (!data._nextId.proxies) data._nextId.proxies = 1;
+    const added = [];
+    for (const url of urls) {
+        const trimmed = url.trim();
+        if (!trimmed) continue;
+        const id = data._nextId.proxies;
+        data._nextId.proxies = id + 1;
+        const proxy = { id, url: trimmed, assigned_chip_id: null, status: 'available', created_at: now() };
+        data.proxies.push(proxy);
+        added.push(proxy);
+    }
+    saveDb(data);
+    return added;
+}
+
+function getAllProxies() {
+    const data = loadDb();
+    return (data.proxies || []).sort((a, b) => a.id - b.id);
+}
+
+function deleteProxy(id) {
+    const data = loadDb();
+    if (!data.proxies) return;
+    data.proxies = data.proxies.filter(p => p.id !== id);
+    saveDb(data);
+}
+
+function deleteAllProxies() {
+    const data = loadDb();
+    data.proxies = [];
+    // Also clear proxy assignments from chips
+    for (const chip of data.chips) {
+        delete chip.proxy_id;
+    }
+    saveDb(data);
+}
+
+function assignProxyToChip(chipId) {
+    const data = loadDb();
+    if (!data.proxies || data.proxies.length === 0) return null;
+    // Find first available proxy
+    const proxy = data.proxies.find(p => !p.assigned_chip_id);
+    if (!proxy) return null;
+    proxy.assigned_chip_id = chipId;
+    proxy.status = 'in_use';
+    // Also save proxy_id on chip
+    const chip = data.chips.find(c => c.id === chipId);
+    if (chip) chip.proxy_id = proxy.id;
+    saveDb(data);
+    return proxy;
+}
+
+function releaseProxy(chipId) {
+    const data = loadDb();
+    if (!data.proxies) return;
+    const proxy = data.proxies.find(p => p.assigned_chip_id === chipId);
+    if (proxy) {
+        proxy.assigned_chip_id = null;
+        proxy.status = 'available';
+    }
+    const chip = data.chips.find(c => c.id === chipId);
+    if (chip) delete chip.proxy_id;
+    saveDb(data);
+}
+
+function getProxyForChip(chipId) {
+    const data = loadDb();
+    if (!data.proxies) return null;
+    return data.proxies.find(p => p.assigned_chip_id === chipId) || null;
+}
+
+function getProxyStats() {
+    const data = loadDb();
+    const proxies = data.proxies || [];
+    return {
+        total: proxies.length,
+        available: proxies.filter(p => !p.assigned_chip_id).length,
+        in_use: proxies.filter(p => p.assigned_chip_id).length
+    };
+}
+
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
@@ -217,5 +316,7 @@ module.exports = {
     incrementMessagesSent, updateChipPhase, deleteChip, getChipStats,
     getWarmingConfig, getAllWarmingConfigs, updateWarmingConfig,
     logActivity, getRecentActivity, getTodayMessageCount,
-    createWarmingGroup, addGroupMember, getWarmingGroups, getGroupMembers
+    createWarmingGroup, addGroupMember, getWarmingGroups, getGroupMembers,
+    addProxy, addProxiesBulk, getAllProxies, deleteProxy, deleteAllProxies,
+    assignProxyToChip, releaseProxy, getProxyForChip, getProxyStats
 };

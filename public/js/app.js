@@ -461,12 +461,82 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
     const tabs = document.querySelectorAll('.tab');
-    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2 };
+    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2, 'proxies': 3 };
     tabs[tabMap[tabName]].classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
 
     if (tabName === 'activity') renderActivity();
     if (tabName === 'config') loadConfig();
+    if (tabName === 'proxies') loadProxies();
+}
+
+// ==================== PROXIES ====================
+
+function loadProxies() {
+    fetch('/api/proxies').then(r => r.json()).then(proxies => {
+        renderProxyList(proxies);
+    });
+    fetch('/api/proxies/stats').then(r => r.json()).then(stats => {
+        document.getElementById('proxy-stats').textContent =
+            `${stats.total} total | ${stats.available} disponivel | ${stats.in_use} em uso`;
+    });
+}
+
+function renderProxyList(proxies) {
+    const list = document.getElementById('proxy-list');
+    if (proxies.length === 0) {
+        list.innerHTML = `<div class="empty-state" style="padding:30px"><div class="empty-icon" style="font-size:28px">🔒</div><h3>Nenhum proxy cadastrado</h3><p>Adicione proxies acima para isolar cada chip com IP diferente</p></div>`;
+        return;
+    }
+    list.innerHTML = `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr style="border-bottom:1px solid var(--border)">
+                <th style="padding:10px 14px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Proxy</th>
+                <th style="padding:10px 14px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Status</th>
+                <th style="padding:10px 14px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Chip</th>
+                <th style="padding:10px 14px;width:60px"></th>
+            </tr></thead>
+            <tbody>${proxies.map(p => {
+                const chip = p.assigned_chip_id ? chips.find(c => c.id === p.assigned_chip_id) : null;
+                const masked = p.url.replace(/\/\/(.*?)@/, '//***@');
+                return `<tr style="border-bottom:1px solid rgba(0,0,0,0.03)">
+                    <td style="padding:8px 14px;font-family:monospace;font-size:12px;color:var(--text-secondary)">${masked}</td>
+                    <td style="padding:8px 14px"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;${p.assigned_chip_id ? 'background:rgba(249,115,22,0.08);color:var(--warming)' : 'background:rgba(34,197,94,0.08);color:var(--success)'}">${p.assigned_chip_id ? 'Em uso' : 'Disponivel'}</span></td>
+                    <td style="padding:8px 14px;font-size:12px;color:var(--text-muted)">${chip ? (chip.phone || chip.name || 'Chip ' + chip.id) : '—'}</td>
+                    <td style="padding:8px 14px"><button class="btn-icon danger" onclick="deleteOneProxy(${p.id})" title="Remover">✕</button></td>
+                </tr>`;
+            }).join('')}</tbody>
+        </table>
+    </div>`;
+}
+
+function addProxies() {
+    const input = document.getElementById('proxy-input');
+    const lines = input.value.split('\n').map(l => l.trim()).filter(l => l);
+    if (lines.length === 0) return showToast('Cole pelo menos um proxy', 'warning');
+
+    fetch('/api/proxies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proxies: lines })
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            showToast(`${data.added} proxies adicionados`, 'success');
+            input.value = '';
+            loadProxies();
+        }
+    });
+}
+
+function deleteOneProxy(id) {
+    fetch(`/api/proxies/${id}`, { method: 'DELETE' })
+        .then(() => { showToast('Proxy removido', 'danger'); loadProxies(); });
+}
+
+function deleteAllProxies() {
+    if (!confirm('Remover todos os proxies?')) return;
+    fetch('/api/proxies', { method: 'DELETE' })
+        .then(() => { showToast('Todos os proxies removidos', 'danger'); loadProxies(); });
 }
 
 // ==================== LOGOUT ====================
