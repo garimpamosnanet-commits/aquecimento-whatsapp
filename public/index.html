@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aquecimento de Chips WhatsApp</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <div class="header-left">
+        <span class="logo">🔥</span>
+        <h1>Aquecimento WhatsApp</h1>
+    </div>
+    <div class="header-right">
+        <button class="btn btn-success" onclick="startAll()">▶ Iniciar Todos</button>
+        <button class="btn btn-danger" onclick="stopAll()">⏹ Parar Todos</button>
+        <button class="btn btn-primary" onclick="openQRModal()">+ Adicionar Chip</button>
+    </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-bar">
+    <div class="stat-card accent">
+        <div class="stat-value" id="stat-total">0</div>
+        <div class="stat-label">Total de Chips</div>
+    </div>
+    <div class="stat-card success">
+        <div class="stat-value" id="stat-connected">0</div>
+        <div class="stat-label">Conectados</div>
+    </div>
+    <div class="stat-card warming">
+        <div class="stat-value" id="stat-warming">0</div>
+        <div class="stat-label">Aquecendo</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="stat-messages">0</div>
+        <div class="stat-label">Mensagens Enviadas</div>
+    </div>
+</div>
+
+<!-- TABS -->
+<div class="main">
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('chips')">Chips</div>
+        <div class="tab" onclick="switchTab('activity')">Atividade</div>
+        <div class="tab" onclick="switchTab('config')">Configuracao</div>
+    </div>
+
+    <!-- TAB: CHIPS -->
+    <div id="tab-chips" class="tab-content active">
+        <div class="section-header">
+            <h2>Meus Chips</h2>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-outline btn-sm" onclick="refreshChips()">↻ Atualizar</button>
+            </div>
+        </div>
+        <div id="chips-grid" class="chips-grid">
+            <div class="empty-state">
+                <div class="empty-icon">📱</div>
+                <h3>Nenhum chip cadastrado</h3>
+                <p>Clique em "+ Adicionar Chip" para comecar</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: ACTIVITY -->
+    <div id="tab-activity" class="tab-content">
+        <div class="section-header">
+            <h2>Atividade Recente</h2>
+            <button class="btn btn-outline btn-sm" onclick="loadActivity()">↻ Atualizar</button>
+        </div>
+        <div id="activity-log" class="activity-log">
+            <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <h3>Sem atividade ainda</h3>
+                <p>A atividade aparecera aqui quando o aquecimento iniciar</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: CONFIG -->
+    <div id="tab-config" class="tab-content">
+        <div class="section-header">
+            <h2>Configuracao de Fases</h2>
+        </div>
+        <div id="config-grid" class="config-grid"></div>
+    </div>
+</div>
+
+<!-- QR CODE MODAL -->
+<div class="modal-overlay" id="qr-modal">
+    <div class="modal">
+        <h3>Conectar Chip</h3>
+        <p>Escaneie o QR Code com o WhatsApp do chip</p>
+        <div class="qr-container">
+            <div id="qr-image" class="qr-waiting">Aguardando QR Code...</div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeQRModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btn-next-qr" style="display:none" onclick="nextQR()">Proximo Chip →</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
