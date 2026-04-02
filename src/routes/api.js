@@ -196,6 +196,19 @@ module.exports = function(sessionManager, warmingEngine) {
         res.json({ success: true, added: added.length, proxies: added });
     });
 
+    // Swap all proxy URLs (keeps assignments)
+    router.put('/proxies/swap', (req, res) => {
+        const { proxies } = req.body; // array of new URLs
+        if (!proxies || !Array.isArray(proxies)) return res.status(400).json({ error: 'Array de proxies obrigatorio' });
+        const current = db.getAllProxies();
+        let updated = 0;
+        for (let i = 0; i < Math.min(proxies.length, current.length); i++) {
+            db.updateProxyUrl(current[i].id, proxies[i]);
+            updated++;
+        }
+        res.json({ success: true, updated });
+    });
+
     // Delete one proxy
     router.delete('/proxies/:id', (req, res) => {
         db.deleteProxy(parseInt(req.params.id));

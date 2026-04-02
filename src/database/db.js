@@ -311,6 +311,15 @@ function getProxyForChip(chipId) {
     return data.proxies.find(p => p.assigned_chip_id === chipId) || null;
 }
 
+function updateProxyUrl(id, newUrl) {
+    const data = loadDb();
+    const proxy = (data.proxies || []).find(p => p.id === id);
+    if (!proxy) return null;
+    proxy.url = newUrl;
+    saveDb(data);
+    return proxy;
+}
+
 function getProxyStats() {
     const data = loadDb();
     const proxies = data.proxies || [];
@@ -330,5 +339,6 @@ module.exports = {
     logActivity, getRecentActivity, getTodayMessageCount,
     createWarmingGroup, addGroupMember, getWarmingGroups, getGroupMembers,
     addProxy, addProxiesBulk, getAllProxies, deleteProxy, deleteAllProxies,
-    assignProxyToChip, releaseProxy, getProxyForChip, getProxyStats
+    assignProxyToChip, releaseProxy, getProxyForChip, getProxyStats,
+    updateProxyUrl
 };
