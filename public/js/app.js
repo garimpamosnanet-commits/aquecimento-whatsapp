@@ -232,7 +232,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+let chipCreating = false;
 function confirmChipName() {
+    if (chipCreating) return;
+    chipCreating = true;
     const name = document.getElementById('chip-name-input').value.trim();
     document.getElementById('qr-step-name').style.display = 'none';
     document.getElementById('qr-step-scan').style.display = 'block';
@@ -240,17 +243,22 @@ function confirmChipName() {
     document.getElementById('btn-next-qr').style.display = 'none';
     currentQRSessionId = null;
     socket.emit('request_qr', { name: name });
+    setTimeout(() => { chipCreating = false; }, 5000);
 }
 
+let qrLoading = false;
 function reloadQR() {
+    if (qrLoading) return;
+    qrLoading = true;
     document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
-    const name = document.getElementById('chip-name-input').value.trim();
-    // Delete current session and create new one
     if (currentQRSessionId) {
-        socket.emit('delete_chip_by_session', { sessionId: currentQRSessionId });
+        // Reconnect existing session instead of creating new
+        socket.emit('reconnect_chip', { sessionId: currentQRSessionId });
+    } else {
+        const name = document.getElementById('chip-name-input').value.trim();
+        socket.emit('request_qr', { name: name });
     }
-    currentQRSessionId = null;
-    socket.emit('request_qr', { name: name });
+    setTimeout(() => { qrLoading = false; }, 3000); // cooldown 3s
 }
 
 function closeQRModal() {
@@ -325,7 +333,8 @@ function reconnectChip(sessionId) {
 }
 
 function retryQR(sessionId, chipId) {
-    // Open QR modal and reconnect to get new QR
+    if (qrLoading) return;
+    qrLoading = true;
     document.getElementById('qr-modal').classList.add('active');
     document.getElementById('qr-step-name').style.display = 'none';
     document.getElementById('qr-step-scan').style.display = 'block';
@@ -333,6 +342,7 @@ function retryQR(sessionId, chipId) {
     document.getElementById('btn-next-qr').style.display = 'none';
     currentQRSessionId = sessionId;
     socket.emit('reconnect_chip', { sessionId });
+    setTimeout(() => { qrLoading = false; }, 3000);
 }
 
 function refreshChips() {
