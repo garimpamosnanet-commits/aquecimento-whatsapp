@@ -1,6 +1,24 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../database/db');
+
+// Media upload config
+const mediaStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const type = req.params.type; // audios, images, stickers
+        const dir = path.join(__dirname, '..', '..', 'media', type);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + ext);
+    }
+});
+const upload = multer({ storage: mediaStorage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 module.exports = function(sessionManager, warmingEngine, groupManager) {
 
@@ -562,6 +580,166 @@ module.exports = function(sessionManager, warmingEngine, groupManager) {
         const { numbers } = req.body;
         const normalized = groupManager.normalizePhoneNumbers(numbers || '');
         res.json({ valid: normalized, count: normalized.length });
+    });
+
+    // ==================== SETTINGS ====================
+
+    router.get('/settings', (req, res) => {
+        res.json(db.getSettings());
+    });
+
+    router.put('/settings/:key', (req, res) => {
+        const { key } = req.params;
+        const allowed = ['schedule', 'notifications', 'proxy_rotation'];
+        if (!allowed.includes(key)) return res.status(400).json({ error: 'Chave invalida' });
+        const result = db.updateSettings(key, req.body);
+        res.json({ success: true, settings: result });
+    });
+
+    // ==================== DASHBOARD STATS ====================
+
+    router.get('/dashboard/daily-stats', (req, res) => {
+        const days = parseInt(req.query.days) || 7;
+        res.json(db.getDailyStats(days));
+    });
+
+    router.get('/dashboard/summary', (req, res) => {
+        const chips = db.getAllChips();
+        const phases = { 1: 0, 2: 0, 3: 0, 4: 0 };
+        let totalMsgs = 0;
+        for (const c of chips) {
+            if (c.phase >= 1 && c.phase <= 4) phases[c.phase]++;
+            totalMsgs += c.messages_sent || 0;
+        }
+        const ready = chips.filter(c => c.phase >= 4 && c.status !== 'discarded').length;
+        res.json({
+            total: chips.length,
+            connected: chips.filter(c => ['connected', 'warming'].includes(c.status)).length,
+            warming: chips.filter(c => c.status === 'warming').length,
+            ready,
+            phases,
+            totalMessages: totalMsgs,
+            discarded: chips.filter(c => c.status === 'discarded').length,
+            rehab: chips.filter(c => c.status === 'rehabilitation').length
+        });
+    });
+
+    // ==================== MEDIA UPLOAD ====================
+
+    router.post('/media/:type/upload', upload.array('files', 20), (req, res) => {
+        const type = req.params.type;
+        if (!['audios', 'images', 'stickers'].includes(type)) {
+            return res.status(400).json({ error: 'Tipo invalido' });
+        }
+        const uploaded = (req.files || []).map(f => ({ name: f.originalname, saved: f.filename, size: f.size }));
+        res.json({ success: true, uploaded, count: uploaded.length });
+    });
+
+    router.get('/media/:type', (req, res) => {
+        const type = req.params.type;
+        const dir = path.join(__dirname, '..', '..', 'media', type);
+        if (!fs.existsSync(dir)) return res.json([]);
+        const files = fs.readdirSync(dir).map(f => {
+            const stat = fs.statSync(path.join(dir, f));
+            return { name: f, size: stat.size, created: stat.birthtime };
+        });
+        res.json(files);
+    });
+
+    router.delete('/media/:type/:filename', (req, res) => {
+        const { type, filename } = req.params;
+        const filepath = path.join(__dirname, '..', '..', 'media', type, filename);
+        if (fs.existsSync(filepath)) {
+            fs.unlinkSync(filepath);
+            return res.json({ success: true });
+        }
+        res.status(404).json({ error: 'Arquivo nao encontrado' });
+    });
+
+    // ==================== CUSTOM MESSAGES ====================
+
+    router.get('/messages', (req, res) => {
+        res.json(db.getCustomMessages());
+    });
+
+    router.put('/messages', (req, res) => {
+        const { messages } = req.body;
+        if (!Array.isArray(messages)) return res.status(400).json({ error: 'Formato invalido' });
+        db.saveCustomMessages(messages);
+        res.json({ success: true, count: messages.length });
+    });
+
+    // ==================== CHIP HISTORY/TIMELINE ====================
+
+    router.get('/chips/:id/history', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+
+        const activities = db.getRecentActivity(chipId, 200);
+        const timeline = [];
+
+        // Add connection event
+        if (chip.connected_at) {
+            timeline.push({ type: 'connect', time: chip.connected_at, detail: 'Conectado ao WhatsApp' });
+        }
+        if (chip.created_at) {
+            timeline.push({ type: 'create', time: chip.created_at, detail: 'Chip criado' });
+        }
+        if (chip.rehab_started_at) {
+            timeline.push({ type: 'rehab', time: chip.rehab_started_at, detail: `Entrou em reabilitacao: ${chip.rehab_reason || ''}` });
+        }
+
+        // Group activities by hour for summary
+        const hourMap = {};
+        for (const a of activities) {
+            const hour = (a.created_at || '').slice(0, 13);
+            if (!hourMap[hour]) hourMap[hour] = { count: 0, actions: {}, errors: 0 };
+            hourMap[hour].count++;
+            hourMap[hour].actions[a.action_type] = (hourMap[hour].actions[a.action_type] || 0) + 1;
+            if (!a.success) hourMap[hour].errors++;
+        }
+
+        for (const [hour, data] of Object.entries(hourMap)) {
+            const topAction = Object.entries(data.actions).sort((a, b) => b[1] - a[1])[0];
+            timeline.push({
+                type: 'activity',
+                time: hour + ':00:00.000Z',
+                detail: `${data.count} acoes (${topAction ? topAction[0] + ': ' + topAction[1] : ''})${data.errors ? ' · ' + data.errors + ' erros' : ''}`
+            });
+        }
+
+        timeline.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+        res.json({
+            chip,
+            timeline: timeline.slice(0, 100),
+            stats: {
+                total_messages: chip.messages_sent || 0,
+                phase: chip.phase,
+                days_active: chip.connected_at ? Math.ceil((Date.now() - new Date(chip.connected_at).getTime()) / 86400000) : 0,
+                status: chip.status
+            }
+        });
+    });
+
+    // ==================== TEST NOTIFICATION ====================
+
+    router.post('/test-notification', async (req, res) => {
+        const settings = db.getSettings();
+        const n = settings.notifications;
+        if (!n || !n.phone) return res.json({ success: false, error: 'Numero nao configurado' });
+        try {
+            const phone = n.phone.replace(/\D/g, '');
+            const resp = await fetch('https://api.z-api.io/instances/3E9F26A4DCFB614A95626EB14D89919B/token/9CDF3623EFE3D71E8FAD8912/send-text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Client-Token': 'F7428e0211a2f428d96737ee23d06edb8S' },
+                body: JSON.stringify({ phone, message: '🤖 *Aquecimento KS*\n\n✅ Teste de notificacao! Tudo funcionando.' })
+            });
+            res.json({ success: resp.ok });
+        } catch (err) {
+            res.json({ success: false, error: err.message });
+        }
     });
 
     return router;

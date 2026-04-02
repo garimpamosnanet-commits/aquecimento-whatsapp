@@ -4,9 +4,10 @@ const fs = require('fs');
 const path = require('path');
 
 class WarmingEngine {
-    constructor(sessionManager, io) {
+    constructor(sessionManager, io, notifier) {
         this.sessionManager = sessionManager;
         this.io = io;
+        this.notifier = notifier;
         this.activeTimers = new Map(); // chipId -> timeout
         this.running = false;
     }
@@ -523,6 +524,12 @@ class WarmingEngine {
             console.log(`[WarmingEngine] Chip ${chipId} avancou para fase ${newPhase} (${daysDiff} dias)`);
             this.io.emit('phase_change', { chipId, phase: newPhase, days: daysDiff });
             this.sessionManager.emitChipUpdate(chipId);
+            // Notify
+            if (this.notifier) {
+                const name = chip.name || chip.phone || `Chip ${chipId}`;
+                this.notifier.phaseChange(name, newPhase);
+                if (newPhase >= 4) this.notifier.chipReady(name);
+            }
         }
     }
 }

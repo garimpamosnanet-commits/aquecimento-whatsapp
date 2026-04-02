@@ -154,14 +154,18 @@ function renderChipCard(chip) {
     const instanceBadge = chip.instance_type === 'admin'
         ? '<span class="instance-badge adm">ADM</span>'
         : '';
+    const readyBadge = chip.phase >= 4 && chip.status !== 'discarded'
+        ? '<span class="instance-badge ready">PRONTO</span>'
+        : '';
 
     return `
-    <div class="chip-card status-${chip.status}" id="chip-${chip.id}" draggable="true" ondragstart="onDragStart(event, ${chip.id})">
+    <div class="chip-card status-${chip.status}${_bulkSelected.has(chip.id) ? ' bulk-selected' : ''}" id="chip-${chip.id}" draggable="true" ondragstart="onDragStart(event, ${chip.id})">
+        <input type="checkbox" class="bulk-checkbox" ${_bulkSelected.has(chip.id) ? 'checked' : ''} onclick="toggleBulkSelect(${chip.id}, event)" title="Selecionar">
         <div class="chip-header">
             <div class="chip-info">
                 <div class="chip-avatar ${avatarClass}">${avatarContent}</div>
                 <div class="chip-identity">
-                    <div class="chip-name">${chip.name || 'Chip ' + chip.id} ${instanceBadge} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
+                    <div class="chip-name">${chip.name || 'Chip ' + chip.id} ${instanceBadge}${readyBadge} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
                     <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>
                 </div>
             </div>
@@ -222,6 +226,7 @@ function renderChipCard(chip) {
             ${chip.status !== 'discarded' ? `<button class="btn btn-outline btn-sm" onclick="disconnectChip(${chip.id})" ${chip.status === 'disconnected' ? 'disabled' : ''}>⏏ Desconectar</button>` : ''}
             ${['connected','warming','paused'].includes(chip.status) && (chip.instance_type || 'warming') === 'warming' ? `<button class="btn btn-outline btn-sm" onclick="setInstanceType(${chip.id},'admin')" title="Marcar como ADM do cliente">👤 ADM</button>` : ''}
             ${chip.instance_type === 'admin' ? `<button class="btn btn-outline btn-sm btn-adm-active" onclick="setInstanceType(${chip.id},'warming')" title="Voltar para aquecimento">👤 ADM ✓</button>` : ''}
+            <button class="btn-icon" onclick="openChipHistory(${chip.id})" title="Historico">📋</button>
             <button class="btn-icon danger" onclick="deleteChip(${chip.id})" title="Excluir">✕</button>
         </div>
     </div>`;
@@ -2060,3 +2065,306 @@ function setInstanceType(chipId, type) {
         }
     });
 }
+
+// ==================== DASHBOARD CHARTS ====================
+
+let _chartsVisible = false;
+let _chartMsg = null;
+let _chartPhase = null;
+
+function toggleCharts() {
+    const grid = document.getElementById('charts-grid');
+    const icon = document.getElementById('chart-toggle-icon');
+    _chartsVisible = !_chartsVisible;
+    grid.style.display = _chartsVisible ? 'grid' : 'none';
+    icon.textContent = _chartsVisible ? '▲' : '▼';
+    if (_chartsVisible) loadDashboardCharts();
+}
+
+function loadDashboardCharts() {
+    Promise.all([
+        fetch('/api/dashboard/daily-stats?days=7').then(r => r.json()),
+        fetch('/api/dashboard/summary').then(r => r.json())
+    ]).then(([daily, summary]) => {
+        renderMessagesChart(daily);
+        renderPhasesChart(summary.phases);
+    }).catch(() => {});
+}
+
+function renderMessagesChart(data) {
+    const ctx = document.getElementById('chart-messages');
+    if (!ctx) return;
+    if (_chartMsg) _chartMsg.destroy();
+    const labels = data.map(d => { const p = d.date?.split('-'); return p ? p[2] + '/' + p[1] : ''; });
+    const values = data.map(d => d.today_messages || 0);
+    _chartMsg = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{ label: 'Msgs/dia', data: values, backgroundColor: 'rgba(99,102,241,0.5)', borderRadius: 6, borderSkipped: false }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' } }, x: { grid: { display: false } } } }
+    });
+}
+
+function renderPhasesChart(phases) {
+    const ctx = document.getElementById('chart-phases');
+    if (!ctx) return;
+    if (_chartPhase) _chartPhase.destroy();
+    _chartPhase = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Fase 1', 'Fase 2', 'Fase 3', 'Fase 4'],
+            datasets: [{ data: [phases[1]||0, phases[2]||0, phases[3]||0, phases[4]||0], backgroundColor: ['#dc2626', '#ca8a04', '#ea580c', '#16a34a'], borderWidth: 0 }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }, cutout: '60%' }
+    });
+}
+
+// ==================== CONFIG SUB-TABS ====================
+
+function switchConfigSub(name) {
+    document.querySelectorAll('.config-sub').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.config-subtab').forEach(el => el.classList.remove('active'));
+    const sub = document.getElementById('config-sub-' + name);
+    if (sub) sub.classList.add('active');
+    if (event && event.target) event.target.classList.add('active');
+    if (name === 'schedule') loadScheduleSettings();
+    if (name === 'notifications') loadNotifSettings();
+    if (name === 'proxy-rotation') loadProxyRotSettings();
+    if (name === 'media') loadAllMedia();
+    if (name === 'messages') loadCustomMessages();
+}
+
+// ==================== SCHEDULE SETTINGS ====================
+
+function loadScheduleSettings() {
+    fetch('/api/settings').then(r => r.json()).then(s => {
+        const sched = s.schedule || {};
+        document.getElementById('sched-enabled').checked = sched.enabled || false;
+        document.getElementById('sched-start-h').value = sched.start_hour ?? 8;
+        document.getElementById('sched-start-m').value = sched.start_min ?? 0;
+        document.getElementById('sched-stop-h').value = sched.stop_hour ?? 22;
+        document.getElementById('sched-stop-m').value = sched.stop_min ?? 0;
+    });
+}
+
+function saveScheduleSettings() {
+    const data = {
+        enabled: document.getElementById('sched-enabled').checked,
+        start_hour: parseInt(document.getElementById('sched-start-h').value) || 8,
+        start_min: parseInt(document.getElementById('sched-start-m').value) || 0,
+        stop_hour: parseInt(document.getElementById('sched-stop-h').value) || 22,
+        stop_min: parseInt(document.getElementById('sched-stop-m').value) || 0
+    };
+    fetch('/api/settings/schedule', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+        .then(() => showToast('Agendamento salvo', 'success'));
+}
+
+// ==================== NOTIFICATION SETTINGS ====================
+
+function loadNotifSettings() {
+    fetch('/api/settings').then(r => r.json()).then(s => {
+        const n = s.notifications || {};
+        document.getElementById('notif-enabled').checked = n.enabled || false;
+        document.getElementById('notif-phone').value = n.phone || '';
+        const events = n.events || [];
+        document.querySelectorAll('.notif-event').forEach(cb => { cb.checked = events.includes(cb.value); });
+    });
+}
+
+function saveNotifSettings() {
+    const events = [];
+    document.querySelectorAll('.notif-event:checked').forEach(cb => events.push(cb.value));
+    const data = {
+        enabled: document.getElementById('notif-enabled').checked,
+        phone: document.getElementById('notif-phone').value.trim(),
+        events
+    };
+    fetch('/api/settings/notifications', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+        .then(() => showToast('Notificacoes salvas', 'success'));
+}
+
+function testNotification() {
+    saveNotifSettings();
+    setTimeout(() => {
+        fetch('/api/test-notification', { method: 'POST' })
+            .then(r => r.json())
+            .then(d => showToast(d.success ? 'Teste enviado!' : (d.error || 'Erro'), d.success ? 'success' : 'danger'));
+    }, 500);
+}
+
+// ==================== PROXY ROTATION SETTINGS ====================
+
+function loadProxyRotSettings() {
+    fetch('/api/settings').then(r => r.json()).then(s => {
+        const pr = s.proxy_rotation || {};
+        document.getElementById('proxyrot-enabled').checked = pr.enabled || false;
+        document.getElementById('proxyrot-hours').value = pr.interval_hours ?? 6;
+    });
+}
+
+function saveProxyRotSettings() {
+    const data = {
+        enabled: document.getElementById('proxyrot-enabled').checked,
+        interval_hours: parseInt(document.getElementById('proxyrot-hours').value) || 6
+    };
+    fetch('/api/settings/proxy-rotation', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+        .then(() => showToast('Rotacao de proxy salva', 'success'));
+}
+
+// ==================== MEDIA MANAGEMENT ====================
+
+function loadAllMedia() {
+    ['audios', 'images', 'stickers'].forEach(type => {
+        fetch('/api/media/' + type).then(r => r.json()).then(files => {
+            document.getElementById('media-' + type + '-count').textContent = files.length;
+            const list = document.getElementById('media-' + type + '-list');
+            if (files.length === 0) { list.innerHTML = '<p class="settings-hint">Nenhum arquivo</p>'; return; }
+            list.innerHTML = files.map(f => `
+                <div class="media-item">
+                    <span class="media-name">${f.name}</span>
+                    <span class="media-size">${(f.size / 1024).toFixed(1)}KB</span>
+                    <button class="btn-icon danger" onclick="deleteMedia('${type}','${f.name}')" title="Excluir">✕</button>
+                </div>
+            `).join('');
+        });
+    });
+}
+
+function uploadMedia(type) {
+    const input = document.getElementById('upload-' + type);
+    if (!input.files.length) return;
+    const form = new FormData();
+    for (const f of input.files) form.append('files', f);
+    fetch('/api/media/' + type + '/upload', { method: 'POST', body: form })
+        .then(r => r.json())
+        .then(d => { showToast(d.count + ' arquivo(s) enviado(s)', 'success'); loadAllMedia(); input.value = ''; })
+        .catch(() => showToast('Erro no upload', 'danger'));
+}
+
+function deleteMedia(type, filename) {
+    fetch('/api/media/' + type + '/' + encodeURIComponent(filename), { method: 'DELETE' })
+        .then(() => { showToast('Removido', 'success'); loadAllMedia(); });
+}
+
+// ==================== CUSTOM MESSAGES ====================
+
+let _customMessages = [];
+
+function loadCustomMessages() {
+    fetch('/api/messages').then(r => r.json()).then(msgs => { _customMessages = msgs || []; renderCustomMessages(); });
+}
+
+function renderCustomMessages() {
+    const list = document.getElementById('custom-messages-list');
+    if (_customMessages.length === 0) { list.innerHTML = '<p class="settings-hint">Nenhuma mensagem customizada. As mensagens padrao serao usadas.</p>'; return; }
+    list.innerHTML = _customMessages.map((msg, i) => `
+        <div class="media-item"><span class="media-name" style="flex:1">${truncate(msg, 60)}</span><button class="btn-icon danger" onclick="removeCustomMessage(${i})">✕</button></div>
+    `).join('');
+}
+
+function addCustomMessage() {
+    const msg = prompt('Digite a mensagem:');
+    if (!msg || !msg.trim()) return;
+    _customMessages.push(msg.trim());
+    fetch('/api/messages', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ messages: _customMessages }) })
+        .then(() => { renderCustomMessages(); showToast('Mensagem adicionada', 'success'); });
+}
+
+function removeCustomMessage(i) {
+    _customMessages.splice(i, 1);
+    fetch('/api/messages', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ messages: _customMessages }) })
+        .then(() => { renderCustomMessages(); showToast('Removida', 'success'); });
+}
+
+// ==================== CHIP HISTORY MODAL ====================
+
+function openChipHistory(chipId) {
+    fetch('/api/chips/' + chipId + '/history').then(r => r.json()).then(data => {
+        const chip = data.chip;
+        const name = chip.name || chip.phone || 'Chip ' + chipId;
+        const div = document.createElement('div');
+        div.innerHTML = `
+        <div class="modal-overlay" onclick="this.parentElement.remove()">
+            <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">
+                <h3>📋 Historico — ${name}</h3>
+                <div class="chip-history-stats">
+                    <div class="history-stat"><span class="history-stat-val">${data.stats.days_active}</span><span class="history-stat-label">dias</span></div>
+                    <div class="history-stat"><span class="history-stat-val">${data.stats.total_messages}</span><span class="history-stat-label">msgs</span></div>
+                    <div class="history-stat"><span class="history-stat-val">Fase ${data.stats.phase}</span><span class="history-stat-label">atual</span></div>
+                    <div class="history-stat"><span class="history-stat-val">${data.stats.status}</span><span class="history-stat-label">status</span></div>
+                </div>
+                <div class="chip-timeline">${data.timeline.map(t => {
+                    const icon = t.type === 'connect' ? '🟢' : t.type === 'create' ? '📱' : t.type === 'rehab' ? '🏥' : '📊';
+                    const time = new Date(t.time).toLocaleString('pt-BR');
+                    return '<div class="timeline-item"><span class="timeline-icon">' + icon + '</span><div class="timeline-content"><div class="timeline-detail">' + t.detail + '</div><div class="timeline-time">' + time + '</div></div></div>';
+                }).join('')}</div>
+                <button class="btn btn-outline btn-sm" onclick="this.closest('.modal-overlay').parentElement.remove()" style="margin-top:16px;width:100%">Fechar</button>
+            </div>
+        </div>`;
+        document.body.appendChild(div);
+    }).catch(() => showToast('Erro ao carregar historico', 'danger'));
+}
+
+// ==================== BULK CHIP OPERATIONS ====================
+
+let _bulkSelected = new Set();
+
+function toggleBulkSelect(chipId, event) {
+    if (event) event.stopPropagation();
+    if (_bulkSelected.has(chipId)) _bulkSelected.delete(chipId);
+    else _bulkSelected.add(chipId);
+    const card = document.getElementById('chip-' + chipId);
+    if (card) card.classList.toggle('bulk-selected', _bulkSelected.has(chipId));
+    updateBulkBar();
+}
+
+function deselectAllChips() {
+    _bulkSelected.clear();
+    document.querySelectorAll('.chip-card.bulk-selected').forEach(c => c.classList.remove('bulk-selected'));
+    updateBulkBar();
+}
+
+function updateBulkBar() {
+    let bar = document.getElementById('bulk-bar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'bulk-bar';
+        bar.className = 'bulk-bar';
+        const container = document.querySelector('.chips-header');
+        if (container) container.after(bar);
+    }
+    if (_bulkSelected.size === 0) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    bar.innerHTML = `
+        <span><strong>${_bulkSelected.size}</strong> selecionado(s)</span>
+        <button class="btn btn-success btn-sm" onclick="bulkAction('start')">▶ Aquecer</button>
+        <button class="btn btn-warning btn-sm" onclick="bulkAction('stop')">⏸ Pausar</button>
+        <button class="btn btn-outline btn-sm" onclick="bulkAction('adm')">👤 ADM</button>
+        <button class="btn btn-danger btn-sm" onclick="bulkAction('delete')">✕ Excluir</button>
+        <button class="btn btn-outline btn-sm" onclick="deselectAllChips()">Limpar</button>
+    `;
+}
+
+function bulkAction(action) {
+    const ids = Array.from(_bulkSelected);
+    if (ids.length === 0) return;
+    if (action === 'delete' && !confirm('Excluir ' + ids.length + ' chip(s)?')) return;
+
+    const requests = ids.map(id => {
+        if (action === 'start') return fetch('/api/chips/' + id + '/warming/start', { method: 'POST' });
+        if (action === 'stop') return fetch('/api/chips/' + id + '/warming/stop', { method: 'POST' });
+        if (action === 'adm') return fetch('/api/chips/' + id + '/set-type', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'admin' }) });
+        if (action === 'delete') return fetch('/api/chips/' + id, { method: 'DELETE' });
+    });
+    Promise.all(requests).then(() => {
+        showToast(action + ' aplicado em ' + ids.length + ' chip(s)', 'success');
+        _bulkSelected.clear();
+        updateBulkBar();
+        refreshChips();
+    });
+}
+
+// Toast listener for server-side toasts
+socket.on('toast', (data) => { showToast(data.message, data.type || 'info'); });

@@ -92,7 +92,70 @@ function getDb() {
         }
     }
 
+    // Migrate: add schedule and notifications config
+    if (!data.settings) {
+        data.settings = {
+            schedule: { enabled: false, start_hour: 8, start_min: 0, stop_hour: 22, stop_min: 0 },
+            notifications: { enabled: false, phone: '', events: ['disconnect', 'ban', 'phase_change', 'error', 'ready'] },
+            proxy_rotation: { enabled: false, interval_hours: 6 },
+            messages: []
+        };
+        if (!data._nextId.messages) data._nextId.messages = 1;
+        saveDb(data);
+        console.log('[DB] Migrated: added settings (schedule, notifications, proxy_rotation, messages)');
+    }
+
+    // Migrate: add daily_stats collection
+    if (!data.daily_stats) {
+        data.daily_stats = [];
+        saveDb(data);
+        console.log('[DB] Migrated: added daily_stats');
+    }
+
     return data;
+}
+
+function getSettings() {
+    const data = loadDb();
+    return data.settings || {};
+}
+
+function updateSettings(key, value) {
+    const data = loadDb();
+    if (!data.settings) data.settings = {};
+    data.settings[key] = value;
+    saveDb(data);
+    return data.settings;
+}
+
+function addDailyStat(date, stats) {
+    const data = loadDb();
+    const existing = data.daily_stats.findIndex(s => s.date === date);
+    if (existing >= 0) {
+        data.daily_stats[existing] = { date, ...stats };
+    } else {
+        data.daily_stats.push({ date, ...stats });
+    }
+    // Keep last 30 days
+    if (data.daily_stats.length > 30) data.daily_stats = data.daily_stats.slice(-30);
+    saveDb(data);
+}
+
+function getDailyStats(days = 7) {
+    const data = loadDb();
+    return (data.daily_stats || []).slice(-days);
+}
+
+function getCustomMessages() {
+    const data = loadDb();
+    return data.settings?.messages || [];
+}
+
+function saveCustomMessages(messages) {
+    const data = loadDb();
+    if (!data.settings) data.settings = {};
+    data.settings.messages = messages;
+    saveDb(data);
 }
 
 function nextId(collection) {
@@ -612,5 +675,7 @@ module.exports = {
     enterRehabilitation, exitRehabilitation, markChipDiscarded, getChipsInRehab,
     setChipInstanceType, getAdminInstances, getWarmingChipsForAdd,
     createAddOperation, getAddOperation, updateAddOperation, getAddOperations,
-    addOperationItems, getOperationItems, updateOperationItem, getFailedItems
+    addOperationItems, getOperationItems, updateOperationItem, getFailedItems,
+    getSettings, updateSettings, addDailyStat, getDailyStats,
+    getCustomMessages, saveCustomMessages
 };

@@ -6,6 +6,7 @@
     <title>KS Digital — Command Center</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -74,6 +75,24 @@
             </div>
         </div>
 
+        <!-- DASHBOARD CHARTS (collapsible) -->
+        <div class="dashboard-charts" id="dashboard-charts">
+            <div class="chart-toggle" onclick="toggleCharts()">
+                <span>📊 Dashboard</span>
+                <span id="chart-toggle-icon">▼</span>
+            </div>
+            <div class="charts-grid" id="charts-grid" style="display:none">
+                <div class="chart-card">
+                    <h4>Mensagens / Dia</h4>
+                    <canvas id="chart-messages" height="180"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h4>Distribuicao por Fase</h4>
+                    <canvas id="chart-phases" height="180"></canvas>
+                </div>
+            </div>
+        </div>
+
         <!-- ALERTS BAR (health-monitor) -->
         <div id="alerts-bar" class="alerts-bar" style="display:none"></div>
 
@@ -128,10 +147,126 @@
 
         <!-- TAB: CONFIG -->
         <div id="tab-config" class="tab-content">
-            <div class="section-header">
-                <h2>Configuracao de Fases</h2>
+            <!-- Sub-tabs within config -->
+            <div class="config-subtabs">
+                <button class="config-subtab active" onclick="switchConfigSub('phases')">Fases</button>
+                <button class="config-subtab" onclick="switchConfigSub('schedule')">Agendamento</button>
+                <button class="config-subtab" onclick="switchConfigSub('notifications')">Notificacoes</button>
+                <button class="config-subtab" onclick="switchConfigSub('proxy-rotation')">Rotacao Proxy</button>
+                <button class="config-subtab" onclick="switchConfigSub('media')">Midias</button>
+                <button class="config-subtab" onclick="switchConfigSub('messages')">Mensagens</button>
             </div>
-            <div id="config-grid" class="config-grid"></div>
+
+            <!-- Phases config -->
+            <div id="config-sub-phases" class="config-sub active">
+                <div class="section-header"><h2>Configuracao de Fases</h2></div>
+                <div id="config-grid" class="config-grid"></div>
+            </div>
+
+            <!-- Schedule config -->
+            <div id="config-sub-schedule" class="config-sub">
+                <div class="section-header"><h2>Agendamento Automatico</h2></div>
+                <div class="settings-card">
+                    <div class="settings-row">
+                        <label>Ativar agendamento</label>
+                        <label class="toggle"><input type="checkbox" id="sched-enabled" onchange="saveScheduleSettings()"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="settings-row">
+                        <label>Iniciar aquecimento as</label>
+                        <div class="time-inputs">
+                            <input type="number" id="sched-start-h" min="0" max="23" value="8" class="input-sm" onchange="saveScheduleSettings()">
+                            <span>:</span>
+                            <input type="number" id="sched-start-m" min="0" max="59" value="0" class="input-sm" onchange="saveScheduleSettings()">
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <label>Parar aquecimento as</label>
+                        <div class="time-inputs">
+                            <input type="number" id="sched-stop-h" min="0" max="23" value="22" class="input-sm" onchange="saveScheduleSettings()">
+                            <span>:</span>
+                            <input type="number" id="sched-stop-m" min="0" max="59" value="0" class="input-sm" onchange="saveScheduleSettings()">
+                        </div>
+                    </div>
+                    <p class="settings-hint">Os chips conectados serao iniciados/parados automaticamente nos horarios definidos.</p>
+                </div>
+            </div>
+
+            <!-- Notifications config -->
+            <div id="config-sub-notifications" class="config-sub">
+                <div class="section-header"><h2>Notificacoes WhatsApp</h2></div>
+                <div class="settings-card">
+                    <div class="settings-row">
+                        <label>Ativar notificacoes</label>
+                        <label class="toggle"><input type="checkbox" id="notif-enabled" onchange="saveNotifSettings()"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="settings-row">
+                        <label>Numero WhatsApp (com DDD)</label>
+                        <input type="text" id="notif-phone" class="input-field" placeholder="5543999999999" onchange="saveNotifSettings()">
+                    </div>
+                    <div class="settings-row">
+                        <label>Eventos</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" value="disconnect" onchange="saveNotifSettings()" class="notif-event" checked> Desconexao</label>
+                            <label><input type="checkbox" value="ban" onchange="saveNotifSettings()" class="notif-event" checked> Ban/Logout</label>
+                            <label><input type="checkbox" value="phase_change" onchange="saveNotifSettings()" class="notif-event" checked> Mudanca de fase</label>
+                            <label><input type="checkbox" value="ready" onchange="saveNotifSettings()" class="notif-event" checked> Chip pronto</label>
+                            <label><input type="checkbox" value="error" onchange="saveNotifSettings()" class="notif-event"> Erros criticos</label>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="testNotification()" style="margin-top:12px">Enviar teste</button>
+                </div>
+            </div>
+
+            <!-- Proxy Rotation -->
+            <div id="config-sub-proxy-rotation" class="config-sub">
+                <div class="section-header"><h2>Rotacao de Proxy</h2></div>
+                <div class="settings-card">
+                    <div class="settings-row">
+                        <label>Ativar rotacao automatica</label>
+                        <label class="toggle"><input type="checkbox" id="proxyrot-enabled" onchange="saveProxyRotSettings()"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="settings-row">
+                        <label>Intervalo de rotacao (horas)</label>
+                        <input type="number" id="proxyrot-hours" min="1" max="48" value="6" class="input-sm" onchange="saveProxyRotSettings()">
+                    </div>
+                    <p class="settings-hint">Proxies serao alternados automaticamente entre os chips no intervalo definido.</p>
+                </div>
+            </div>
+
+            <!-- Media Upload -->
+            <div id="config-sub-media" class="config-sub">
+                <div class="section-header"><h2>Midias (Audios, Imagens, Stickers)</h2></div>
+                <div class="media-sections">
+                    <div class="media-section">
+                        <h3>Audios <span id="media-audios-count" class="media-count">0</span></h3>
+                        <input type="file" id="upload-audios" multiple accept="audio/*,.ogg,.mp3,.m4a" style="display:none" onchange="uploadMedia('audios')">
+                        <button class="btn btn-primary btn-sm" onclick="document.getElementById('upload-audios').click()">+ Upload Audios</button>
+                        <div id="media-audios-list" class="media-list"></div>
+                    </div>
+                    <div class="media-section">
+                        <h3>Imagens <span id="media-images-count" class="media-count">0</span></h3>
+                        <input type="file" id="upload-images" multiple accept="image/*" style="display:none" onchange="uploadMedia('images')">
+                        <button class="btn btn-primary btn-sm" onclick="document.getElementById('upload-images').click()">+ Upload Imagens</button>
+                        <div id="media-images-list" class="media-list"></div>
+                    </div>
+                    <div class="media-section">
+                        <h3>Stickers <span id="media-stickers-count" class="media-count">0</span></h3>
+                        <input type="file" id="upload-stickers" multiple accept="image/webp,.webp" style="display:none" onchange="uploadMedia('stickers')">
+                        <button class="btn btn-primary btn-sm" onclick="document.getElementById('upload-stickers').click()">+ Upload Stickers</button>
+                        <div id="media-stickers-list" class="media-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Messages -->
+            <div id="config-sub-messages" class="config-sub">
+                <div class="section-header">
+                    <h2>Banco de Mensagens</h2>
+                    <button class="btn btn-primary btn-sm" onclick="addCustomMessage()">+ Adicionar</button>
+                </div>
+                <p class="settings-hint">Adicione mensagens customizadas que serao usadas no aquecimento. Uma por linha.</p>
+                <div id="custom-messages-list"></div>
+            </div>
         </div>
 
         <!-- TAB: REHABILITATION -->

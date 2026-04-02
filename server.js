@@ -99,8 +99,10 @@ app.post('/api/logout', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize components
-const sessionManager = new SessionManager(io);
-const warmingEngine = new WarmingEngine(sessionManager, io);
+const Notifier = require('./src/notifier');
+const notifier = new Notifier(io);
+const sessionManager = new SessionManager(io, notifier);
+const warmingEngine = new WarmingEngine(sessionManager, io, notifier);
 const groupManager = new GroupManager(sessionManager, io);
 
 // Routes
@@ -147,6 +149,20 @@ server.listen(PORT, async () => {
     const healthMonitor = new HealthMonitor(io);
     healthMonitor.start();
     console.log('[Health] Monitor de saude iniciado');
+
+    // Start automatic backup
+    const backup = require('./src/backup');
+    backup.start();
+
+    // Start scheduler (auto start/stop warming)
+    const Scheduler = require('./src/scheduler');
+    const scheduler = new Scheduler(warmingEngine, sessionManager, io);
+    scheduler.start();
+
+    // Start proxy rotator
+    const ProxyRotator = require('./src/proxy-rotator');
+    const proxyRotator = new ProxyRotator(sessionManager);
+    proxyRotator.start();
     console.log('');
 });
 

@@ -27,8 +27,9 @@ const SESSIONS_DIR = path.join(__dirname, '..', '..', 'sessions');
 const logger = pino({ level: 'silent' });
 
 class SessionManager {
-    constructor(io) {
+    constructor(io, notifier) {
         this.io = io;
+        this.notifier = notifier;
         this.sessions = new Map(); // sessionId -> { socket, chip }
         this.reconnectTimers = new Map();
     }
@@ -169,6 +170,15 @@ class SessionManager {
                         fs.rmSync(sessionPath, { recursive: true });
                     }
                     this.io.emit('logged_out', { sessionId, chipId: chip.id });
+                    // Notify — possible ban
+                    if (this.notifier) {
+                        const name = chip.name || chip.phone || sessionId;
+                        if (statusCode === 401 || statusCode === 440) {
+                            this.notifier.chipBanned(name);
+                        } else {
+                            this.notifier.chipDisconnected(name);
+                        }
+                    }
                 } else if (statusCode !== reason.connectionClosed) {
                     // Try to reconnect after delay
                     const delay = Math.min(5000 + Math.random() * 5000, 30000);
