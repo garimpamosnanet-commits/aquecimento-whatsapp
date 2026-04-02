@@ -281,8 +281,9 @@ function closeInputModal() {
 function confirmInputModal() {
     const value = document.getElementById('input-modal-value').value.trim();
     if (!value) return;
+    const cb = _inputModalCallback;
     closeInputModal();
-    if (_inputModalCallback) _inputModalCallback(value);
+    if (cb) cb(value);
 }
 
 // Enter no input modal confirma
@@ -305,8 +306,9 @@ function closeConfirmModal() {
 }
 
 function confirmConfirmModal() {
+    const cb = _confirmModalCallback;
     closeConfirmModal();
-    if (_confirmModalCallback) _confirmModalCallback();
+    if (cb) cb();
 }
 
 // ==================== FOLDERS ====================
