@@ -1598,6 +1598,29 @@ body::before {
     color: var(--warming);
 }
 
+.ga-no-admin-box {
+    margin-top: 10px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.04), rgba(99, 102, 241, 0.04));
+    border: 1px dashed rgba(139, 92, 246, 0.25);
+    border-radius: var(--radius);
+    text-align: center;
+}
+.ga-no-admin-box p {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.ga-no-admin-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.ga-no-admin-actions .btn {
+    min-width: 180px;
+}
+
 /* Panels (2 columns) */
 .ga-panels {
     display: grid;

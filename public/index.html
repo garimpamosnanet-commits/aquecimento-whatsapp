@@ -162,8 +162,12 @@
                     <button class="btn btn-outline btn-sm" onclick="loadAdminInstances()">Atualizar</button>
                 </div>
                 <div id="ga-admin-info" class="ga-admin-info" style="display:none"></div>
-                <div id="ga-no-admin" class="ga-hint" style="display:none">
-                    Nenhuma instancia marcada como ADM. Va na aba Chips, marque uma instancia como "ADM" primeiro.
+                <div id="ga-no-admin" class="ga-no-admin-box" style="display:none">
+                    <p>Nenhuma instancia marcada como ADM.</p>
+                    <div class="ga-no-admin-actions">
+                        <button class="btn btn-primary btn-sm" onclick="connectAdmInstance()">📱 Conectar nova ADM</button>
+                        <button class="btn btn-outline btn-sm" onclick="markExistingAsAdm()">👤 Marcar chip existente</button>
+                    </div>
                 </div>
             </div>
 

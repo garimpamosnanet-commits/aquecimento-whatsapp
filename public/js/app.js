@@ -3,6 +3,7 @@ const socket = io();
 let chips = [];
 let folders = [];
 let currentQRSessionId = null;
+let _pendingAdmConnect = false; // Auto-mark as ADM after QR connect
 
 // ==================== ANIMATED COUNTER ====================
 function animateValue(el, start, end, duration) {
@@ -82,10 +83,23 @@ socket.on('qr', ({ sessionId, chipId, qr }) => {
 socket.on('connected', ({ sessionId, chipId, phone }) => {
     if (currentQRSessionId === sessionId) {
         const qrImage = document.getElementById('qr-image');
-        qrImage.innerHTML = `<div style="color:#22C55E;font-size:48px">✓</div><div style="margin-top:8px;color:#666;font-size:14px">Conectado!<br><small>${phone || ''}</small></div>`;
+        if (_pendingAdmConnect) {
+            qrImage.innerHTML = `<div style="color:#8B5CF6;font-size:48px">👤</div><div style="margin-top:8px;color:#666;font-size:14px">ADM Conectado!<br><small>${phone || ''}</small></div>`;
+        } else {
+            qrImage.innerHTML = `<div style="color:#22C55E;font-size:48px">✓</div><div style="margin-top:8px;color:#666;font-size:14px">Conectado!<br><small>${phone || ''}</small></div>`;
+        }
         document.getElementById('btn-next-qr').style.display = 'inline-flex';
     }
-    showToast(`Chip ${phone || 'novo'} conectado!`, 'success');
+    // Auto-mark as ADM if connected via "Adicionar aos Grupos" flow
+    if (_pendingAdmConnect && chipId) {
+        _pendingAdmConnect = false;
+        setInstanceType(chipId, 'admin');
+        showToast(`ADM ${phone || ''} conectado e marcado!`, 'success');
+        // Refresh group-add tab if visible
+        setTimeout(() => loadAdminInstances(), 1000);
+    } else {
+        showToast(`Chip ${phone || 'novo'} conectado!`, 'success');
+    }
     addFeedItem(phone || 'Novo chip', 'Conectado com sucesso', null, 'connect');
 });
 
@@ -540,6 +554,7 @@ function reloadQR() {
 function closeQRModal() {
     document.getElementById('qr-modal').classList.remove('active');
     currentQRSessionId = null;
+    _pendingAdmConnect = false;
 }
 
 function nextQR() {
@@ -1512,6 +1527,35 @@ function loadGroupAddTab() {
 }
 
 // ==================== ADMIN INSTANCES ====================
+
+function connectAdmInstance() {
+    _pendingAdmConnect = true;
+    openQRModal();
+    // Pre-fill name hint
+    const nameInput = document.getElementById('chip-name-input');
+    if (nameInput) {
+        nameInput.value = 'ADM ';
+        nameInput.focus();
+        nameInput.setSelectionRange(4, 4);
+    }
+}
+
+function markExistingAsAdm() {
+    // Show connected chips that aren't ADM yet
+    const available = chips.filter(c => c.status === 'connected' && (c.instance_type || 'warming') === 'warming');
+    if (available.length === 0) {
+        showToast('Nenhum chip conectado disponivel para marcar como ADM', 'warning');
+        return;
+    }
+    const options = available.map(c => `${c.name || 'Chip ' + c.id} (${c.phone || 'sem numero'})`);
+    const choice = prompt('Chips disponiveis:\n\n' + options.map((o, i) => `${i + 1}. ${o}`).join('\n') + '\n\nDigite o numero:');
+    if (!choice) return;
+    const idx = parseInt(choice) - 1;
+    if (idx >= 0 && idx < available.length) {
+        setInstanceType(available[idx].id, 'admin');
+        setTimeout(() => loadAdminInstances(), 500);
+    }
+}
 
 function loadAdminInstances() {
     fetch('/api/admin-instances').then(r => r.json()).then(admins => {
