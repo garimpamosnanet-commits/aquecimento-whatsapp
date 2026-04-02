@@ -9,6 +9,8 @@ class HealthMonitor {
         this.interval = null;
         this.INTERVAL_MS = 30000; // 30 seconds
         this.lastHealthData = null;
+        this._rehabCandidateChecks = new Map(); // chipId -> consecutive low-score count
+        this._rehabExitChecks = new Map(); // chipId -> consecutive good-score count
     }
 
     start() {
@@ -67,12 +69,18 @@ class HealthMonitor {
             // Enriched stats
             const enrichedStats = this.getEnrichedStats(chips, chipHealthMap, todayCountMap, recentActivity, folderSummaries);
 
+            // Rehabilitation detection (read-only suggestions)
+            const rehabSuggestions = this.detectRehabCandidates(chips, chipHealthMap, recentActivity);
+            const rehabExitReady = this.detectRehabExitReady(chips, chipHealthMap);
+
             const healthData = {
                 chipHealth: chipHealthMap,
                 proxyHealth: proxyHealthMap,
                 folderSummaries,
                 alerts,
                 enrichedStats,
+                rehabSuggestions,
+                rehabExitReady,
                 timestamp: new Date().toISOString()
             };
 
@@ -111,6 +119,9 @@ class HealthMonitor {
         // 1. Status scoring
         if (chip.status === 'warming') {
             // Best status - no penalty
+        } else if (chip.status === 'rehabilitation') {
+            score -= 15;
+            reasons.push('Em reabilitacao');
         } else if (chip.status === 'connected') {
             score -= 10;
             reasons.push('Conectado mas nao aquecendo');
@@ -120,13 +131,15 @@ class HealthMonitor {
         } else if (chip.status === 'qr_pending') {
             score -= 40;
             reasons.push('QR pendente');
+        } else if (chip.status === 'discarded') {
+            return { score: 0, status: 'critical', reasons: ['Chip descartado'], lastActivityMinutesAgo: null, todayMsgCount: 0 };
         } else {
             score -= 30;
             reasons.push('Status: ' + chip.status);
         }
 
         // 2. Messages sent vs expected for phase/day
-        if (chip.status === 'warming') {
+        if (chip.status === 'warming' || chip.status === 'rehabilitation') {
             const config = db.getWarmingConfig(chip.phase);
             if (config) {
                 const now = new Date();
@@ -404,6 +417,103 @@ class HealthMonitor {
             connectedChips: chips.filter(c => c.status === 'connected' || c.status === 'warming').length,
             warmingChips: chips.filter(c => c.status === 'warming').length
         };
+    }
+    // ==================== REHABILITATION DETECTION (READ-ONLY) ====================
+
+    detectRehabCandidates(chips, chipHealthMap, recentActivity) {
+        const suggestions = [];
+        const nowMs = Date.now();
+
+        for (const chip of chips) {
+            // Only suggest rehab for warming chips in phase 4+
+            if (chip.status !== 'warming' || chip.phase < 4) {
+                this._rehabCandidateChecks.delete(chip.id);
+                continue;
+            }
+
+            const health = chipHealthMap[chip.id];
+            if (!health) continue;
+
+            let shouldSuggest = false;
+            let reason = '';
+
+            // Rule 1: health_score < 40 for 3 consecutive checks (1.5 min)
+            if (health.score < 40) {
+                const count = (this._rehabCandidateChecks.get(chip.id) || 0) + 1;
+                this._rehabCandidateChecks.set(chip.id, count);
+                if (count >= 3) {
+                    shouldSuggest = true;
+                    reason = 'Health score baixo (' + health.score + ') por ' + count + ' verificacoes';
+                }
+            } else {
+                this._rehabCandidateChecks.delete(chip.id);
+            }
+
+            // Rule 2: 5+ errors in last hour
+            if (!shouldSuggest) {
+                const oneHourAgo = nowMs - 3600000;
+                let errorCount = 0;
+                for (const a of recentActivity) {
+                    if (a.chip_id === chip.id && !a.success && a.created_at && new Date(a.created_at).getTime() > oneHourAgo) {
+                        errorCount++;
+                    }
+                }
+                if (errorCount >= 5) {
+                    shouldSuggest = true;
+                    reason = errorCount + ' erros na ultima hora';
+                }
+            }
+
+            // Rule 3: Inactive > 30 min while warming
+            if (!shouldSuggest && health.lastActivityMinutesAgo !== null && health.lastActivityMinutesAgo > 30) {
+                shouldSuggest = true;
+                reason = 'Inativo ha ' + health.lastActivityMinutesAgo + ' minutos';
+            }
+
+            if (shouldSuggest) {
+                suggestions.push({
+                    chipId: chip.id,
+                    chipName: chip.name || chip.phone || 'Chip ' + chip.id,
+                    score: health.score,
+                    reason
+                });
+            }
+        }
+
+        return suggestions;
+    }
+
+    detectRehabExitReady(chips, chipHealthMap) {
+        const ready = [];
+
+        for (const chip of chips) {
+            if (chip.status !== 'rehabilitation') {
+                this._rehabExitChecks.delete(chip.id);
+                continue;
+            }
+
+            const health = chipHealthMap[chip.id];
+            if (!health) continue;
+
+            // Exit criteria: health_score >= 70 for 6 consecutive checks (3 min)
+            if (health.score >= 70) {
+                const count = (this._rehabExitChecks.get(chip.id) || 0) + 1;
+                this._rehabExitChecks.set(chip.id, count);
+                if (count >= 6) {
+                    ready.push({
+                        chipId: chip.id,
+                        chipName: chip.name || chip.phone || 'Chip ' + chip.id,
+                        score: health.score,
+                        rehabDuration: chip.rehab_started_at ?
+                            Math.round((Date.now() - new Date(chip.rehab_started_at).getTime()) / 60000) : null
+                    });
+                }
+            } else {
+                this._rehabExitChecks.delete(chip.id);
+            }
+        }
+
+        return ready;
     }
 }
 

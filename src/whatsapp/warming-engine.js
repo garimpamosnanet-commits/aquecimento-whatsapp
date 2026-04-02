@@ -42,7 +42,7 @@ class WarmingEngine {
             this.activeTimers.delete(chipId);
         }
         const chip = db.getChipById(chipId);
-        if (chip && chip.status === 'warming') {
+        if (chip && (chip.status === 'warming' || chip.status === 'rehabilitation')) {
             db.updateChipStatus(chipId, 'connected');
             this.sessionManager.emitChipUpdate(chipId);
         }
@@ -52,7 +52,7 @@ class WarmingEngine {
     scheduleAllActive() {
         const chips = db.getAllChips();
         for (const chip of chips) {
-            if (chip.status === 'warming') {
+            if (chip.status === 'warming' || chip.status === 'rehabilitation') {
                 this.scheduleNextAction(chip.id);
             }
         }
@@ -62,7 +62,7 @@ class WarmingEngine {
         if (!this.running) return;
 
         const chip = db.getChipById(chipId);
-        if (!chip || chip.status !== 'warming') return;
+        if (!chip || (chip.status !== 'warming' && chip.status !== 'rehabilitation')) return;
 
         const config = db.getWarmingConfig(chip.phase);
         if (!config) return;
@@ -114,7 +114,7 @@ class WarmingEngine {
 
     async executeAction(chipId) {
         const chip = db.getChipById(chipId);
-        if (!chip || chip.status !== 'warming') return;
+        if (!chip || (chip.status !== 'warming' && chip.status !== 'rehabilitation')) return;
 
         const config = db.getWarmingConfig(chip.phase);
         if (!config) return;
@@ -486,6 +486,15 @@ class WarmingEngine {
         this.sessionManager.emitChipUpdate(chip.id);
     }
 
+    startRehab(chipId) {
+        const chip = db.getChipById(chipId);
+        if (!chip) return;
+        // Status already set to 'rehabilitation' by db.enterRehabilitation
+        this.sessionManager.emitChipUpdate(chipId);
+        this.scheduleNextAction(chipId);
+        console.log(`[WarmingEngine] Reabilitacao iniciada para chip ${chipId} (${chip.phone || chip.session_id})`);
+    }
+
     getRandomPartner(excludeChipId) {
         const connected = this.sessionManager.getConnectedSessions();
         const partners = connected.filter(s => s.chip.id !== excludeChipId && s.chip.phone);
@@ -496,6 +505,8 @@ class WarmingEngine {
     checkPhaseUpgrade(chipId) {
         const chip = db.getChipById(chipId);
         if (!chip || !chip.connected_at) return;
+        // Skip rehabilitation chips — they have their own exit criteria
+        if (chip.status === 'rehabilitation') return;
 
         const connectedDate = new Date(chip.connected_at);
         const now = new Date();

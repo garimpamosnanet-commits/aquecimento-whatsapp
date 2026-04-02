@@ -275,5 +275,86 @@ module.exports = function(sessionManager, warmingEngine) {
         res.json({ success: true });
     });
 
+    // ==================== REHABILITATION ====================
+
+    // Get chips in rehabilitation
+    router.get('/rehab', (req, res) => {
+        const chips = db.getChipsInRehab().map(chip => {
+            const proxy = db.getProxyForChip(chip.id);
+            return {
+                ...chip,
+                proxy_ip: proxy ? proxy.url.replace(/.*@/, '').replace(/:.*/, '') : null,
+                rehab_duration_min: chip.rehab_started_at ?
+                    Math.round((Date.now() - new Date(chip.rehab_started_at).getTime()) / 60000) : null
+            };
+        });
+        res.json(chips);
+    });
+
+    // Enter rehabilitation
+    router.post('/chips/:id/rehab/enter', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        if (chip.status !== 'warming' && chip.status !== 'connected') {
+            return res.status(400).json({ error: 'Chip precisa estar conectado ou aquecendo' });
+        }
+
+        // Stop current warming if active
+        warmingEngine.stopChip(chipId);
+
+        const reason = (req.body && req.body.reason) || 'manual';
+        const rehabChip = db.enterRehabilitation(chipId, reason);
+
+        // Start rehabilitation schedule if connected
+        if (sessionManager.isConnected(rehabChip.session_id)) {
+            warmingEngine.startRehab(chipId);
+        }
+
+        sessionManager.emitChipUpdate(chipId);
+        sessionManager.emitStats();
+        res.json({ success: true, chip: rehabChip });
+    });
+
+    // Resume from rehabilitation (return to normal warming at phase 3)
+    router.post('/chips/:id/rehab/resume', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        if (chip.status !== 'rehabilitation') {
+            return res.status(400).json({ error: 'Chip nao esta em reabilitacao' });
+        }
+
+        // Stop rehabilitation schedule
+        warmingEngine.stopChip(chipId);
+
+        // Exit rehabilitation - return to phase 3
+        const resumed = db.exitRehabilitation(chipId, 3);
+
+        // Restart normal warming
+        if (sessionManager.isConnected(resumed.session_id)) {
+            warmingEngine.startChip(chipId);
+        }
+
+        sessionManager.emitChipUpdate(chipId);
+        sessionManager.emitStats();
+        res.json({ success: true, chip: resumed });
+    });
+
+    // Discard chip
+    router.post('/chips/:id/discard', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+
+        // Stop any active warming/rehab
+        warmingEngine.stopChip(chipId);
+
+        const discarded = db.markChipDiscarded(chipId);
+        sessionManager.emitChipUpdate(chipId);
+        sessionManager.emitStats();
+        res.json({ success: true, chip: discarded });
+    });
+
     return router;
 };

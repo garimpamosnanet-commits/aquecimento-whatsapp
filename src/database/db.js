@@ -55,6 +55,18 @@ function getDb() {
         console.log('[DB] Migrated: added folders collection');
     }
 
+    // Migrate: add rehabilitation config (phase 5) if missing
+    if (data.warming_config && !data.warming_config.find(c => c.phase === 5)) {
+        data.warming_config.push({
+            id: 5, phase: 5, daily_limit: 30, min_delay_seconds: 180, max_delay_seconds: 600,
+            active_hour_start: 9, active_hour_end: 20,
+            enabled_actions: 'private_chat,location',
+            description: 'Reabilitacao - recuperacao controlada'
+        });
+        saveDb(data);
+        console.log('[DB] Config migrada: fase 5 (reabilitacao) adicionada');
+    }
+
     // Migrate: switch HTTP proxies to SOCKS5 (port 12323 -> 12324)
     if (data.proxies && data.proxies.length > 0 && data.proxies[0].url && data.proxies[0].url.startsWith('http://')) {
         let migrated = 0;
@@ -164,8 +176,10 @@ function getChipStats() {
     const chips = loadDb().chips;
     return {
         total: chips.length,
-        connected: chips.filter(c => c.status === 'connected' || c.status === 'warming').length,
+        connected: chips.filter(c => c.status === 'connected' || c.status === 'warming' || c.status === 'rehabilitation').length,
         warming: chips.filter(c => c.status === 'warming').length,
+        rehabilitation: chips.filter(c => c.status === 'rehabilitation').length,
+        discarded: chips.filter(c => c.status === 'discarded').length,
         totalMessages: chips.reduce((sum, c) => sum + c.messages_sent, 0)
     };
 }
@@ -413,6 +427,51 @@ function assignChipToFolder(chipId, folderId) {
     return chip;
 }
 
+// ==================== REHABILITATION ====================
+
+function enterRehabilitation(chipId, reason) {
+    const data = loadDb();
+    const chip = data.chips.find(c => c.id === chipId);
+    if (!chip) return null;
+    chip.rehab_reason = reason || 'manual';
+    chip.rehab_started_at = now();
+    chip.rehab_previous_phase = chip.phase;
+    chip.phase = 5;
+    chip.status = 'rehabilitation';
+    saveDb(data);
+    return chip;
+}
+
+function exitRehabilitation(chipId, targetPhase) {
+    const data = loadDb();
+    const chip = data.chips.find(c => c.id === chipId);
+    if (!chip || chip.status !== 'rehabilitation') return null;
+    chip.phase = targetPhase || 3;
+    chip.status = 'connected';
+    delete chip.rehab_reason;
+    delete chip.rehab_started_at;
+    delete chip.rehab_previous_phase;
+    saveDb(data);
+    return chip;
+}
+
+function markChipDiscarded(chipId) {
+    const data = loadDb();
+    const chip = data.chips.find(c => c.id === chipId);
+    if (!chip) return null;
+    chip.status = 'discarded';
+    chip.discarded_at = now();
+    delete chip.rehab_reason;
+    delete chip.rehab_started_at;
+    delete chip.rehab_previous_phase;
+    saveDb(data);
+    return chip;
+}
+
+function getChipsInRehab() {
+    return loadDb().chips.filter(c => c.status === 'rehabilitation');
+}
+
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
@@ -424,5 +483,6 @@ module.exports = {
     addProxy, addProxiesBulk, getAllProxies, deleteProxy, deleteAllProxies,
     assignProxyToChip, releaseProxy, getProxyForChip, getProxyStats,
     updateProxyUrl,
-    createFolder, getAllFolders, updateFolder, deleteFolder, assignChipToFolder
+    createFolder, getAllFolders, updateFolder, deleteFolder, assignChipToFolder,
+    enterRehabilitation, exitRehabilitation, markChipDiscarded, getChipsInRehab
 };

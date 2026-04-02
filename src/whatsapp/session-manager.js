@@ -37,7 +37,7 @@ class SessionManager {
         // Reconnect all previously connected chips
         const chips = db.getAllChips();
         for (const chip of chips) {
-            if (chip.status === 'connected' || chip.status === 'warming') {
+            if (chip.status === 'connected' || chip.status === 'warming' || chip.status === 'rehabilitation') {
                 const sessionPath = path.join(SESSIONS_DIR, chip.session_id);
                 if (fs.existsSync(sessionPath)) {
                     console.log(`[SessionManager] Reconectando ${chip.session_id} (${chip.phone || 'sem numero'})...`);

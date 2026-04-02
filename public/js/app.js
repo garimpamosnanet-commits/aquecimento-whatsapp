@@ -183,16 +183,20 @@ function renderChipCard(chip) {
 
         <div class="chip-actions">
             ${chip.status === 'warming'
-                ? `<button class="btn btn-warning btn-sm" onclick="stopWarming(${chip.id})">⏸ Pausar</button>`
-                : chip.status === 'connected'
-                    ? `<button class="btn btn-success btn-sm" onclick="startWarming(${chip.id})">▶ Aquecer</button>`
-                    : chip.status === 'disconnected'
-                        ? `<button class="btn btn-primary btn-sm" onclick="reconnectChip('${chip.session_id}')">🔄 Reconectar</button>`
-                        : chip.status === 'qr_pending'
-                            ? `<button class="btn btn-primary btn-sm" onclick="retryQR('${chip.session_id}', ${chip.id})">📱 Gerar QR Code</button>`
-                            : `<button class="btn btn-outline btn-sm" disabled>⏳ Aguardando...</button>`
+                ? `<button class="btn btn-warning btn-sm" onclick="stopWarming(${chip.id})">⏸ Pausar</button>${chip.phase >= 4 ? `<button class="btn btn-outline btn-sm" onclick="enterRehabUI(${chip.id})" title="Reabilitar">🏥</button>` : ''}`
+                : chip.status === 'rehabilitation'
+                    ? `<button class="btn btn-success btn-sm" onclick="resumeFromRehab(${chip.id})">▶ Voltar</button><button class="btn btn-danger btn-sm" onclick="discardChipUI(${chip.id})">✕ Descartar</button>`
+                    : chip.status === 'connected'
+                        ? `<button class="btn btn-success btn-sm" onclick="startWarming(${chip.id})">▶ Aquecer</button>`
+                        : chip.status === 'discarded'
+                            ? `<button class="btn btn-outline btn-sm" disabled>Descartado</button>`
+                            : chip.status === 'disconnected'
+                                ? `<button class="btn btn-primary btn-sm" onclick="reconnectChip('${chip.session_id}')">🔄 Reconectar</button>`
+                                : chip.status === 'qr_pending'
+                                    ? `<button class="btn btn-primary btn-sm" onclick="retryQR('${chip.session_id}', ${chip.id})">📱 Gerar QR Code</button>`
+                                    : `<button class="btn btn-outline btn-sm" disabled>⏳ Aguardando...</button>`
             }
-            <button class="btn btn-outline btn-sm" onclick="disconnectChip(${chip.id})" ${chip.status === 'disconnected' ? 'disabled' : ''}>⏏ Desconectar</button>
+            ${chip.status !== 'discarded' ? `<button class="btn btn-outline btn-sm" onclick="disconnectChip(${chip.id})" ${chip.status === 'disconnected' ? 'disabled' : ''}>⏏ Desconectar</button>` : ''}
             <button class="btn-icon danger" onclick="deleteChip(${chip.id})" title="Excluir">✕</button>
         </div>
     </div>`;
@@ -466,7 +470,9 @@ function getStatusLabel(status) {
         'warming': 'Aquecendo',
         'disconnected': 'Offline',
         'qr_pending': 'QR Pendente',
-        'paused': 'Pausado'
+        'paused': 'Pausado',
+        'rehabilitation': 'Em Reabilitação',
+        'discarded': 'Descartado'
     };
     return labels[status] || status;
 }
@@ -818,12 +824,13 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
     const tabs = document.querySelectorAll('.tab');
-    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2, 'proxies': 3 };
+    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2, 'rehab': 3, 'proxies': 4 };
     tabs[tabMap[tabName]].classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
 
     if (tabName === 'activity') renderActivity();
     if (tabName === 'config') loadConfig();
+    if (tabName === 'rehab') loadRehab();
     if (tabName === 'proxies') loadProxies();
 }
 
@@ -1028,6 +1035,12 @@ function updateHealthUI() {
 
     // Update alerts bar
     updateAlertsBar(_healthData.alerts);
+
+    // Update rehab badge and suggestions
+    updateRehabBadge();
+    if (document.getElementById('tab-rehab') && document.getElementById('tab-rehab').classList.contains('active')) {
+        updateRehabSuggestions();
+    }
 
     // Re-render chips to update health badges (only if chips tab visible)
     if (document.getElementById('tab-chips').classList.contains('active')) {
@@ -1235,3 +1248,214 @@ renderActivity = function() {
         </div>`;
     }).join('');
 };
+
+// ==================== REHABILITATION TAB ====================
+
+function loadRehab() {
+    fetch('/api/rehab').then(r => r.json()).then(rehabChips => {
+        renderRehabList(rehabChips);
+    });
+    fetch('/api/stats').then(r => r.json()).then(stats => {
+        renderRehabStatsBar(stats);
+    });
+    updateRehabSuggestions();
+}
+
+function renderRehabStatsBar(stats) {
+    const el = document.getElementById('rehab-stats-bar');
+    if (!el) return;
+    el.innerHTML = `
+        <div style="display:flex;gap:12px;margin-bottom:16px">
+            <div class="rehab-stat-card">
+                <div class="rehab-stat-icon">🏥</div>
+                <div>
+                    <div class="rehab-stat-value">${stats.rehabilitation || 0}</div>
+                    <div class="rehab-stat-label">Em reabilitacao</div>
+                </div>
+            </div>
+            <div class="rehab-stat-card">
+                <div class="rehab-stat-icon">❌</div>
+                <div>
+                    <div class="rehab-stat-value">${stats.discarded || 0}</div>
+                    <div class="rehab-stat-label">Descartados</div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function renderRehabList(rehabChips) {
+    const list = document.getElementById('rehab-list');
+    if (!list) return;
+
+    if (rehabChips.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state" style="padding:40px">
+                <div class="empty-icon" style="font-size:36px">🏥</div>
+                <h3>Nenhum chip em reabilitacao</h3>
+                <p>Chips com problemas aparecerao aqui quando precisarem de recuperacao</p>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = `
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr style="border-bottom:1px solid var(--border)">
+                <th class="rehab-th">Chip</th>
+                <th class="rehab-th">Score</th>
+                <th class="rehab-th">Proxy</th>
+                <th class="rehab-th">Tempo</th>
+                <th class="rehab-th">Motivo</th>
+                <th class="rehab-th">Acoes</th>
+            </tr></thead>
+            <tbody>${rehabChips.map(chip => {
+                const score = getHealthScoreForChip(chip.id);
+                const scoreNum = typeof score === 'number' ? score : 0;
+                const scoreClass = scoreNum >= 70 ? 'score-good' : scoreNum >= 40 ? 'score-warning' : 'score-critical';
+                const duration = formatRehabDuration(chip.rehab_duration_min);
+                return `<tr style="border-bottom:1px solid rgba(0,0,0,0.03)">
+                    <td style="padding:10px 14px">
+                        <div style="font-weight:600">${chip.name || 'Chip ' + chip.id}</div>
+                        <div style="font-size:11px;color:var(--text-muted)">${chip.phone || 'Sem numero'}</div>
+                    </td>
+                    <td style="padding:10px 14px"><span class="rehab-score ${scoreClass}">${score}</span></td>
+                    <td style="padding:10px 14px;font-size:12px;color:var(--text-muted)">${chip.proxy_ip ? '🛡️ ' + chip.proxy_ip : '⚠️ Sem proxy'}</td>
+                    <td style="padding:10px 14px;font-size:12px">${duration}</td>
+                    <td style="padding:10px 14px;font-size:12px;color:var(--text-secondary)">${chip.rehab_reason || '—'}</td>
+                    <td style="padding:10px 14px">
+                        <div style="display:flex;gap:6px">
+                            <button class="btn btn-success btn-sm" onclick="resumeFromRehab(${chip.id})">▶ Voltar</button>
+                            <button class="btn btn-danger btn-sm" onclick="discardChipUI(${chip.id})">✕ Descartar</button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('')}</tbody>
+        </table>
+    </div>`;
+}
+
+function getHealthScoreForChip(chipId) {
+    if (_healthData && _healthData.chipHealth && _healthData.chipHealth[chipId]) {
+        return _healthData.chipHealth[chipId].score;
+    }
+    return '—';
+}
+
+function formatRehabDuration(minutes) {
+    if (!minutes && minutes !== 0) return '—';
+    if (minutes < 60) return minutes + ' min';
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours + 'h ' + (minutes % 60) + 'min';
+    const days = Math.floor(hours / 24);
+    return days + 'd ' + (hours % 24) + 'h';
+}
+
+function updateRehabBadge() {
+    const badge = document.getElementById('rehab-badge');
+    if (!badge || !_healthData) return;
+    const suggestions = (_healthData.rehabSuggestions || []).length;
+    const inRehab = chips.filter(c => c.status === 'rehabilitation').length;
+    const count = suggestions + inRehab;
+    if (count > 0) {
+        badge.textContent = count;
+        badge.style.display = 'inline-flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function updateRehabSuggestions() {
+    const el = document.getElementById('rehab-suggestions');
+    if (!el || !_healthData) return;
+
+    const suggestions = _healthData.rehabSuggestions || [];
+    const exitReady = _healthData.rehabExitReady || [];
+
+    if (suggestions.length === 0 && exitReady.length === 0) {
+        el.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+
+    if (suggestions.length > 0) {
+        html += '<div style="margin-bottom:12px"><h4 style="font-size:13px;color:var(--warning);margin-bottom:8px">⚠️ Sugestoes de Reabilitacao</h4>';
+        html += suggestions.map(s => `
+            <div class="rehab-suggestion-item">
+                <span>${s.chipName} — Score: ${s.score} — ${s.reason}</span>
+                <button class="btn btn-warning btn-sm" onclick="enterRehabUI(${s.chipId})">🏥 Reabilitar</button>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+
+    if (exitReady.length > 0) {
+        html += '<div style="margin-bottom:12px"><h4 style="font-size:13px;color:var(--success);margin-bottom:8px">✅ Prontos para Retornar</h4>';
+        html += exitReady.map(s => `
+            <div class="rehab-suggestion-item exit-ready">
+                <span>${s.chipName} — Score: ${s.score}${s.rehabDuration ? ' — ' + formatRehabDuration(s.rehabDuration) + ' em rehab' : ''}</span>
+                <button class="btn btn-success btn-sm" onclick="resumeFromRehab(${s.chipId})">▶ Voltar</button>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+
+    el.innerHTML = html;
+}
+
+function enterRehabUI(chipId) {
+    const chip = chips.find(c => c.id === chipId);
+    const chipName = chip?.name || chip?.phone || 'Chip ' + chipId;
+    openConfirmModal('Reabilitar Chip', 'Enviar "' + chipName + '" para reabilitacao? O aquecimento sera reduzido para recuperacao controlada.', 'Reabilitar', () => {
+        fetch('/api/chips/' + chipId + '/rehab/enter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'manual' })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Chip enviado para reabilitacao', 'warning');
+                refreshChips();
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}
+
+function resumeFromRehab(chipId) {
+    const chip = chips.find(c => c.id === chipId);
+    const chipName = chip?.name || chip?.phone || 'Chip ' + chipId;
+    openConfirmModal('Voltar para Operacao', 'Retornar "' + chipName + '" para aquecimento normal (Fase 3)?', 'Confirmar', () => {
+        fetch('/api/chips/' + chipId + '/rehab/resume', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Chip retornado ao aquecimento normal', 'success');
+                refreshChips();
+                if (document.getElementById('tab-rehab').classList.contains('active')) loadRehab();
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}
+
+function discardChipUI(chipId) {
+    const chip = chips.find(c => c.id === chipId);
+    const chipName = chip?.name || chip?.phone || 'Chip ' + chipId;
+    openConfirmModal('Descartar Chip', 'Marcar "' + chipName + '" como descartado? O chip sera desativado.', 'Descartar', () => {
+        fetch('/api/chips/' + chipId + '/discard', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Chip descartado', 'danger');
+                refreshChips();
+                if (document.getElementById('tab-rehab').classList.contains('active')) loadRehab();
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}

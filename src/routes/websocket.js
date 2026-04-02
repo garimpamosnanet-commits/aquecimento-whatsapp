@@ -102,6 +102,48 @@ module.exports = function(io, sessionManager, warmingEngine) {
             }
         });
 
+        // Enter rehabilitation
+        socket.on('enter_rehab', (data) => {
+            const { chipId, reason } = data;
+            const chip = db.getChipById(chipId);
+            if (chip && (chip.status === 'warming' || chip.status === 'connected')) {
+                warmingEngine.stopChip(chipId);
+                db.enterRehabilitation(chipId, reason || 'manual');
+                if (sessionManager.isConnected(chip.session_id)) {
+                    warmingEngine.startRehab(chipId);
+                }
+                sessionManager.emitChipUpdate(chipId);
+                io.emit('stats', db.getChipStats());
+            }
+        });
+
+        // Exit rehabilitation (resume warming)
+        socket.on('exit_rehab', (data) => {
+            const { chipId } = data;
+            const chip = db.getChipById(chipId);
+            if (chip && chip.status === 'rehabilitation') {
+                warmingEngine.stopChip(chipId);
+                db.exitRehabilitation(chipId, 3);
+                if (sessionManager.isConnected(chip.session_id)) {
+                    warmingEngine.startChip(chipId);
+                }
+                sessionManager.emitChipUpdate(chipId);
+                io.emit('stats', db.getChipStats());
+            }
+        });
+
+        // Discard chip
+        socket.on('discard_chip', (data) => {
+            const { chipId } = data;
+            const chip = db.getChipById(chipId);
+            if (chip) {
+                warmingEngine.stopChip(chipId);
+                db.markChipDiscarded(chipId);
+                sessionManager.emitChipUpdate(chipId);
+                io.emit('stats', db.getChipStats());
+            }
+        });
+
         socket.on('disconnect', () => {
             console.log('[WebSocket] Cliente desconectado');
         });
