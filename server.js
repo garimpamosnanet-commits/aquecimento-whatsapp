@@ -6,6 +6,7 @@ const path = require('path');
 
 const SessionManager = require('./src/whatsapp/session-manager');
 const WarmingEngine = require('./src/whatsapp/warming-engine');
+const GroupManager = require('./src/whatsapp/group-manager');
 const HealthMonitor = require('./src/health-monitor');
 const apiRoutes = require('./src/routes/api');
 const setupWebSocket = require('./src/routes/websocket');
@@ -100,9 +101,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Initialize components
 const sessionManager = new SessionManager(io);
 const warmingEngine = new WarmingEngine(sessionManager, io);
+const groupManager = new GroupManager(sessionManager, io);
 
 // Routes
-app.use('/api', apiRoutes(sessionManager, warmingEngine));
+app.use('/api', apiRoutes(sessionManager, warmingEngine, groupManager));
 
 // WebSocket auth
 io.use((socket, next) => {
@@ -116,7 +118,7 @@ io.use((socket, next) => {
 });
 
 // WebSocket
-setupWebSocket(io, sessionManager, warmingEngine);
+setupWebSocket(io, sessionManager, warmingEngine, groupManager);
 
 // Start server
 const PORT = process.env.PORT || 3001;

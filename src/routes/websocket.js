@@ -1,4 +1,4 @@
-module.exports = function(io, sessionManager, warmingEngine) {
+module.exports = function(io, sessionManager, warmingEngine, groupManager) {
 
     io.on('connection', (socket) => {
         console.log('[WebSocket] Cliente conectado');
@@ -142,6 +142,46 @@ module.exports = function(io, sessionManager, warmingEngine) {
                 sessionManager.emitChipUpdate(chipId);
                 io.emit('stats', db.getChipStats());
             }
+        });
+
+        // ==================== GROUP ADD ====================
+
+        // Fetch admin groups
+        socket.on('fetch_admin_groups', async (data) => {
+            const { chipId } = data;
+            try {
+                const chip = db.getChipById(chipId);
+                if (!chip || !sessionManager.isConnected(chip.session_id)) {
+                    socket.emit('admin_groups_list', { error: 'Instancia nao conectada', groups: [] });
+                    return;
+                }
+                const groups = await groupManager.getAdminGroups(chip.session_id);
+                socket.emit('admin_groups_list', { groups });
+            } catch (err) {
+                socket.emit('admin_groups_list', { error: err.message, groups: [] });
+            }
+        });
+
+        // Start group add
+        socket.on('start_group_add', async (data) => {
+            // This is handled via REST API (/api/group-add/start)
+            // But provide WebSocket fallback
+            socket.emit('group_add_status', { status: 'info', message: 'Use o botao na interface para iniciar' });
+        });
+
+        // Pause group add
+        socket.on('pause_group_add', () => {
+            if (groupManager) groupManager.pause();
+        });
+
+        // Resume group add
+        socket.on('resume_group_add', () => {
+            if (groupManager) groupManager.resume();
+        });
+
+        // Stop group add
+        socket.on('stop_group_add', () => {
+            if (groupManager) groupManager.stop();
         });
 
         socket.on('disconnect', () => {

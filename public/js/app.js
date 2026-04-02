@@ -197,6 +197,8 @@ function renderChipCard(chip) {
                                     : `<button class="btn btn-outline btn-sm" disabled>⏳ Aguardando...</button>`
             }
             ${chip.status !== 'discarded' ? `<button class="btn btn-outline btn-sm" onclick="disconnectChip(${chip.id})" ${chip.status === 'disconnected' ? 'disabled' : ''}>⏏ Desconectar</button>` : ''}
+            ${chip.status === 'connected' && (chip.instance_type || 'warming') === 'warming' ? `<button class="btn btn-outline btn-sm" onclick="setInstanceType(${chip.id},'admin')" title="Marcar como ADM do cliente">👤 ADM</button>` : ''}
+            ${chip.instance_type === 'admin' ? `<button class="btn btn-outline btn-sm" onclick="setInstanceType(${chip.id},'warming')" title="Voltar para aquecimento" style="border-color:#8B5CF6;color:#8B5CF6">👤 ADM ✓</button>` : ''}
             <button class="btn-icon danger" onclick="deleteChip(${chip.id})" title="Excluir">✕</button>
         </div>
     </div>`;
@@ -824,7 +826,7 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
     const tabs = document.querySelectorAll('.tab');
-    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2, 'rehab': 3, 'proxies': 4 };
+    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2, 'rehab': 3, 'proxies': 4, 'groupadd': 5 };
     tabs[tabMap[tabName]].classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
 
@@ -832,6 +834,7 @@ function switchTab(tabName) {
     if (tabName === 'config') loadConfig();
     if (tabName === 'rehab') loadRehab();
     if (tabName === 'proxies') loadProxies();
+    if (tabName === 'groupadd') loadGroupAddTab();
 }
 
 // ==================== TEST MESSAGE ====================
@@ -1457,5 +1460,527 @@ function discardChipUI(chipId) {
                 showToast(data.error || 'Erro', 'danger');
             }
         });
+    });
+}
+
+// ==================== GROUP ADD TAB ====================
+
+let _gaGroups = [];
+let _gaSelectedGroups = new Set();
+let _gaSelectedChips = new Set();
+let _gaWarmingChips = [];
+let _gaRunning = false;
+let _gaPaused = false;
+let _gaCurrentOpId = null;
+let _gaLogItems = [];
+
+function loadGroupAddTab() {
+    loadAdminInstances();
+    loadWarmingChipsForGA();
+}
+
+// ==================== ADMIN INSTANCES ====================
+
+function loadAdminInstances() {
+    fetch('/api/admin-instances').then(r => r.json()).then(admins => {
+        const select = document.getElementById('ga-admin-select');
+        const current = select.value;
+        select.innerHTML = '<option value="">Selecione uma instancia ADM...</option>';
+        if (admins.length === 0) {
+            document.getElementById('ga-no-admin').style.display = 'block';
+        } else {
+            document.getElementById('ga-no-admin').style.display = 'none';
+        }
+        for (const adm of admins) {
+            const label = (adm.name || 'ADM') + (adm.phone ? ' (' + adm.phone + ')' : '');
+            const status = adm.is_connected ? '🟢' : '🔴';
+            const opt = document.createElement('option');
+            opt.value = adm.id;
+            opt.textContent = status + ' ' + label;
+            opt.disabled = !adm.is_connected;
+            select.appendChild(opt);
+        }
+        if (current) select.value = current;
+    });
+}
+
+function onAdminInstanceSelect() {
+    const chipId = document.getElementById('ga-admin-select').value;
+    const infoEl = document.getElementById('ga-admin-info');
+    const panels = document.getElementById('ga-panels');
+
+    if (!chipId) {
+        infoEl.style.display = 'none';
+        panels.style.display = 'none';
+        hideSummary();
+        return;
+    }
+
+    infoEl.style.display = 'block';
+    infoEl.innerHTML = '<div class="ga-loading">Buscando grupos...</div>';
+    panels.style.display = 'none';
+
+    fetch('/api/admin-instances/' + chipId + '/groups')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                infoEl.innerHTML = '<div class="ga-error">' + data.error + '</div>';
+                return;
+            }
+            _gaGroups = data;
+            _gaSelectedGroups.clear();
+            infoEl.innerHTML = '<span class="ga-success-text">🟢 Conectado — ' + data.length + ' grupos encontrados onde e admin</span>';
+            panels.style.display = 'grid';
+            renderGAGroups();
+            renderGAChips();
+        })
+        .catch(err => {
+            infoEl.innerHTML = '<div class="ga-error">Erro: ' + err.message + '</div>';
+        });
+}
+
+// ==================== GROUPS LIST ====================
+
+function renderGAGroups() {
+    const list = document.getElementById('ga-groups-list');
+    const search = (document.getElementById('ga-groups-search')?.value || '').toLowerCase();
+    document.getElementById('ga-groups-count').textContent = _gaGroups.length;
+
+    const filtered = search ? _gaGroups.filter(g => (g.subject || '').toLowerCase().includes(search)) : _gaGroups;
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="ga-empty">Nenhum grupo encontrado</div>';
+        return;
+    }
+
+    list.innerHTML = filtered.map(g => {
+        const checked = _gaSelectedGroups.has(g.id) ? 'checked' : '';
+        return `<label class="ga-item ${checked ? 'selected' : ''}">
+            <input type="checkbox" ${checked} onchange="gaToggleGroup('${g.id}')">
+            <div class="ga-item-info">
+                <div class="ga-item-name">${g.subject || 'Sem nome'}</div>
+                <div class="ga-item-meta">${g.size} participantes</div>
+            </div>
+        </label>`;
+    }).join('');
+
+    updateGASummary();
+}
+
+function gaFilterGroups() { renderGAGroups(); }
+
+function gaToggleGroup(groupId) {
+    if (_gaSelectedGroups.has(groupId)) {
+        _gaSelectedGroups.delete(groupId);
+    } else {
+        _gaSelectedGroups.add(groupId);
+    }
+    renderGAGroups();
+}
+
+function gaSelectAllGroups() {
+    for (const g of _gaGroups) _gaSelectedGroups.add(g.id);
+    renderGAGroups();
+}
+
+function gaDeselectAllGroups() {
+    _gaSelectedGroups.clear();
+    renderGAGroups();
+}
+
+// ==================== CHIPS LIST ====================
+
+function loadWarmingChipsForGA() {
+    fetch('/api/warming-chips').then(r => r.json()).then(list => {
+        _gaWarmingChips = list;
+        renderGAChips();
+    });
+}
+
+function renderGAChips() {
+    const list = document.getElementById('ga-chips-list');
+    if (!list) return;
+
+    if (_gaWarmingChips.length === 0) {
+        list.innerHTML = '<div class="ga-empty">Nenhum chip em aquecimento com numero</div>';
+        return;
+    }
+
+    list.innerHTML = _gaWarmingChips.map(c => {
+        const checked = _gaSelectedChips.has(c.id) ? 'checked' : '';
+        const statusLabel = getStatusLabel(c.status);
+        return `<label class="ga-item ${checked ? 'selected' : ''}">
+            <input type="checkbox" ${checked} onchange="gaToggleChip(${c.id})">
+            <div class="ga-item-info">
+                <div class="ga-item-name">${c.name || 'Chip ' + c.id}</div>
+                <div class="ga-item-meta">${c.phone} · Fase ${c.phase} · ${statusLabel}</div>
+            </div>
+        </label>`;
+    }).join('');
+
+    updateGASummary();
+}
+
+function gaToggleChip(chipId) {
+    if (_gaSelectedChips.has(chipId)) {
+        _gaSelectedChips.delete(chipId);
+    } else {
+        _gaSelectedChips.add(chipId);
+    }
+    renderGAChips();
+}
+
+function gaSelectAllChips() {
+    for (const c of _gaWarmingChips) _gaSelectedChips.add(c.id);
+    renderGAChips();
+}
+
+function gaDeselectAllChips() {
+    _gaSelectedChips.clear();
+    renderGAChips();
+}
+
+// ==================== SUMMARY ====================
+
+function updateGASummary() {
+    const summaryEl = document.getElementById('ga-summary');
+    const groupCount = _gaSelectedGroups.size;
+    const chipCount = _gaSelectedChips.size;
+    const manualText = (document.getElementById('ga-manual-numbers')?.value || '').trim();
+    const manualCount = manualText ? manualText.split(/[\n,;]+/).filter(l => l.trim()).length : 0;
+    const totalNumbers = chipCount + manualCount;
+    const totalAdds = groupCount * totalNumbers;
+
+    if (groupCount === 0 || totalNumbers === 0) {
+        summaryEl.style.display = 'none';
+        return;
+    }
+
+    const adminSelect = document.getElementById('ga-admin-select');
+    const adminText = adminSelect.options[adminSelect.selectedIndex]?.textContent || '?';
+    const estMinutes = Math.ceil(totalAdds * 12 / 60); // ~12s avg per add
+
+    summaryEl.style.display = 'block';
+    summaryEl.innerHTML = `
+        <div class="ga-summary-card">
+            <div class="ga-summary-title">Resumo da Operacao</div>
+            <div class="ga-summary-grid">
+                <div class="ga-summary-row"><span>Instancia ADM:</span><strong>${adminText}</strong></div>
+                <div class="ga-summary-row"><span>Grupos alvo:</span><strong>${groupCount} grupos</strong></div>
+                <div class="ga-summary-row"><span>Numeros:</span><strong>${chipCount} chips${manualCount > 0 ? ' + ' + manualCount + ' manuais' : ''} = ${totalNumbers}</strong></div>
+                <div class="ga-summary-row"><span>Total adicoes:</span><strong>${totalAdds} (${totalNumbers} x ${groupCount})</strong></div>
+                <div class="ga-summary-row"><span>Promover a admin:</span><strong>Sim (todos)</strong></div>
+                <div class="ga-summary-row"><span>Estimativa:</span><strong>~${estMinutes} minutos</strong></div>
+            </div>
+            <button class="btn btn-success" onclick="gaStartOperation()" id="ga-btn-start" style="margin-top:16px;width:100%">
+                Iniciar Adicao
+            </button>
+        </div>`;
+}
+
+function hideSummary() {
+    const el = document.getElementById('ga-summary');
+    if (el) el.style.display = 'none';
+}
+
+// Listen for manual numbers textarea changes
+document.addEventListener('DOMContentLoaded', () => {
+    const manualEl = document.getElementById('ga-manual-numbers');
+    if (manualEl) {
+        manualEl.addEventListener('input', () => updateGASummary());
+    }
+});
+
+// ==================== EXECUTION ====================
+
+function gaStartOperation() {
+    const adminChipId = parseInt(document.getElementById('ga-admin-select').value);
+    if (!adminChipId) return showToast('Selecione uma instancia ADM', 'warning');
+    if (_gaSelectedGroups.size === 0) return showToast('Selecione pelo menos 1 grupo', 'warning');
+
+    const chipIds = Array.from(_gaSelectedChips);
+    const manualNumbers = document.getElementById('ga-manual-numbers')?.value || '';
+
+    if (chipIds.length === 0 && !manualNumbers.trim()) {
+        return showToast('Selecione chips ou cole numeros manuais', 'warning');
+    }
+
+    const selectedGroups = _gaGroups.filter(g => _gaSelectedGroups.has(g.id));
+    const config = {
+        delayMin: 5, delayMax: 15,
+        groupDelayMin: 30, groupDelayMax: 60,
+        checkExists: true
+    };
+
+    document.getElementById('ga-btn-start').disabled = true;
+    document.getElementById('ga-btn-start').textContent = 'Iniciando...';
+
+    fetch('/api/group-add/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            adminChipId, chipIds, manualNumbers,
+            groups: selectedGroups, config
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            _gaCurrentOpId = data.operationId;
+            _gaRunning = true;
+            _gaPaused = false;
+            _gaLogItems = [];
+            showExecutionUI(data.totalItems);
+            showToast('Operacao iniciada!', 'success');
+        } else {
+            showToast(data.error || 'Erro ao iniciar', 'danger');
+            document.getElementById('ga-btn-start').disabled = false;
+            document.getElementById('ga-btn-start').textContent = 'Iniciar Adicao';
+        }
+    })
+    .catch(err => {
+        showToast('Erro: ' + err.message, 'danger');
+        document.getElementById('ga-btn-start').disabled = false;
+        document.getElementById('ga-btn-start').textContent = 'Iniciar Adicao';
+    });
+}
+
+function showExecutionUI(totalItems) {
+    document.getElementById('ga-summary').style.display = 'none';
+    document.getElementById('ga-execution').style.display = 'block';
+    document.getElementById('ga-report').style.display = 'none';
+    document.getElementById('ga-progress-text').textContent = '0/' + totalItems + ' adicoes (0%)';
+    document.getElementById('ga-progress-fill').style.width = '0%';
+    document.getElementById('ga-progress-stats').innerHTML = '';
+    document.getElementById('ga-log').innerHTML = '';
+    document.getElementById('ga-btn-pause').textContent = 'Pausar';
+}
+
+function gaTogglePause() {
+    if (_gaPaused) {
+        fetch('/api/group-add/resume', { method: 'POST' });
+        _gaPaused = false;
+        document.getElementById('ga-btn-pause').textContent = 'Pausar';
+    } else {
+        fetch('/api/group-add/pause', { method: 'POST' });
+        _gaPaused = true;
+        document.getElementById('ga-btn-pause').textContent = 'Retomar';
+    }
+}
+
+function gaStop() {
+    openConfirmModal('Parar Operacao', 'Deseja parar a operacao em andamento? Itens ja processados serao mantidos.', 'Parar', () => {
+        fetch('/api/group-add/stop', { method: 'POST' });
+        _gaRunning = false;
+    });
+}
+
+// ==================== SOCKET LISTENERS FOR GROUP ADD ====================
+
+socket.on('group_add_stats', (data) => {
+    if (!_gaRunning) return;
+    document.getElementById('ga-progress-text').textContent =
+        data.processed + '/' + data.total + ' adicoes (' + data.percent + '%)';
+    document.getElementById('ga-progress-fill').style.width = data.percent + '%';
+    document.getElementById('ga-progress-stats').innerHTML = `
+        <span class="ga-stat-item ga-stat-success">✅ ${data.success}</span>
+        <span class="ga-stat-item ga-stat-admin">👑 ${data.adminOk} admins</span>
+        <span class="ga-stat-item ga-stat-skip">⏭️ ${data.skip}</span>
+        <span class="ga-stat-item ga-stat-fail">❌ ${data.fail}</span>
+        ${data.adminFail > 0 ? '<span class="ga-stat-item ga-stat-warn">⚠️ ' + data.adminFail + ' sem admin</span>' : ''}
+        ${data.currentGroup ? '<span class="ga-stat-item ga-stat-group">📂 ' + data.currentGroup + '</span>' : ''}
+    `;
+});
+
+socket.on('group_add_log', (data) => {
+    if (!document.getElementById('ga-log')) return;
+    const icons = {
+        'success': '✅', 'admin': '👑', 'admin_fail': '⚠️',
+        'skip': '⏭️', 'error': '❌', 'warning': '⚠️',
+        'info': 'ℹ️', 'system': '🔄'
+    };
+    const icon = icons[data.type] || '📝';
+    const time = new Date(data.timestamp || Date.now()).toLocaleTimeString('pt-BR');
+    const cls = data.type === 'error' ? 'ga-log-error' : data.type === 'admin' ? 'ga-log-admin' : data.type === 'success' ? 'ga-log-success' : data.type === 'warning' || data.type === 'admin_fail' ? 'ga-log-warn' : 'ga-log-info';
+
+    const logEl = document.getElementById('ga-log');
+    const item = document.createElement('div');
+    item.className = 'ga-log-item ' + cls;
+    item.innerHTML = '<span class="ga-log-icon">' + icon + '</span><span class="ga-log-msg">' + data.message + '</span><span class="ga-log-time">' + time + '</span>';
+    logEl.appendChild(item);
+    logEl.scrollTop = logEl.scrollHeight;
+});
+
+socket.on('group_add_status', (data) => {
+    if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed') {
+        _gaRunning = false;
+        _gaPaused = false;
+    }
+});
+
+socket.on('group_add_complete', (summary) => {
+    _gaRunning = false;
+    document.getElementById('ga-execution').style.display = 'none';
+    showGAReport(summary);
+    showToast('Operacao concluida! ' + summary.success + ' adicionados', 'success');
+
+    // Reset start button
+    const btn = document.getElementById('ga-btn-start');
+    if (btn) { btn.disabled = false; btn.textContent = 'Iniciar Adicao'; }
+});
+
+// ==================== REPORT ====================
+
+function showGAReport(summary) {
+    const el = document.getElementById('ga-report');
+    el.style.display = 'block';
+
+    const durationMin = Math.floor(summary.duration / 60);
+    const durationSec = summary.duration % 60;
+    const durationText = durationMin > 0 ? durationMin + 'min ' + durationSec + 's' : durationSec + 's';
+
+    el.innerHTML = `
+        <div class="ga-report-card">
+            <div class="ga-report-header">${summary.status === 'completed' ? '✅ Operacao Concluida' : summary.status === 'stopped' ? '⏹ Operacao Parada' : '❌ Operacao Falhou'}</div>
+            <div class="ga-report-grid">
+                <div class="ga-report-stat">
+                    <div class="ga-report-value">${summary.total}</div>
+                    <div class="ga-report-label">Total</div>
+                </div>
+                <div class="ga-report-stat success">
+                    <div class="ga-report-value">${summary.success}</div>
+                    <div class="ga-report-label">Adicionados</div>
+                </div>
+                <div class="ga-report-stat admin">
+                    <div class="ga-report-value">${summary.adminPromoted}</div>
+                    <div class="ga-report-label">Admins ✅</div>
+                </div>
+                <div class="ga-report-stat skip">
+                    <div class="ga-report-value">${summary.skip}</div>
+                    <div class="ga-report-label">Ja membros</div>
+                </div>
+                <div class="ga-report-stat fail">
+                    <div class="ga-report-value">${summary.fail}</div>
+                    <div class="ga-report-label">Falhas</div>
+                </div>
+                <div class="ga-report-stat warn">
+                    <div class="ga-report-value">${summary.adminFailed || 0}</div>
+                    <div class="ga-report-label">Sem admin ⚠️</div>
+                </div>
+            </div>
+            <div class="ga-report-duration">Duracao: ${durationText}</div>
+            <div class="ga-report-actions">
+                <button class="btn btn-outline btn-sm" onclick="gaExportCSV(${summary.operationId})">Exportar CSV</button>
+                ${summary.fail > 0 ? '<button class="btn btn-warning btn-sm" onclick="gaRetry(' + summary.operationId + ')">Reexecutar falhas (' + summary.fail + ')</button>' : ''}
+                <button class="btn btn-primary btn-sm" onclick="gaNewOperation()">Nova Operacao</button>
+            </div>
+        </div>`;
+}
+
+function gaExportCSV(opId) {
+    window.open('/api/group-add/operations/' + opId + '/csv', '_blank');
+}
+
+function gaRetry(opId) {
+    openConfirmModal('Reexecutar Falhas', 'Reexecutar apenas os itens que falharam?', 'Reexecutar', () => {
+        fetch('/api/group-add/retry/' + opId, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                _gaCurrentOpId = data.operationId;
+                _gaRunning = true;
+                _gaPaused = false;
+                _gaLogItems = [];
+                showExecutionUI(data.retrying);
+                showToast('Reexecutando ' + data.retrying + ' itens', 'success');
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}
+
+function gaNewOperation() {
+    document.getElementById('ga-report').style.display = 'none';
+    document.getElementById('ga-execution').style.display = 'none';
+    document.getElementById('ga-summary').style.display = 'none';
+    _gaSelectedGroups.clear();
+    _gaSelectedChips.clear();
+    if (document.getElementById('ga-manual-numbers')) document.getElementById('ga-manual-numbers').value = '';
+    renderGAGroups();
+    renderGAChips();
+    const btn = document.getElementById('ga-btn-start');
+    if (btn) { btn.disabled = false; btn.textContent = 'Iniciar Adicao'; }
+}
+
+// ==================== HISTORY ====================
+
+function loadGroupAddHistory() {
+    const el = document.getElementById('ga-history');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    if (el.style.display === 'none') return;
+
+    el.innerHTML = '<div class="ga-loading">Carregando historico...</div>';
+
+    fetch('/api/group-add/operations?limit=20')
+    .then(r => r.json())
+    .then(ops => {
+        if (ops.length === 0) {
+            el.innerHTML = '<div class="ga-empty" style="padding:20px">Nenhuma operacao realizada ainda</div>';
+            return;
+        }
+        el.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead><tr style="border-bottom:1px solid var(--border)">
+                    <th class="rehab-th">Data</th>
+                    <th class="rehab-th">ADM</th>
+                    <th class="rehab-th">Total</th>
+                    <th class="rehab-th">Sucesso</th>
+                    <th class="rehab-th">Admin</th>
+                    <th class="rehab-th">Falhas</th>
+                    <th class="rehab-th">Status</th>
+                    <th class="rehab-th">Acoes</th>
+                </tr></thead>
+                <tbody>${ops.map(op => {
+                    const date = op.created_at ? new Date(op.created_at).toLocaleString('pt-BR') : '—';
+                    const statusCls = op.status === 'completed' ? 'ga-status-ok' : op.status === 'running' ? 'ga-status-run' : op.status === 'failed' ? 'ga-status-fail' : 'ga-status-other';
+                    return `<tr style="border-bottom:1px solid rgba(0,0,0,0.03)">
+                        <td style="padding:8px 14px;font-size:12px">${date}</td>
+                        <td style="padding:8px 14px;font-size:12px">${op.admin_name || op.admin_phone || '—'}</td>
+                        <td style="padding:8px 14px">${op.total_additions}</td>
+                        <td style="padding:8px 14px;color:var(--success)">${op.success_count}</td>
+                        <td style="padding:8px 14px;color:#8B5CF6">${op.admin_promoted_count}</td>
+                        <td style="padding:8px 14px;color:var(--danger)">${op.fail_count}</td>
+                        <td style="padding:8px 14px"><span class="${statusCls}">${op.status}</span></td>
+                        <td style="padding:8px 14px">
+                            <button class="btn btn-outline btn-xs" onclick="gaExportCSV(${op.id})">CSV</button>
+                            ${op.fail_count > 0 ? '<button class="btn btn-warning btn-xs" onclick="gaRetry(' + op.id + ')" style="margin-left:4px">Retry</button>' : ''}
+                        </td>
+                    </tr>`;
+                }).join('')}</tbody>
+            </table>
+        </div>`;
+    });
+}
+
+// ==================== MARK AS ADM (from chip card) ====================
+
+function setInstanceType(chipId, type) {
+    fetch('/api/chips/' + chipId + '/set-type', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const chip = chips.find(c => c.id === chipId);
+            if (chip) chip.instance_type = type;
+            renderChips();
+            showToast(type === 'admin' ? 'Marcado como ADM' : 'Marcado como Aquecimento', 'success');
+        } else {
+            showToast(data.error || 'Erro', 'danger');
+        }
     });
 }

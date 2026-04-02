@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database/db');
 
-module.exports = function(sessionManager, warmingEngine) {
+module.exports = function(sessionManager, warmingEngine, groupManager) {
 
     // ==================== CHIPS ====================
 
@@ -354,6 +354,214 @@ module.exports = function(sessionManager, warmingEngine) {
         sessionManager.emitChipUpdate(chipId);
         sessionManager.emitStats();
         res.json({ success: true, chip: discarded });
+    });
+
+    // ==================== ADMIN INSTANCES ====================
+
+    // List admin instances (connected)
+    router.get('/admin-instances', (req, res) => {
+        const admins = db.getAdminInstances().map(chip => ({
+            ...chip,
+            is_connected: sessionManager.isConnected(chip.session_id)
+        }));
+        res.json(admins);
+    });
+
+    // Set instance type (admin/warming)
+    router.post('/chips/:id/set-type', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const { type } = req.body;
+        if (!type || !['admin', 'warming'].includes(type)) {
+            return res.status(400).json({ error: 'Tipo deve ser "admin" ou "warming"' });
+        }
+        const chip = db.setChipInstanceType(chipId, type);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        sessionManager.emitChipUpdate(chipId);
+        res.json({ success: true, chip });
+    });
+
+    // Get groups where admin instance is administrator
+    router.get('/admin-instances/:id/groups', async (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Instancia nao encontrada' });
+        if (!sessionManager.isConnected(chip.session_id)) {
+            return res.status(400).json({ error: 'Instancia nao esta conectada' });
+        }
+        try {
+            const groups = await groupManager.getAdminGroups(chip.session_id);
+            res.json(groups);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // List warming chips (for selection in group-add)
+    router.get('/warming-chips', (req, res) => {
+        res.json(db.getWarmingChipsForAdd());
+    });
+
+    // ==================== GROUP ADD OPERATIONS ====================
+
+    // Start group add operation
+    router.post('/group-add/start', async (req, res) => {
+        if (groupManager.isRunning()) {
+            return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
+        }
+        const { adminChipId, chipIds, manualNumbers, groups, config } = req.body;
+        if (!adminChipId || !groups || groups.length === 0) {
+            return res.status(400).json({ error: 'Instancia ADM e pelo menos 1 grupo sao obrigatorios' });
+        }
+
+        // Build list of phone numbers to add
+        const phoneList = [];
+
+        // From system chips
+        if (chipIds && chipIds.length > 0) {
+            for (const cid of chipIds) {
+                const chip = db.getChipById(cid);
+                if (chip && chip.phone) {
+                    phoneList.push({ phone_number: chip.phone, source: 'chip', chip_id: chip.id });
+                }
+            }
+        }
+
+        // From manual numbers
+        if (manualNumbers && manualNumbers.trim()) {
+            const normalized = groupManager.normalizePhoneNumbers(manualNumbers);
+            for (const num of normalized) {
+                // Avoid duplicates with chip list
+                if (!phoneList.find(p => p.phone_number === num)) {
+                    phoneList.push({ phone_number: num, source: 'manual', chip_id: null });
+                }
+            }
+        }
+
+        if (phoneList.length === 0) {
+            return res.status(400).json({ error: 'Nenhum numero valido para adicionar' });
+        }
+
+        // Create operation
+        const operation = db.createAddOperation(adminChipId, config || {});
+
+        // Create items (phone x group = cartesian product)
+        const items = [];
+        for (const group of groups) {
+            for (const phone of phoneList) {
+                items.push({
+                    phone_number: phone.phone_number,
+                    source: phone.source,
+                    chip_id: phone.chip_id,
+                    group_id: group.id,
+                    group_name: group.subject || group.name || group.id
+                });
+            }
+        }
+        db.addOperationItems(operation.id, items);
+
+        // Start execution in background
+        groupManager.executeBulkGroupAdd(operation.id).catch(err => {
+            console.error('[GroupAdd] Erro:', err);
+        });
+
+        res.json({ success: true, operationId: operation.id, totalItems: items.length });
+    });
+
+    // Pause operation
+    router.post('/group-add/pause', (req, res) => {
+        groupManager.pause();
+        res.json({ success: true });
+    });
+
+    // Resume operation
+    router.post('/group-add/resume', (req, res) => {
+        groupManager.resume();
+        res.json({ success: true });
+    });
+
+    // Stop operation
+    router.post('/group-add/stop', (req, res) => {
+        groupManager.stop();
+        res.json({ success: true });
+    });
+
+    // List operations history
+    router.get('/group-add/operations', (req, res) => {
+        const limit = parseInt(req.query.limit) || 20;
+        const ops = db.getAddOperations(limit).map(op => {
+            const adminChip = db.getChipById(op.admin_chip_id);
+            return { ...op, admin_name: adminChip?.name, admin_phone: adminChip?.phone };
+        });
+        res.json(ops);
+    });
+
+    // Get operation details
+    router.get('/group-add/operations/:id', (req, res) => {
+        const opId = parseInt(req.params.id);
+        const op = db.getAddOperation(opId);
+        if (!op) return res.status(404).json({ error: 'Operacao nao encontrada' });
+        const items = db.getOperationItems(opId);
+        const adminChip = db.getChipById(op.admin_chip_id);
+        res.json({ ...op, items, admin_name: adminChip?.name, admin_phone: adminChip?.phone });
+    });
+
+    // Export CSV
+    router.get('/group-add/operations/:id/csv', (req, res) => {
+        const opId = parseInt(req.params.id);
+        const op = db.getAddOperation(opId);
+        if (!op) return res.status(404).json({ error: 'Operacao nao encontrada' });
+        const items = db.getOperationItems(opId);
+
+        let csv = 'Numero,Grupo,Origem,Status,Admin,Erro\n';
+        for (const item of items) {
+            const adminLabel = item.admin_promoted === 1 ? 'Sim' : item.admin_promoted === -1 ? 'Falhou' : 'Nao';
+            csv += `${item.phone_number},"${(item.group_name || '').replace(/"/g, '""')}",${item.source},${item.status},${adminLabel},"${(item.error_message || item.admin_error || '').replace(/"/g, '""')}"\n`;
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=operacao_${opId}.csv`);
+        res.send(csv);
+    });
+
+    // Retry failed items
+    router.post('/group-add/retry/:id', async (req, res) => {
+        if (groupManager.isRunning()) {
+            return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
+        }
+        const opId = parseInt(req.params.id);
+        const originalOp = db.getAddOperation(opId);
+        if (!originalOp) return res.status(404).json({ error: 'Operacao nao encontrada' });
+
+        const failedItems = db.getFailedItems(opId);
+        if (failedItems.length === 0) {
+            return res.status(400).json({ error: 'Nenhum item falhou nesta operacao' });
+        }
+
+        // Create new operation for retries
+        const config = JSON.parse(originalOp.config || '{}');
+        const retryOp = db.createAddOperation(originalOp.admin_chip_id, config);
+
+        const items = failedItems.map(fi => ({
+            phone_number: fi.phone_number,
+            source: fi.source,
+            chip_id: fi.chip_id,
+            group_id: fi.group_id,
+            group_name: fi.group_name
+        }));
+        db.addOperationItems(retryOp.id, items);
+
+        groupManager.executeBulkGroupAdd(retryOp.id).catch(err => {
+            console.error('[GroupAdd Retry] Erro:', err);
+        });
+
+        res.json({ success: true, operationId: retryOp.id, retrying: items.length });
+    });
+
+    // Validate manual numbers
+    router.post('/group-add/validate-numbers', (req, res) => {
+        const { numbers } = req.body;
+        const normalized = groupManager.normalizePhoneNumbers(numbers || '');
+        res.json({ valid: normalized, count: normalized.length });
     });
 
     return router;

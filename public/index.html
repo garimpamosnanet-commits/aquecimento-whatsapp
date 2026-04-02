@@ -84,6 +84,7 @@
             <div class="tab" onclick="switchTab('config')">Config</div>
             <div class="tab" onclick="switchTab('rehab')">Reabilitação <span class="rehab-badge" id="rehab-badge" style="display:none">0</span></div>
             <div class="tab" onclick="switchTab('proxies')">Proxies</div>
+            <div class="tab" onclick="switchTab('groupadd')">Adicionar aos Grupos <span class="ga-badge" id="ga-badge" style="display:none">0</span></div>
         </div>
 
         <!-- TAB: CHIPS -->
@@ -142,6 +143,91 @@
             <div class="rehab-stats-bar" id="rehab-stats-bar"></div>
             <div id="rehab-suggestions" style="margin-bottom:16px"></div>
             <div id="rehab-list"></div>
+        </div>
+
+        <!-- TAB: GROUP ADD -->
+        <div id="tab-groupadd" class="tab-content">
+            <div class="section-header">
+                <h2>Adicionar aos Grupos</h2>
+                <button class="btn btn-outline btn-sm" onclick="loadGroupAddHistory()">Historico</button>
+            </div>
+
+            <!-- STEP 1: Admin Instance Selector -->
+            <div class="ga-section">
+                <label class="ga-label">1. Instancia ADM do Cliente</label>
+                <div class="ga-row">
+                    <select id="ga-admin-select" class="ga-select" onchange="onAdminInstanceSelect()">
+                        <option value="">Selecione uma instancia ADM...</option>
+                    </select>
+                    <button class="btn btn-outline btn-sm" onclick="loadAdminInstances()">Atualizar</button>
+                </div>
+                <div id="ga-admin-info" class="ga-admin-info" style="display:none"></div>
+                <div id="ga-no-admin" class="ga-hint" style="display:none">
+                    Nenhuma instancia marcada como ADM. Va na aba Chips, marque uma instancia como "ADM" primeiro.
+                </div>
+            </div>
+
+            <!-- STEP 2-3: Groups + Chips (side by side) -->
+            <div class="ga-panels" id="ga-panels" style="display:none">
+                <!-- Left: Groups -->
+                <div class="ga-panel">
+                    <div class="ga-panel-header">
+                        <span class="ga-panel-title">2. Grupos (<span id="ga-groups-count">0</span> encontrados)</span>
+                        <div class="ga-panel-actions">
+                            <button class="btn btn-outline btn-xs" onclick="gaSelectAllGroups()">Todos</button>
+                            <button class="btn btn-outline btn-xs" onclick="gaDeselectAllGroups()">Nenhum</button>
+                        </div>
+                    </div>
+                    <input type="text" id="ga-groups-search" class="ga-search" placeholder="Buscar grupo..." oninput="gaFilterGroups()">
+                    <div id="ga-groups-list" class="ga-list"></div>
+                </div>
+
+                <!-- Right: Chips -->
+                <div class="ga-panel">
+                    <div class="ga-panel-header">
+                        <span class="ga-panel-title">3. Numeros a Adicionar</span>
+                        <div class="ga-panel-actions">
+                            <button class="btn btn-outline btn-xs" onclick="gaSelectAllChips()">Todos</button>
+                            <button class="btn btn-outline btn-xs" onclick="gaDeselectAllChips()">Nenhum</button>
+                        </div>
+                    </div>
+                    <div id="ga-chips-list" class="ga-list"></div>
+                    <div class="ga-manual-section">
+                        <label class="ga-label-sm">Numeros manuais (um por linha)</label>
+                        <textarea id="ga-manual-numbers" class="ga-textarea" rows="3" placeholder="5511999999999&#10;+5521988887777&#10;(11) 99999-0000"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 4: Summary -->
+            <div id="ga-summary" class="ga-summary" style="display:none"></div>
+
+            <!-- STEP 5: Execution -->
+            <div id="ga-execution" class="ga-execution" style="display:none">
+                <div class="ga-progress-section">
+                    <div class="ga-progress-header">
+                        <span id="ga-progress-text">0/0 adicoes (0%)</span>
+                        <div class="ga-controls">
+                            <button class="btn btn-warning btn-sm" id="ga-btn-pause" onclick="gaTogglePause()">Pausar</button>
+                            <button class="btn btn-danger btn-sm" onclick="gaStop()">Parar</button>
+                        </div>
+                    </div>
+                    <div class="ga-progress-bar">
+                        <div class="ga-progress-fill" id="ga-progress-fill" style="width:0%"></div>
+                    </div>
+                    <div id="ga-progress-stats" class="ga-progress-stats"></div>
+                </div>
+                <div class="ga-log-section">
+                    <div class="ga-log-header">Log em tempo real</div>
+                    <div id="ga-log" class="ga-log"></div>
+                </div>
+            </div>
+
+            <!-- STEP 6: Report -->
+            <div id="ga-report" class="ga-report" style="display:none"></div>
+
+            <!-- STEP 7: History -->
+            <div id="ga-history" class="ga-history" style="display:none"></div>
         </div>
 
         <!-- TAB: PROXIES -->

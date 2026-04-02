@@ -67,6 +67,16 @@ function getDb() {
         console.log('[DB] Config migrada: fase 5 (reabilitacao) adicionada');
     }
 
+    // Migrate: add group_add collections if missing
+    if (!data.group_add_operations) {
+        data.group_add_operations = [];
+        data.group_add_items = [];
+        if (!data._nextId.group_add_operations) data._nextId.group_add_operations = 1;
+        if (!data._nextId.group_add_items) data._nextId.group_add_items = 1;
+        saveDb(data);
+        console.log('[DB] Migrated: added group_add collections');
+    }
+
     // Migrate: switch HTTP proxies to SOCKS5 (port 12323 -> 12324)
     if (data.proxies && data.proxies.length > 0 && data.proxies[0].url && data.proxies[0].url.startsWith('http://')) {
         let migrated = 0;
@@ -472,6 +482,121 @@ function getChipsInRehab() {
     return loadDb().chips.filter(c => c.status === 'rehabilitation');
 }
 
+// ==================== INSTANCE TYPE ====================
+
+function setChipInstanceType(chipId, instanceType) {
+    const data = loadDb();
+    const chip = data.chips.find(c => c.id === chipId);
+    if (!chip) return null;
+    chip.instance_type = instanceType; // 'warming' | 'admin'
+    saveDb(data);
+    return chip;
+}
+
+function getAdminInstances() {
+    const data = loadDb();
+    return data.chips.filter(c => c.instance_type === 'admin');
+}
+
+function getWarmingChipsForAdd() {
+    const data = loadDb();
+    return data.chips.filter(c =>
+        (c.instance_type || 'warming') === 'warming' &&
+        (c.status === 'warming' || c.status === 'connected' || c.status === 'rehabilitation') &&
+        c.phone
+    );
+}
+
+// ==================== GROUP ADD OPERATIONS ====================
+
+function createAddOperation(adminChipId, config) {
+    const data = loadDb();
+    if (!data.group_add_operations) data.group_add_operations = [];
+    if (!data._nextId.group_add_operations) data._nextId.group_add_operations = 1;
+    const id = data._nextId.group_add_operations;
+    data._nextId.group_add_operations = id + 1;
+    const op = {
+        id, admin_chip_id: adminChipId, status: 'pending',
+        total_additions: 0, success_count: 0, fail_count: 0, skip_count: 0,
+        admin_promoted_count: 0, admin_failed_count: 0,
+        config: JSON.stringify(config || {}),
+        started_at: null, completed_at: null, created_at: now()
+    };
+    data.group_add_operations.push(op);
+    saveDb(data);
+    return op;
+}
+
+function getAddOperation(id) {
+    const data = loadDb();
+    return (data.group_add_operations || []).find(o => o.id === id) || null;
+}
+
+function updateAddOperation(id, updates) {
+    const data = loadDb();
+    const op = (data.group_add_operations || []).find(o => o.id === id);
+    if (!op) return null;
+    Object.assign(op, updates);
+    saveDb(data);
+    return op;
+}
+
+function getAddOperations(limit) {
+    const data = loadDb();
+    const ops = (data.group_add_operations || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return limit ? ops.slice(0, limit) : ops;
+}
+
+function addOperationItems(operationId, items) {
+    const data = loadDb();
+    if (!data.group_add_items) data.group_add_items = [];
+    if (!data._nextId.group_add_items) data._nextId.group_add_items = 1;
+    const added = [];
+    for (const item of items) {
+        const id = data._nextId.group_add_items;
+        data._nextId.group_add_items = id + 1;
+        const record = {
+            id, operation_id: operationId,
+            phone_number: item.phone_number,
+            source: item.source || 'chip',
+            chip_id: item.chip_id || null,
+            group_id: item.group_id,
+            group_name: item.group_name || null,
+            status: 'pending',
+            admin_promoted: 0,
+            admin_error: null,
+            error_message: null,
+            processed_at: null
+        };
+        data.group_add_items.push(record);
+        added.push(record);
+    }
+    // Update total on operation
+    const op = data.group_add_operations.find(o => o.id === operationId);
+    if (op) op.total_additions = added.length;
+    saveDb(data);
+    return added;
+}
+
+function getOperationItems(operationId) {
+    const data = loadDb();
+    return (data.group_add_items || []).filter(i => i.operation_id === operationId);
+}
+
+function updateOperationItem(id, updates) {
+    const data = loadDb();
+    const item = (data.group_add_items || []).find(i => i.id === id);
+    if (!item) return null;
+    Object.assign(item, updates);
+    saveDb(data);
+    return item;
+}
+
+function getFailedItems(operationId) {
+    const data = loadDb();
+    return (data.group_add_items || []).filter(i => i.operation_id === operationId && i.status === 'failed');
+}
+
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
@@ -484,5 +609,8 @@ module.exports = {
     assignProxyToChip, releaseProxy, getProxyForChip, getProxyStats,
     updateProxyUrl,
     createFolder, getAllFolders, updateFolder, deleteFolder, assignChipToFolder,
-    enterRehabilitation, exitRehabilitation, markChipDiscarded, getChipsInRehab
+    enterRehabilitation, exitRehabilitation, markChipDiscarded, getChipsInRehab,
+    setChipInstanceType, getAdminInstances, getWarmingChipsForAdd,
+    createAddOperation, getAddOperation, updateAddOperation, getAddOperations,
+    addOperationItems, getOperationItems, updateOperationItem, getFailedItems
 };
