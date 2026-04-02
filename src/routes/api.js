@@ -176,9 +176,23 @@ module.exports = function(sessionManager, warmingEngine) {
 
     // ==================== PROXIES ====================
 
-    // List all proxies
+    // List all proxies (sorted: in use first by chip name, then available)
     router.get('/proxies', (req, res) => {
-        res.json(db.getAllProxies());
+        const proxies = db.getAllProxies();
+        proxies.sort((a, b) => {
+            const aUsed = a.assigned_chip_id ? 0 : 1;
+            const bUsed = b.assigned_chip_id ? 0 : 1;
+            if (aUsed !== bUsed) return aUsed - bUsed;
+            if (a.assigned_chip_id && b.assigned_chip_id) {
+                const chipA = db.getChipById(a.assigned_chip_id);
+                const chipB = db.getChipById(b.assigned_chip_id);
+                const nameA = (chipA?.name || '').toLowerCase();
+                const nameB = (chipB?.name || '').toLowerCase();
+                return nameA.localeCompare(nameB);
+            }
+            return 0;
+        });
+        res.json(proxies);
     });
 
     // Get proxy stats
