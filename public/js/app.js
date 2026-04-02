@@ -138,14 +138,17 @@ function renderChips() {
             : 0;
         const remaining = Math.max(0, chip.messages_target - chip.messages_sent);
         const temp = getTemperature(chip);
-        const initial = (chip.phone || chip.name || 'C')[0].toUpperCase();
+        const initial = (chip.name || chip.phone || 'C')[0].toUpperCase();
         const avatarClass = chip.status === 'warming' ? 'warming' : chip.status === 'disconnected' ? 'disconnected' : '';
+        const avatarContent = chip.profile_pic
+            ? `<img src="${chip.profile_pic}" alt="${initial}" onerror="this.parentElement.innerHTML='${initial}'">`
+            : initial;
 
         return `
         <div class="chip-card status-${chip.status}" id="chip-${chip.id}">
             <div class="chip-header">
                 <div class="chip-info">
-                    <div class="chip-avatar ${avatarClass}">${initial}</div>
+                    <div class="chip-avatar ${avatarClass}">${avatarContent}</div>
                     <div>
                         <div class="chip-name">${chip.name || 'Chip ' + chip.id} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
                         <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>

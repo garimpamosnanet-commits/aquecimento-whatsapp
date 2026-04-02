@@ -126,6 +126,12 @@ function updateChipName(id, name) {
     if (chip) { chip.name = name; saveDb(data); }
 }
 
+function updateChipField(id, field, value) {
+    const data = loadDb();
+    const chip = data.chips.find(c => c.id === id);
+    if (chip) { chip[field] = value; saveDb(data); }
+}
+
 function incrementMessagesSent(id) {
     const data = loadDb();
     const chip = data.chips.find(c => c.id === id);
@@ -348,7 +354,7 @@ function getProxyStats() {
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
-    updateChipStatus, updateChipPhone, updateChipName,
+    updateChipStatus, updateChipPhone, updateChipName, updateChipField,
     incrementMessagesSent, updateChipPhase, deleteChip, getChipStats,
     getWarmingConfig, getAllWarmingConfigs, updateWarmingConfig,
     logActivity, getRecentActivity, getTodayMessageCount,

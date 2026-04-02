@@ -133,6 +133,20 @@ class SessionManager {
                     db.updateChipName(chip.id, pushName);
                 }
 
+                // Get profile picture
+                try {
+                    const jid = socket.user?.id;
+                    if (jid) {
+                        const ppUrl = await socket.profilePictureUrl(jid, 'image');
+                        if (ppUrl) {
+                            db.updateChipField(chip.id, 'profile_pic', ppUrl);
+                        }
+                    }
+                } catch (e) {
+                    // No profile pic or privacy setting - ignore
+                    console.log(`[SessionManager] Sem foto de perfil para ${sessionId}`);
+                }
+
                 this.io.emit('connected', { sessionId, chipId: chip.id, phone: phoneNumber });
                 this.emitChipUpdate(chip.id);
                 this.emitStats();
