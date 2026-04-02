@@ -62,6 +62,12 @@ socket.on('chip_deleted', ({ chipId }) => {
 
 socket.on('qr', ({ sessionId, chipId, qr }) => {
     currentQRSessionId = sessionId;
+    // Show scan step with QR
+    document.getElementById('qr-step-name').style.display = 'none';
+    document.getElementById('qr-step-scan').style.display = 'block';
+    const chipName = document.getElementById('chip-name-input').value.trim();
+    const modalTitle = document.querySelector('#qr-modal .modal h3');
+    if (modalTitle && chipName) modalTitle.textContent = 'Conectar: ' + chipName;
     const qrImage = document.getElementById('qr-image');
     qrImage.innerHTML = `<img src="${qr}" alt="QR Code">`;
 });
@@ -141,7 +147,7 @@ function renderChips() {
                 <div class="chip-info">
                     <div class="chip-avatar ${avatarClass}">${initial}</div>
                     <div>
-                        <div class="chip-name">${chip.name || 'Chip ' + chip.id}</div>
+                        <div class="chip-name">${chip.name || 'Chip ' + chip.id} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
                         <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>
                     </div>
                 </div>
@@ -233,6 +239,17 @@ function confirmChipName() {
     socket.emit('request_qr', { name: name });
 }
 
+function reloadQR() {
+    document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
+    const name = document.getElementById('chip-name-input').value.trim();
+    // Delete current session and create new one
+    if (currentQRSessionId) {
+        socket.emit('delete_chip_by_session', { sessionId: currentQRSessionId });
+    }
+    currentQRSessionId = null;
+    socket.emit('request_qr', { name: name });
+}
+
 function closeQRModal() {
     document.getElementById('qr-modal').classList.remove('active');
     currentQRSessionId = null;
@@ -244,6 +261,26 @@ function nextQR() {
     document.getElementById('chip-name-input').value = '';
     document.getElementById('chip-name-input').focus();
     currentQRSessionId = null;
+}
+
+function editChipName(chipId, currentName) {
+    const newName = prompt('Nome do chip:', currentName);
+    if (newName !== null && newName.trim() !== '') {
+        fetch(`/api/chips/${chipId}/name`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName.trim() })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const idx = chips.findIndex(c => c.id === chipId);
+                if (idx >= 0) chips[idx].name = newName.trim();
+                renderChips();
+                showToast('Nome atualizado', 'success');
+            }
+        });
+    }
 }
 
 function startWarming(chipId) {

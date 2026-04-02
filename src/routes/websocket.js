@@ -84,6 +84,19 @@ module.exports = function(io, sessionManager, warmingEngine) {
             }
         });
 
+        // Delete chip by session (used when reloading QR)
+        socket.on('delete_chip_by_session', async (data) => {
+            const { sessionId } = data;
+            if (sessionId) {
+                const chip = db.getChipBySession(sessionId);
+                if (chip) {
+                    warmingEngine.stopChip(chip.id);
+                    await sessionManager.deleteSession(sessionId);
+                    io.emit('chip_deleted', { chipId: chip.id });
+                }
+            }
+        });
+
         socket.on('disconnect', () => {
             console.log('[WebSocket] Cliente desconectado');
         });

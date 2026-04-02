@@ -527,6 +527,37 @@ body::before {
     font-size: 14px;
     letter-spacing: -0.2px;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-edit-name {
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.btn-edit-name:hover {
+    opacity: 1;
+}
+
+.btn-reload-qr {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    margin-top: 8px;
+}
+
+.btn-reload-qr:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .chip-phone {

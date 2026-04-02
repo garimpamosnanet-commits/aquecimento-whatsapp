@@ -28,6 +28,17 @@ module.exports = function(sessionManager, warmingEngine) {
         }
     });
 
+    // Rename chip
+    router.put('/chips/:id/name', (req, res) => {
+        const chip = db.getChipById(req.params.id);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        const { name } = req.body;
+        if (!name) return res.status(400).json({ error: 'Nome obrigatorio' });
+        db.updateChipName(chip.id, name);
+        sessionManager.emitChipUpdate(chip.id);
+        res.json({ success: true });
+    });
+
     // Disconnect chip
     router.post('/chips/:id/disconnect', async (req, res) => {
         const chip = db.getChipById(req.params.id);
