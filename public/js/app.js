@@ -190,7 +190,9 @@ function renderChips() {
                         ? `<button class="btn btn-success btn-sm" onclick="startWarming(${chip.id})">▶ Aquecer</button>`
                         : chip.status === 'disconnected'
                             ? `<button class="btn btn-primary btn-sm" onclick="reconnectChip('${chip.session_id}')">🔄 Reconectar</button>`
-                            : `<button class="btn btn-outline btn-sm" disabled>⏳ Aguardando...</button>`
+                            : chip.status === 'qr_pending'
+                                ? `<button class="btn btn-primary btn-sm" onclick="retryQR('${chip.session_id}', ${chip.id})">📱 Gerar QR Code</button>`
+                                : `<button class="btn btn-outline btn-sm" disabled>⏳ Aguardando...</button>`
                 }
                 <button class="btn btn-outline btn-sm" onclick="disconnectChip(${chip.id})" ${chip.status === 'disconnected' ? 'disabled' : ''}>⏏ Desconectar</button>
                 <button class="btn-icon danger" onclick="deleteChip(${chip.id})" title="Excluir">✕</button>
@@ -320,6 +322,17 @@ function deleteChip(chipId) {
 function reconnectChip(sessionId) {
     socket.emit('reconnect_chip', { sessionId });
     showToast('Reconectando...', 'accent');
+}
+
+function retryQR(sessionId, chipId) {
+    // Open QR modal and reconnect to get new QR
+    document.getElementById('qr-modal').classList.add('active');
+    document.getElementById('qr-step-name').style.display = 'none';
+    document.getElementById('qr-step-scan').style.display = 'block';
+    document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
+    document.getElementById('btn-next-qr').style.display = 'none';
+    currentQRSessionId = sessionId;
+    socket.emit('reconnect_chip', { sessionId });
 }
 
 function refreshChips() {
