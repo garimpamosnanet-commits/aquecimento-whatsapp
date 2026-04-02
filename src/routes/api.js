@@ -380,6 +380,45 @@ module.exports = function(sessionManager, warmingEngine, groupManager) {
         res.json({ success: true, chip });
     });
 
+    // DEBUG: raw group data from Baileys (temporary)
+    router.get('/admin-instances/:id/debug-groups', async (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        if (!sessionManager.isConnected(chip.session_id)) {
+            return res.status(400).json({ error: 'Nao conectado' });
+        }
+        try {
+            const sock = sessionManager.getSocket(chip.session_id);
+            const userJid = sock.user?.id || 'unknown';
+            const phone = userJid.split('@')[0].split(':')[0];
+            const groups = await sock.groupFetchAllParticipating();
+            const debug = [];
+            for (const [gid, g] of Object.entries(groups)) {
+                const meParticipant = g.participants.find(p => {
+                    const pPhone = p.id.split('@')[0].split(':')[0];
+                    return pPhone === phone;
+                });
+                debug.push({
+                    id: gid,
+                    subject: g.subject,
+                    participantCount: g.participants.length,
+                    myJid: userJid,
+                    myPhone: phone,
+                    meFound: !!meParticipant,
+                    meRole: meParticipant ? meParticipant.admin : null,
+                    meId: meParticipant ? meParticipant.id : null,
+                    firstThreeParticipants: g.participants.slice(0, 3).map(p => ({
+                        id: p.id, admin: p.admin, phone: p.id.split('@')[0].split(':')[0]
+                    }))
+                });
+            }
+            res.json({ userJid, phone, totalGroups: Object.keys(groups).length, groups: debug });
+        } catch (err) {
+            res.status(500).json({ error: err.message, stack: err.stack });
+        }
+    });
+
     // Get groups where admin instance is administrator
     router.get('/admin-instances/:id/groups', async (req, res) => {
         const chipId = parseInt(req.params.id);
