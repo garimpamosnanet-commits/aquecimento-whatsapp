@@ -11,6 +11,7 @@ module.exports = function(io, sessionManager, warmingEngine) {
             return { ...chip, proxy_ip: proxy ? proxy.url.replace(/.*@/, '').replace(/:.*/, '') : null };
         });
         socket.emit('chips_list', chipsWithProxy);
+        socket.emit('folders_list', db.getAllFolders());
 
         // Request new QR code connection
         socket.on('request_qr', async (data) => {

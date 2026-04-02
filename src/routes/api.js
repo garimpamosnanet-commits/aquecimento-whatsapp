@@ -142,6 +142,46 @@ module.exports = function(sessionManager, warmingEngine) {
         res.json(db.getWarmingGroups());
     });
 
+    // ==================== FOLDERS ====================
+
+    // List all folders
+    router.get('/folders', (req, res) => {
+        res.json(db.getAllFolders());
+    });
+
+    // Create folder
+    router.post('/folders', (req, res) => {
+        const { name } = req.body;
+        if (!name || !name.trim()) return res.status(400).json({ error: 'Nome obrigatorio' });
+        const folder = db.createFolder(name.trim());
+        res.json({ success: true, folder });
+    });
+
+    // Rename folder
+    router.put('/folders/:id', (req, res) => {
+        const { name } = req.body;
+        if (!name || !name.trim()) return res.status(400).json({ error: 'Nome obrigatorio' });
+        const folder = db.updateFolder(parseInt(req.params.id), name.trim());
+        if (!folder) return res.status(404).json({ error: 'Pasta nao encontrada' });
+        res.json({ success: true, folder });
+    });
+
+    // Delete folder (unassigns chips)
+    router.delete('/folders/:id', (req, res) => {
+        db.deleteFolder(parseInt(req.params.id));
+        res.json({ success: true });
+    });
+
+    // Assign chip to folder
+    router.put('/chips/:id/folder', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const { folder_id } = req.body;
+        const chip = db.assignChipToFolder(chipId, folder_id);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        sessionManager.emitChipUpdate(chipId);
+        res.json({ success: true, chip });
+    });
+
     // ==================== TEST ====================
 
     // Send a test message between two chips

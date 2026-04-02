@@ -19,7 +19,8 @@ function loadDb() {
                 { id: 4, phase: 4, daily_limit: 200, min_delay_seconds: 30, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,status,sticker,reaction,location,image', description: 'Fase 4 (Dia 13-15): Finalizacao + manutencao' }
             ],
             proxies: [],
-            _nextId: { chips: 1, activity_log: 1, warming_groups: 1, proxies: 1 }
+            folders: [],
+            _nextId: { chips: 1, activity_log: 1, warming_groups: 1, proxies: 1, folders: 1 }
         };
         saveDb(initial);
         return initial;
@@ -46,6 +47,14 @@ function getDb() {
         saveDb(data);
         console.log('[DB] Config migrada para incluir location/image');
     }
+    // Migrate: add folders collection if missing
+    if (!data.folders) {
+        data.folders = [];
+        if (!data._nextId.folders) data._nextId.folders = 1;
+        saveDb(data);
+        console.log('[DB] Migrated: added folders collection');
+    }
+
     // Migrate: switch HTTP proxies to SOCKS5 (port 12323 -> 12324)
     if (data.proxies && data.proxies.length > 0 && data.proxies[0].url && data.proxies[0].url.startsWith('http://')) {
         let migrated = 0;
@@ -351,6 +360,59 @@ function getProxyStats() {
     };
 }
 
+// ==================== FOLDERS ====================
+
+function createFolder(name) {
+    const data = loadDb();
+    if (!data.folders) data.folders = [];
+    if (!data._nextId.folders) data._nextId.folders = 1;
+    const id = data._nextId.folders;
+    data._nextId.folders = id + 1;
+    const folder = { id, name, created_at: now() };
+    data.folders.push(folder);
+    saveDb(data);
+    return folder;
+}
+
+function getAllFolders() {
+    const data = loadDb();
+    return (data.folders || []).sort((a, b) => a.id - b.id);
+}
+
+function updateFolder(id, name) {
+    const data = loadDb();
+    if (!data.folders) return null;
+    const folder = data.folders.find(f => f.id === id);
+    if (!folder) return null;
+    folder.name = name;
+    saveDb(data);
+    return folder;
+}
+
+function deleteFolder(id) {
+    const data = loadDb();
+    if (!data.folders) return;
+    data.folders = data.folders.filter(f => f.id !== id);
+    // Unassign all chips from this folder
+    for (const chip of data.chips) {
+        if (chip.folder_id === id) delete chip.folder_id;
+    }
+    saveDb(data);
+}
+
+function assignChipToFolder(chipId, folderId) {
+    const data = loadDb();
+    const chip = data.chips.find(c => c.id === chipId);
+    if (!chip) return null;
+    if (folderId === null || folderId === undefined) {
+        delete chip.folder_id;
+    } else {
+        chip.folder_id = folderId;
+    }
+    saveDb(data);
+    return chip;
+}
+
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
@@ -361,5 +423,6 @@ module.exports = {
     createWarmingGroup, addGroupMember, getWarmingGroups, getGroupMembers,
     addProxy, addProxiesBulk, getAllProxies, deleteProxy, deleteAllProxies,
     assignProxyToChip, releaseProxy, getProxyForChip, getProxyStats,
-    updateProxyUrl
+    updateProxyUrl,
+    createFolder, getAllFolders, updateFolder, deleteFolder, assignChipToFolder
 };

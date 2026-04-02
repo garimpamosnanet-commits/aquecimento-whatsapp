@@ -1,6 +1,7 @@
 // ==================== KS DIGITAL — COMMAND CENTER ====================
 const socket = io();
 let chips = [];
+let folders = [];
 let currentQRSessionId = null;
 
 // ==================== ANIMATED COUNTER ====================
@@ -42,6 +43,11 @@ socket.on('stats', (stats) => {
 
 socket.on('chips_list', (list) => {
     chips = list;
+    renderChips();
+});
+
+socket.on('folders_list', (list) => {
+    folders = list;
     renderChips();
 });
 
@@ -119,10 +125,109 @@ function getTemperature(chip) {
 }
 
 // ==================== RENDER CHIPS ====================
+function renderChipCard(chip) {
+    const progress = chip.messages_target > 0
+        ? Math.min(100, Math.round((chip.messages_sent / chip.messages_target) * 100))
+        : 0;
+    const temp = getTemperature(chip);
+    const initial = (chip.name || chip.phone || 'C')[0].toUpperCase();
+    const avatarClass = chip.status === 'warming' ? 'warming' : chip.status === 'disconnected' ? 'disconnected' : '';
+    const avatarContent = chip.profile_pic
+        ? `<img src="${chip.profile_pic}" alt="${initial}" onerror="this.parentElement.innerHTML='${initial}'">`
+        : initial;
+
+    return `
+    <div class="chip-card status-${chip.status}" id="chip-${chip.id}" draggable="true" ondragstart="onDragStart(event, ${chip.id})">
+        <div class="chip-header">
+            <div class="chip-info">
+                <div class="chip-avatar ${avatarClass}">${avatarContent}</div>
+                <div>
+                    <div class="chip-name">${chip.name || 'Chip ' + chip.id} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
+                    <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>
+                </div>
+            </div>
+            <div class="chip-status">
+                <span class="dot"></span>
+                ${getStatusLabel(chip.status)}
+                ${chip.proxy_ip ? `<div class="proxy-badge" title="Proxy ativo">🛡️ ${chip.proxy_ip}</div>` : '<div class="proxy-badge no-proxy">⚠️ Sem proxy</div>'}
+            </div>
+        </div>
+
+        <div class="chip-temp">
+            <div class="temp-bar-wrapper">
+                <div class="temp-label">
+                    <span>Temperatura</span>
+                    <span class="temp-status">${temp.label} — ${progress}%</span>
+                </div>
+                <div class="temp-bar">
+                    <div class="temp-fill ${temp.cls}" style="width: ${progress}%"></div>
+                </div>
+            </div>
+            <div class="temp-fires">${temp.fires}</div>
+        </div>
+
+        <div class="chip-meta">
+            <span class="chip-meta-item">
+                <span class="meta-icon">📊</span>
+                Fase <span class="badge badge-phase-${chip.phase}">${chip.phase}</span>
+            </span>
+            <span class="chip-meta-item">
+                <span class="meta-icon">💬</span>
+                ${formatNumber(chip.messages_sent)} msgs
+            </span>
+            ${chip.connected_at ? `<span class="chip-meta-item"><span class="meta-icon">📅</span>${formatDate(chip.connected_at)}</span>` : ''}
+        </div>
+
+        <div class="chip-actions">
+            ${chip.status === 'warming'
+                ? `<button class="btn btn-warning btn-sm" onclick="stopWarming(${chip.id})">⏸ Pausar</button>`
+                : chip.status === 'connected'
+                    ? `<button class="btn btn-success btn-sm" onclick="startWarming(${chip.id})">▶ Aquecer</button>`
+                    : chip.status === 'disconnected'
+                        ? `<button class="btn btn-primary btn-sm" onclick="reconnectChip('${chip.session_id}')">🔄 Reconectar</button>`
+                        : chip.status === 'qr_pending'
+                            ? `<button class="btn btn-primary btn-sm" onclick="retryQR('${chip.session_id}', ${chip.id})">📱 Gerar QR Code</button>`
+                            : `<button class="btn btn-outline btn-sm" disabled>⏳ Aguardando...</button>`
+            }
+            <button class="btn btn-outline btn-sm" onclick="disconnectChip(${chip.id})" ${chip.status === 'disconnected' ? 'disabled' : ''}>⏏ Desconectar</button>
+            <button class="btn-icon danger" onclick="deleteChip(${chip.id})" title="Excluir">✕</button>
+        </div>
+    </div>`;
+}
+
+function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
+    const count = folderChips.length;
+    const label = isUnassigned
+        ? `Sem pasta (${count} chip${count !== 1 ? 's' : ''})`
+        : `${folderName} (${count}/12)`;
+    const dropId = isUnassigned ? 'drop-none' : `drop-folder-${folderId}`;
+    const dataFolder = isUnassigned ? 'null' : folderId;
+
+    return `
+    <div class="folder-section" id="${dropId}">
+        <div class="folder-header" onclick="toggleFolder('${dropId}')">
+            <div class="folder-header-left">
+                <span class="folder-toggle" id="toggle-${dropId}">▼</span>
+                <span class="folder-title">${isUnassigned ? '📂' : '📁'} ${label}</span>
+            </div>
+            ${!isUnassigned ? `
+            <div class="folder-actions" onclick="event.stopPropagation()">
+                <button class="btn-icon" onclick="renameFolder(${folderId}, '${folderName.replace(/'/g, "\\'")}')" title="Renomear">✏️</button>
+                <button class="btn-icon danger" onclick="deleteFolderConfirm(${folderId})" title="Excluir pasta">🗑️</button>
+            </div>` : ''}
+        </div>
+        <div class="folder-drop-zone chips-grid" data-folder="${dataFolder}"
+             ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+            ${folderChips.length > 0 ? folderChips.map(c => renderChipCard(c)).join('') : `
+            <div class="empty-folder-hint">Arraste chips para esta pasta</div>`}
+        </div>
+    </div>`;
+}
+
 function renderChips() {
     const grid = document.getElementById('chips-grid');
 
-    if (chips.length === 0) {
+    if (chips.length === 0 && folders.length === 0) {
         grid.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📱</div>
@@ -132,76 +237,169 @@ function renderChips() {
         return;
     }
 
-    grid.innerHTML = chips.map(chip => {
-        const progress = chip.messages_target > 0
-            ? Math.min(100, Math.round((chip.messages_sent / chip.messages_target) * 100))
-            : 0;
-        const remaining = Math.max(0, chip.messages_target - chip.messages_sent);
-        const temp = getTemperature(chip);
-        const initial = (chip.name || chip.phone || 'C')[0].toUpperCase();
-        const avatarClass = chip.status === 'warming' ? 'warming' : chip.status === 'disconnected' ? 'disconnected' : '';
-        const avatarContent = chip.profile_pic
-            ? `<img src="${chip.profile_pic}" alt="${initial}" onerror="this.parentElement.innerHTML='${initial}'">`
-            : initial;
+    let html = '';
 
-        return `
-        <div class="chip-card status-${chip.status}" id="chip-${chip.id}">
-            <div class="chip-header">
-                <div class="chip-info">
-                    <div class="chip-avatar ${avatarClass}">${avatarContent}</div>
-                    <div>
-                        <div class="chip-name">${chip.name || 'Chip ' + chip.id} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
-                        <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>
-                    </div>
-                </div>
-                <div class="chip-status">
-                    <span class="dot"></span>
-                    ${getStatusLabel(chip.status)}
-                    ${chip.proxy_ip ? `<div class="proxy-badge" title="Proxy ativo">🛡️ ${chip.proxy_ip}</div>` : '<div class="proxy-badge no-proxy">⚠️ Sem proxy</div>'}
-                </div>
-            </div>
+    // Unassigned chips (no folder)
+    const unassigned = chips.filter(c => !c.folder_id);
+    if (unassigned.length > 0 || folders.length > 0) {
+        html += renderFolderSection(null, null, unassigned, true);
+    }
 
-            <div class="chip-temp">
-                <div class="temp-bar-wrapper">
-                    <div class="temp-label">
-                        <span>Temperatura</span>
-                        <span class="temp-status">${temp.label} — ${progress}%</span>
-                    </div>
-                    <div class="temp-bar">
-                        <div class="temp-fill ${temp.cls}" style="width: ${progress}%"></div>
-                    </div>
-                </div>
-                <div class="temp-fires">${temp.fires}</div>
-            </div>
+    // Each folder
+    for (const folder of folders) {
+        const folderChips = chips.filter(c => c.folder_id === folder.id);
+        html += renderFolderSection(folder.id, folder.name, folderChips, false);
+    }
 
-            <div class="chip-meta">
-                <span class="chip-meta-item">
-                    <span class="meta-icon">📊</span>
-                    Fase <span class="badge badge-phase-${chip.phase}">${chip.phase}</span>
-                </span>
-                <span class="chip-meta-item">
-                    <span class="meta-icon">💬</span>
-                    ${formatNumber(chip.messages_sent)} msgs
-                </span>
-                ${chip.connected_at ? `<span class="chip-meta-item"><span class="meta-icon">📅</span>${formatDate(chip.connected_at)}</span>` : ''}
-            </div>
+    // If no folders and has chips, just render unassigned
+    if (folders.length === 0 && unassigned.length > 0) {
+        // Already rendered above
+    }
 
-            <div class="chip-actions">
-                ${chip.status === 'warming'
-                    ? `<button class="btn btn-warning btn-sm" onclick="stopWarming(${chip.id})">⏸ Pausar</button>`
-                    : chip.status === 'connected'
-                        ? `<button class="btn btn-success btn-sm" onclick="startWarming(${chip.id})">▶ Aquecer</button>`
-                        : chip.status === 'disconnected'
-                            ? `<button class="btn btn-primary btn-sm" onclick="reconnectChip('${chip.session_id}')">🔄 Reconectar</button>`
-                            : chip.status === 'qr_pending'
-                                ? `<button class="btn btn-primary btn-sm" onclick="retryQR('${chip.session_id}', ${chip.id})">📱 Gerar QR Code</button>`
-                                : `<button class="btn btn-outline btn-sm" disabled>⏳ Aguardando...</button>`
-                }
-                <button class="btn btn-outline btn-sm" onclick="disconnectChip(${chip.id})" ${chip.status === 'disconnected' ? 'disabled' : ''}>⏏ Desconectar</button>
-                <button class="btn-icon danger" onclick="deleteChip(${chip.id})" title="Excluir">✕</button>
-            </div>
-        </div>`;
-    }).join('');
+    grid.innerHTML = html;
+}
+
+// ==================== FOLDER CRUD ====================
+function createFolder() {
+    const name = prompt('Nome da pasta (cliente):');
+    if (!name || !name.trim()) return;
+    fetch('/api/folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() })
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            folders.push(data.folder);
+            renderChips();
+            showToast('Pasta criada: ' + data.folder.name, 'success');
+        }
+    });
+}
+
+function renameFolder(id, currentName) {
+    const name = prompt('Novo nome da pasta:', currentName);
+    if (!name || !name.trim()) return;
+    fetch(`/api/folders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() })
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            const f = folders.find(f => f.id === id);
+            if (f) f.name = name.trim();
+            renderChips();
+            showToast('Pasta renomeada', 'success');
+        }
+    });
+}
+
+function deleteFolderConfirm(id) {
+    const folder = folders.find(f => f.id === id);
+    if (!confirm(`Excluir pasta "${folder?.name}"? Os chips serao movidos para "Sem pasta".`)) return;
+    fetch(`/api/folders/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
+        if (data.success) {
+            folders = folders.filter(f => f.id !== id);
+            // Unassign chips locally
+            chips.forEach(c => { if (c.folder_id === id) delete c.folder_id; });
+            renderChips();
+            showToast('Pasta excluida', 'danger');
+        }
+    });
+}
+
+function loadFolders() {
+    fetch('/api/folders').then(r => r.json()).then(list => {
+        folders = list;
+        renderChips();
+    });
+}
+
+// ==================== DRAG AND DROP ====================
+let draggedChipId = null;
+
+function onDragStart(event, chipId) {
+    draggedChipId = chipId;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', chipId);
+    // Add visual feedback
+    setTimeout(() => {
+        const el = document.getElementById('chip-' + chipId);
+        if (el) el.style.opacity = '0.4';
+    }, 0);
+}
+
+function onDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const zone = event.currentTarget;
+    if (!zone.classList.contains('drag-over')) {
+        zone.classList.add('drag-over');
+    }
+}
+
+function onDragLeave(event) {
+    const zone = event.currentTarget;
+    // Only remove if actually leaving the zone (not entering a child)
+    if (!zone.contains(event.relatedTarget)) {
+        zone.classList.remove('drag-over');
+    }
+}
+
+function onDrop(event) {
+    event.preventDefault();
+    const zone = event.currentTarget;
+    zone.classList.remove('drag-over');
+    const chipId = parseInt(event.dataTransfer.getData('text/plain'));
+    if (!chipId) return;
+
+    const folderId = zone.dataset.folder === 'null' ? null : parseInt(zone.dataset.folder);
+
+    // Restore opacity
+    const el = document.getElementById('chip-' + chipId);
+    if (el) el.style.opacity = '1';
+
+    // Update locally
+    const chip = chips.find(c => c.id === chipId);
+    if (chip) {
+        if (folderId === null) {
+            delete chip.folder_id;
+        } else {
+            chip.folder_id = folderId;
+        }
+    }
+
+    // Update server
+    fetch(`/api/chips/${chipId}/folder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_id: folderId })
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            renderChips();
+        }
+    });
+}
+
+// Listen for dragend to restore opacity if drop was cancelled
+document.addEventListener('dragend', () => {
+    if (draggedChipId) {
+        const el = document.getElementById('chip-' + draggedChipId);
+        if (el) el.style.opacity = '1';
+        draggedChipId = null;
+    }
+});
+
+function toggleFolder(dropId) {
+    const zone = document.querySelector(`#${dropId} .folder-drop-zone`);
+    const toggle = document.getElementById('toggle-' + dropId);
+    if (!zone) return;
+    if (zone.style.display === 'none') {
+        zone.style.display = '';
+        if (toggle) toggle.textContent = '▼';
+    } else {
+        zone.style.display = 'none';
+        if (toggle) toggle.textContent = '▶';
+    }
 }
 
 function getStatusLabel(status) {
@@ -353,6 +551,12 @@ function refreshChips() {
         .then(r => r.json())
         .then(list => {
             chips = list;
+            renderChips();
+        });
+    fetch('/api/folders')
+        .then(r => r.json())
+        .then(list => {
+            folders = list;
             renderChips();
         });
     fetch('/api/stats')

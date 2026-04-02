@@ -1084,6 +1084,84 @@ body::before {
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.18); }
 
+/* ==================== FOLDERS & DRAG-DROP ==================== */
+.folder-section {
+    margin-bottom: 20px;
+}
+
+.folder-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition);
+    margin-bottom: 10px;
+}
+
+.folder-header:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-hover);
+}
+
+.folder-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.folder-toggle {
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}
+
+.folder-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.2px;
+}
+
+.folder-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.folder-drop-zone {
+    min-height: 60px;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s, border-color 0.2s;
+    border: 2px dashed transparent;
+    padding: 4px;
+}
+
+.folder-drop-zone.drag-over {
+    background: rgba(59, 130, 246, 0.04);
+    border-color: var(--accent);
+}
+
+.empty-folder-hint {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-style: italic;
+    grid-column: 1 / -1;
+}
+
+.chip-card[draggable="true"] {
+    cursor: grab;
+}
+
+.chip-card[draggable="true"]:active {
+    cursor: grabbing;
+}
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 1024px) {
     .sidebar-feed { display: none; }
