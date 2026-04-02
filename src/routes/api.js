@@ -726,15 +726,14 @@ module.exports = function(sessionManager, warmingEngine, groupManager) {
     // ==================== TEST NOTIFICATION ====================
 
     router.post('/test-notification', async (req, res) => {
-        const settings = db.getSettings();
-        const n = settings.notifications;
-        if (!n || !n.phone) return res.json({ success: false, error: 'Numero nao configurado' });
         try {
-            const phone = n.phone.replace(/\D/g, '');
-            const resp = await fetch('https://api.z-api.io/instances/3E9F26A4DCFB614A95626EB14D89919B/token/9CDF3623EFE3D71E8FAD8912/send-text', {
+            const ZAPI_BASE = 'https://api.z-api.io/instances/3E9F26A4DCFB614A95626EB14D89919B/token/9CDF3623EFE3D71E8FAD8912';
+            const GROUP_ID = '120363429056734446-group';
+            const msg = '🤖 *Aquecimento KS*\n\n✅ Teste de notificacao! Tudo funcionando.\n\nVoce recebera alertas aqui quando:\n• ⚠️ Chip desconectar\n• 🚨 Chip for banido\n• 📈 Chip mudar de fase\n• ✅ Chip ficar pronto\n• ❌ Erros criticos';
+            const resp = await fetch(`${ZAPI_BASE}/send-text`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Client-Token': 'F7428e0211a2f428d96737ee23d06edb8S' },
-                body: JSON.stringify({ phone, message: '🤖 *Aquecimento KS*\n\n✅ Teste de notificacao! Tudo funcionando.' })
+                body: JSON.stringify({ phone: GROUP_ID, message: msg })
             });
             res.json({ success: resp.ok });
         } catch (err) {
