@@ -193,6 +193,31 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
     </div>
 </div>
 
+<!-- MODAL: INPUT (criar/renomear pasta, editar nome chip) -->
+<div class="modal-overlay" id="input-modal">
+    <div class="modal">
+        <h3 id="input-modal-title">Titulo</h3>
+        <p id="input-modal-desc"></p>
+        <input type="text" id="input-modal-value" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-top:8px">
+        <div class="modal-actions" style="margin-top:12px">
+            <button class="btn btn-outline" onclick="closeInputModal()">Cancelar</button>
+            <button class="btn btn-primary" id="input-modal-confirm" onclick="confirmInputModal()">Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: CONFIRM (excluir pasta, chip, etc) -->
+<div class="modal-overlay" id="confirm-modal">
+    <div class="modal">
+        <h3 id="confirm-modal-title">Confirmar</h3>
+        <p id="confirm-modal-desc"></p>
+        <div class="modal-actions" style="margin-top:12px">
+            <button class="btn btn-outline" onclick="closeConfirmModal()">Cancelar</button>
+            <button class="btn btn-danger" id="confirm-modal-btn" onclick="confirmConfirmModal()">Excluir</button>
+        </div>
+    </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast-container" id="toast-container"></div>
 

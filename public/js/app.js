@@ -260,50 +260,101 @@ function renderChips() {
 }
 
 // ==================== FOLDER CRUD ====================
+// ==================== MODAL INPUT/CONFIRM SYSTEM ====================
+let _inputModalCallback = null;
+let _confirmModalCallback = null;
+
+function openInputModal(title, desc, defaultValue, callback) {
+    document.getElementById('input-modal-title').textContent = title;
+    document.getElementById('input-modal-desc').textContent = desc || '';
+    document.getElementById('input-modal-value').value = defaultValue || '';
+    document.getElementById('input-modal').classList.add('active');
+    document.getElementById('input-modal-value').focus();
+    _inputModalCallback = callback;
+}
+
+function closeInputModal() {
+    document.getElementById('input-modal').classList.remove('active');
+    _inputModalCallback = null;
+}
+
+function confirmInputModal() {
+    const value = document.getElementById('input-modal-value').value.trim();
+    if (!value) return;
+    closeInputModal();
+    if (_inputModalCallback) _inputModalCallback(value);
+}
+
+// Enter no input modal confirma
+document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('input-modal-value');
+    if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') confirmInputModal(); });
+});
+
+function openConfirmModal(title, desc, btnText, callback) {
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-desc').textContent = desc || '';
+    document.getElementById('confirm-modal-btn').textContent = btnText || 'Excluir';
+    document.getElementById('confirm-modal').classList.add('active');
+    _confirmModalCallback = callback;
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirm-modal').classList.remove('active');
+    _confirmModalCallback = null;
+}
+
+function confirmConfirmModal() {
+    closeConfirmModal();
+    if (_confirmModalCallback) _confirmModalCallback();
+}
+
+// ==================== FOLDERS ====================
+
 function createFolder() {
-    const name = prompt('Nome da pasta (cliente):');
-    if (!name || !name.trim()) return;
-    fetch('/api/folders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() })
-    }).then(r => r.json()).then(data => {
-        if (data.success) {
-            folders.push(data.folder);
-            renderChips();
-            showToast('Pasta criada: ' + data.folder.name, 'success');
-        }
+    openInputModal('Nova Pasta', 'Nome do cliente:', '', (name) => {
+        fetch('/api/folders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                folders.push(data.folder);
+                renderChips();
+                showToast('Pasta criada: ' + data.folder.name, 'success');
+            }
+        });
     });
 }
 
 function renameFolder(id, currentName) {
-    const name = prompt('Novo nome da pasta:', currentName);
-    if (!name || !name.trim()) return;
-    fetch(`/api/folders/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() })
-    }).then(r => r.json()).then(data => {
-        if (data.success) {
-            const f = folders.find(f => f.id === id);
-            if (f) f.name = name.trim();
-            renderChips();
-            showToast('Pasta renomeada', 'success');
-        }
+    openInputModal('Renomear Pasta', 'Novo nome:', currentName, (name) => {
+        fetch(`/api/folders/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                const f = folders.find(f => f.id === id);
+                if (f) f.name = name;
+                renderChips();
+                showToast('Pasta renomeada', 'success');
+            }
+        });
     });
 }
 
 function deleteFolderConfirm(id) {
     const folder = folders.find(f => f.id === id);
-    if (!confirm(`Excluir pasta "${folder?.name}"? Os chips serao movidos para "Sem pasta".`)) return;
-    fetch(`/api/folders/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
-        if (data.success) {
-            folders = folders.filter(f => f.id !== id);
-            // Unassign chips locally
-            chips.forEach(c => { if (c.folder_id === id) delete c.folder_id; });
-            renderChips();
-            showToast('Pasta excluida', 'danger');
-        }
+    openConfirmModal('Excluir Pasta', `Excluir "${folder?.name}"? Os chips serao movidos para "Sem pasta".`, 'Excluir', () => {
+        fetch(`/api/folders/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
+            if (data.success) {
+                folders = folders.filter(f => f.id !== id);
+                chips.forEach(c => { if (c.folder_id === id) delete c.folder_id; });
+                renderChips();
+                showToast('Pasta excluida', 'danger');
+            }
+        });
     });
 }
 
@@ -476,23 +527,22 @@ function nextQR() {
 }
 
 function editChipName(chipId, currentName) {
-    const newName = prompt('Nome do chip:', currentName);
-    if (newName !== null && newName.trim() !== '') {
+    openInputModal('Editar Nome', 'Nome do chip:', currentName, (newName) => {
         fetch(`/api/chips/${chipId}/name`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newName.trim() })
+            body: JSON.stringify({ name: newName })
         })
         .then(r => r.json())
         .then(data => {
             if (data.success) {
                 const idx = chips.findIndex(c => c.id === chipId);
-                if (idx >= 0) chips[idx].name = newName.trim();
+                if (idx >= 0) chips[idx].name = newName;
                 renderChips();
                 showToast('Nome atualizado', 'success');
             }
         });
-    }
+    });
 }
 
 function startWarming(chipId) {
@@ -516,16 +566,16 @@ function stopAll() {
 }
 
 function disconnectChip(chipId) {
-    if (confirm('Desconectar este chip?')) {
+    openConfirmModal('Desconectar Chip', 'Deseja desconectar este chip?', 'Desconectar', () => {
         socket.emit('disconnect_chip', { chipId });
-    }
+    });
 }
 
 function deleteChip(chipId) {
-    if (confirm('Excluir este chip? A sessao sera removida.')) {
+    openConfirmModal('Excluir Chip', 'Excluir este chip? A sessao sera removida permanentemente.', 'Excluir', () => {
         socket.emit('delete_chip', { chipId });
         showToast('Chip excluido', 'danger');
-    }
+    });
 }
 
 function reconnectChip(sessionId) {
