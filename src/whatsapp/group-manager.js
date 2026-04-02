@@ -17,20 +17,27 @@ class GroupManager {
 
     // ==================== WHATSAPP FUNCTIONS ====================
 
+    // Extract phone number from any JID format
+    // '5543920001520:12@s.whatsapp.net' → '5543920001520'
+    // '5543920001520@s.whatsapp.net' → '5543920001520'
+    // '5543920001520' → '5543920001520'
+    _extractPhone(jid) {
+        if (!jid) return '';
+        return jid.split('@')[0].split(':')[0];
+    }
+
     async getAdminGroups(adminSessionId) {
         const sock = this.sessionManager.getSocket(adminSessionId);
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
         const groups = await sock.groupFetchAllParticipating();
-        const adminJid = sock.user.id;
-        const adminPhone = adminJid.split(':')[0] || adminJid.split('@')[0];
+        const adminPhone = this._extractPhone(sock.user.id);
+
+        console.log(`[GroupManager] Admin phone: ${adminPhone}, total groups fetched: ${Object.keys(groups).length}`);
 
         const result = [];
         for (const [groupId, group] of Object.entries(groups)) {
-            const me = group.participants.find(p => {
-                const pPhone = p.id.split(':')[0] || p.id.split('@')[0];
-                return pPhone === adminPhone;
-            });
+            const me = group.participants.find(p => this._extractPhone(p.id) === adminPhone);
             if (me && (me.admin === 'admin' || me.admin === 'superadmin')) {
                 result.push({
                     id: groupId,
@@ -41,6 +48,8 @@ class GroupManager {
                 });
             }
         }
+
+        console.log(`[GroupManager] Admin groups found: ${result.length} of ${Object.keys(groups).length} total`);
         return result.sort((a, b) => (a.subject || '').localeCompare(b.subject || ''));
     }
 
@@ -141,10 +150,7 @@ class GroupManager {
         // STEP 1 — Check if already member
         try {
             const participants = await this.getGroupParticipants(adminSessionId, groupId);
-            const found = participants.find(m => {
-                const mPhone = m.jid.split(':')[0] || m.jid.split('@')[0];
-                return mPhone === phone || m.jid === jid;
-            });
+            const found = participants.find(m => this._extractPhone(m.jid) === phone);
 
             if (found && found.isAdmin) {
                 // Already member AND admin — skip entirely
