@@ -31,7 +31,8 @@ function updateStat(id, newValue) {
 // ==================== SOCKET EVENTS ====================
 socket.on('connect', () => {
     console.log('[KS] Conectado ao servidor');
-    addFeedItem('system', 'Sistema', 'Conectado ao servidor', 'connect');
+    loadFeedHistory();
+    addFeedItem('system', 'Conectado ao servidor', null, 'system');
 });
 
 socket.on('stats', (stats) => {
@@ -136,25 +137,33 @@ function renderChipCard(chip) {
         ? `<img src="${chip.profile_pic}" alt="${initial}" onerror="this.parentElement.innerHTML='${initial}'">`
         : initial;
 
+    const instanceBadge = chip.instance_type === 'admin'
+        ? '<span class="instance-badge adm">ADM</span>'
+        : '';
+
     return `
     <div class="chip-card status-${chip.status}" id="chip-${chip.id}" draggable="true" ondragstart="onDragStart(event, ${chip.id})">
         <div class="chip-header">
             <div class="chip-info">
                 <div class="chip-avatar ${avatarClass}">${avatarContent}</div>
-                <div>
-                    <div class="chip-name">${chip.name || 'Chip ' + chip.id} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
+                <div class="chip-identity">
+                    <div class="chip-name">${chip.name || 'Chip ' + chip.id} ${instanceBadge} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
                     <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>
                 </div>
             </div>
             <div class="chip-status">
                 <span class="dot"></span>
                 ${getStatusLabel(chip.status)}
-                ${chip.proxy_ip ? `<div class="proxy-badge" title="Proxy ativo">🛡️ ${chip.proxy_ip}</div>` : '<div class="proxy-badge no-proxy">⚠️ Sem proxy</div>'}
-                ${getHealthBadgeHtml(chip.id)}
             </div>
         </div>
 
-        ${getLastActivityHtml(chip.id)}
+        <div class="chip-badges">
+            ${chip.proxy_ip
+                ? `<span class="proxy-badge" title="Proxy ativo">🛡️ ${chip.proxy_ip}</span>`
+                : '<span class="proxy-badge no-proxy">⚠️ Sem proxy</span>'}
+            ${getHealthBadgeHtml(chip.id)}
+            ${getLastActivityHtml(chip.id)}
+        </div>
 
         <div class="chip-temp">
             <div class="temp-bar-wrapper">
@@ -178,7 +187,7 @@ function renderChipCard(chip) {
                 <span class="meta-icon">💬</span>
                 ${formatNumber(chip.messages_sent)} msgs
             </span>
-            ${chip.connected_at ? `<span class="chip-meta-item"><span class="meta-icon">📅</span>${formatDate(chip.connected_at)}</span>` : ''}
+            ${chip.connected_at ? `<span class="chip-meta-item"><span class="meta-icon">📅</span> ${formatDate(chip.connected_at)}</span>` : ''}
         </div>
 
         <div class="chip-actions">
@@ -198,7 +207,7 @@ function renderChipCard(chip) {
             }
             ${chip.status !== 'discarded' ? `<button class="btn btn-outline btn-sm" onclick="disconnectChip(${chip.id})" ${chip.status === 'disconnected' ? 'disabled' : ''}>⏏ Desconectar</button>` : ''}
             ${chip.status === 'connected' && (chip.instance_type || 'warming') === 'warming' ? `<button class="btn btn-outline btn-sm" onclick="setInstanceType(${chip.id},'admin')" title="Marcar como ADM do cliente">👤 ADM</button>` : ''}
-            ${chip.instance_type === 'admin' ? `<button class="btn btn-outline btn-sm" onclick="setInstanceType(${chip.id},'warming')" title="Voltar para aquecimento" style="border-color:#8B5CF6;color:#8B5CF6">👤 ADM ✓</button>` : ''}
+            ${chip.instance_type === 'admin' ? `<button class="btn btn-outline btn-sm btn-adm-active" onclick="setInstanceType(${chip.id},'warming')" title="Voltar para aquecimento">👤 ADM ✓</button>` : ''}
             <button class="btn-icon danger" onclick="deleteChip(${chip.id})" title="Excluir">✕</button>
         </div>
     </div>`;
@@ -638,6 +647,28 @@ function refreshChips() {
 const feedItems = [];
 const MAX_FEED = 50;
 
+function loadFeedHistory() {
+    fetch('/api/activity?limit=30')
+        .then(r => r.json())
+        .then(activities => {
+            if (!activities || activities.length === 0) return;
+            // Load in reverse order (oldest first) so newest ends up on top
+            const sorted = activities.slice().reverse();
+            for (const a of sorted) {
+                const chip = chips.find(c => c.id === a.chip_id);
+                const label = chip?.phone || chip?.name || `Chip ${a.chip_id}`;
+                const time = new Date(a.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const iconType = getActionClass(a.action_type);
+                const icon = getFeedIcon(iconType);
+                const detail = getActionLabel(a.action_type);
+                feedItems.unshift({ chipLabel: label, detail, message: a.details, iconType, icon, time });
+                if (feedItems.length > MAX_FEED) feedItems.pop();
+            }
+            renderFeed();
+        })
+        .catch(() => {}); // silently fail if API not ready
+}
+
 function addFeedItem(chipLabel, detail, message, iconType) {
     const now = new Date();
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1059,7 +1090,7 @@ function getHealthBadgeHtml(chipId) {
     const cls = 'health-' + h.status;
     const labels = { 'healthy': 'Saudavel', 'attention': 'Atencao', 'critical': 'Critico' };
     const label = labels[h.status] || h.status;
-    return `<div class="health-badge ${cls}"><span class="health-dot"></span>${label}</div>`;
+    return `<span class="health-badge ${cls}"><span class="health-dot"></span>${label}</span>`;
 }
 
 function getLastActivityHtml(chipId) {
@@ -1067,7 +1098,7 @@ function getLastActivityHtml(chipId) {
     const h = _healthData.chipHealth[chipId];
     if (h.lastActivityMinutesAgo === null || h.lastActivityMinutesAgo === undefined) return '';
     const text = formatTimeAgo(h.lastActivityMinutesAgo);
-    return `<div class="last-activity">Ultima acao: ${text} · ${h.todayMsgCount || 0} msgs hoje</div>`;
+    return `<span class="last-activity">${text} · ${h.todayMsgCount || 0} msgs</span>`;
 }
 
 function formatTimeAgo(minutes) {
