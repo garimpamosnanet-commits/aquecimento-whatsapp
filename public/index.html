@@ -170,13 +170,23 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="modal-overlay" id="qr-modal">
     <div class="modal">
         <h3>Conectar Chip</h3>
-        <p>Escaneie o QR Code com WhatsApp > Aparelhos conectados</p>
-        <div class="qr-container">
-            <div id="qr-image" class="qr-waiting">Aguardando QR Code...</div>
+        <div id="qr-step-name">
+            <p>Dê um nome para identificar este chip:</p>
+            <input type="text" id="chip-name-input" class="input-field" placeholder="Ex: Chip Marketing 1" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-top:8px">
+            <div class="modal-actions" style="margin-top:12px">
+                <button class="btn btn-outline" onclick="closeQRModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="confirmChipName()">Gerar QR Code →</button>
+            </div>
         </div>
-        <div class="modal-actions">
-            <button class="btn btn-outline" onclick="closeQRModal()">Cancelar</button>
-            <button class="btn btn-primary" id="btn-next-qr" style="display:none" onclick="nextQR()">Proximo Chip →</button>
+        <div id="qr-step-scan" style="display:none">
+            <p>Escaneie o QR Code com WhatsApp > Aparelhos conectados</p>
+            <div class="qr-container">
+                <div id="qr-image" class="qr-waiting">Aguardando QR Code...</div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeQRModal()">Cancelar</button>
+                <button class="btn btn-primary" id="btn-next-qr" style="display:none" onclick="nextQR()">Proximo Chip →</button>
+            </div>
         </div>
     </div>
 </div>

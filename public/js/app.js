@@ -206,10 +206,31 @@ function getStatusLabel(status) {
 // ==================== ACTIONS ====================
 function openQRModal() {
     document.getElementById('qr-modal').classList.add('active');
+    document.getElementById('qr-step-name').style.display = 'block';
+    document.getElementById('qr-step-scan').style.display = 'none';
+    document.getElementById('chip-name-input').value = '';
+    document.getElementById('chip-name-input').focus();
+    currentQRSessionId = null;
+}
+
+// Enter no input de nome confirma
+document.addEventListener('DOMContentLoaded', () => {
+    const nameInput = document.getElementById('chip-name-input');
+    if (nameInput) {
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirmChipName();
+        });
+    }
+});
+
+function confirmChipName() {
+    const name = document.getElementById('chip-name-input').value.trim();
+    document.getElementById('qr-step-name').style.display = 'none';
+    document.getElementById('qr-step-scan').style.display = 'block';
     document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
     document.getElementById('btn-next-qr').style.display = 'none';
     currentQRSessionId = null;
-    socket.emit('request_qr', { name: '' });
+    socket.emit('request_qr', { name: name });
 }
 
 function closeQRModal() {
@@ -218,10 +239,11 @@ function closeQRModal() {
 }
 
 function nextQR() {
-    document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
-    document.getElementById('btn-next-qr').style.display = 'none';
+    document.getElementById('qr-step-name').style.display = 'block';
+    document.getElementById('qr-step-scan').style.display = 'none';
+    document.getElementById('chip-name-input').value = '';
+    document.getElementById('chip-name-input').focus();
     currentQRSessionId = null;
-    socket.emit('request_qr', { name: '' });
 }
 
 function startWarming(chipId) {
