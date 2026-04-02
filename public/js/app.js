@@ -1178,12 +1178,13 @@ function updateAlertsBar(alerts) {
 
     // Show max 5
     const visible = active.slice(0, 5);
-    bar.innerHTML = visible.map((a, i) => {
+    bar.innerHTML = visible.map(a => {
         const cls = a.level === 'critical' ? 'alert-critical' : 'alert-warning';
         const icon = a.level === 'critical' ? '🚨' : '⚠️';
+        const key = alertKey(a).replace(/'/g, "\\'");
         return `<div class="alert-item ${cls}">
             <span class="alert-text">${icon} ${a.message}</span>
-            <button class="alert-dismiss" onclick="dismissAlert(${i})" title="Fechar">✕</button>
+            <button class="alert-dismiss" onclick="dismissAlert('${key}')" title="Fechar">✕</button>
         </div>`;
     }).join('');
 }
@@ -1192,9 +1193,9 @@ function alertKey(alert) {
     return (alert.chipId || '') + ':' + (alert.message || '');
 }
 
-function dismissAlert(index) {
-    if (_healthData && _healthData.alerts && _healthData.alerts[index]) {
-        _dismissedAlerts.add(alertKey(_healthData.alerts[index]));
+function dismissAlert(key) {
+    _dismissedAlerts.add(key);
+    if (_healthData && _healthData.alerts) {
         updateAlertsBar(_healthData.alerts);
     }
 }
