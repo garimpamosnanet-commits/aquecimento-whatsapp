@@ -6,9 +6,12 @@ module.exports = function(sessionManager, warmingEngine) {
 
     // ==================== CHIPS ====================
 
-    // List all chips
+    // List all chips (with proxy info)
     router.get('/chips', (req, res) => {
-        const chips = db.getAllChips();
+        const chips = db.getAllChips().map(chip => {
+            const proxy = db.getProxyForChip(chip.id);
+            return { ...chip, proxy_ip: proxy ? proxy.url.replace(/.*@/, '').replace(/:.*/, '') : null };
+        });
         res.json(chips);
     });
 

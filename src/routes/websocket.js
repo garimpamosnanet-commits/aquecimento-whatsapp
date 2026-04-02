@@ -4,9 +4,13 @@ module.exports = function(io, sessionManager, warmingEngine) {
         console.log('[WebSocket] Cliente conectado');
         const db = require('../database/db');
 
-        // Send initial data
+        // Send initial data (with proxy info)
         socket.emit('stats', db.getChipStats());
-        socket.emit('chips_list', db.getAllChips());
+        const chipsWithProxy = db.getAllChips().map(chip => {
+            const proxy = db.getProxyForChip(chip.id);
+            return { ...chip, proxy_ip: proxy ? proxy.url.replace(/.*@/, '').replace(/:.*/, '') : null };
+        });
+        socket.emit('chips_list', chipsWithProxy);
 
         // Request new QR code connection
         socket.on('request_qr', async (data) => {

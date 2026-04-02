@@ -250,6 +250,8 @@ class SessionManager {
     emitChipUpdate(chipId) {
         const chip = db.getChipById(chipId);
         if (chip) {
+            const proxy = db.getProxyForChip(chip.id);
+            chip.proxy_ip = proxy ? proxy.url.replace(/.*@/, '').replace(/:.*/, '') : null;
             this.io.emit('chip_update', chip);
         }
     }

@@ -154,6 +154,7 @@ function renderChips() {
                 <div class="chip-status">
                     <span class="dot"></span>
                     ${getStatusLabel(chip.status)}
+                    ${chip.proxy_ip ? `<div class="proxy-badge" title="Proxy ativo">🛡️ ${chip.proxy_ip}</div>` : '<div class="proxy-badge no-proxy">⚠️ Sem proxy</div>'}
                 </div>
             </div>
 

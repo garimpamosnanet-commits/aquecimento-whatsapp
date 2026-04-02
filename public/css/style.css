@@ -543,6 +543,18 @@ body::before {
     opacity: 1;
 }
 
+.proxy-badge {
+    font-size: 10px;
+    color: #22C55E;
+    font-weight: 500;
+    margin-top: 2px;
+    letter-spacing: 0.3px;
+}
+
+.proxy-badge.no-proxy {
+    color: #F97316;
+}
+
 .btn-reload-qr {
     background: none;
     border: 1px solid #ddd;
