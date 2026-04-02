@@ -581,6 +581,21 @@ function loadProxies() {
 }
 
 function renderProxyList(proxies) {
+    // Ordena: Em uso primeiro (por nome do chip), depois Disponível
+    proxies.sort((a, b) => {
+        const aUsed = a.assigned_chip_id ? 0 : 1;
+        const bUsed = b.assigned_chip_id ? 0 : 1;
+        if (aUsed !== bUsed) return aUsed - bUsed;
+        // Dentro de "em uso", ordena por nome do chip
+        if (a.assigned_chip_id && b.assigned_chip_id) {
+            const chipA = chips.find(c => c.id === a.assigned_chip_id);
+            const chipB = chips.find(c => c.id === b.assigned_chip_id);
+            const nameA = (chipA?.name || '').toLowerCase();
+            const nameB = (chipB?.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+        }
+        return 0;
+    });
     const list = document.getElementById('proxy-list');
     if (proxies.length === 0) {
         list.innerHTML = `<div class="empty-state" style="padding:30px"><div class="empty-icon" style="font-size:28px">🔒</div><h3>Nenhum proxy cadastrado</h3><p>Adicione proxies acima para isolar cada chip com IP diferente</p></div>`;
