@@ -98,21 +98,35 @@ class GroupManager {
         if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
 
         try {
+            console.log(`[GroupManager] addToGroup: group=${groupId}, jid=${jid}`);
             const result = await sock.groupParticipantsUpdate(groupId, [jid], 'add');
-            const status = result?.[0]?.status || result?.[0]?.content?.attrs?.type;
+            console.log(`[GroupManager] addToGroup result:`, JSON.stringify(result));
+
+            // Baileys returns array of results per participant
+            const entry = result?.[0];
+            const status = entry?.status || entry?.content?.attrs?.type;
+
+            // Status 200 = added successfully
             if (status === '200' || status === 200) {
                 return { success: true, alreadyMember: false };
             }
+            // Status 409 = already in group
             if (status === '409' || status === 409) {
                 return { success: false, alreadyMember: true };
             }
-            // Some Baileys versions return different formats
-            if (result?.[0]?.status === '403' || result?.[0]?.status === 403) {
+            // Status 403 = blocked invites
+            if (status === '403' || status === 403) {
                 return { success: false, alreadyMember: false, error: 'Numero bloqueou convites para grupos' };
             }
-            // If no error thrown, assume success
+            // Status 408 = recently left, can only be added via invite
+            if (status === '408' || status === 408) {
+                return { success: false, alreadyMember: false, error: 'Saiu recentemente, so via convite' };
+            }
+
+            // If no error thrown, assume success (some Baileys versions don't return status)
             return { success: true, alreadyMember: false };
         } catch (e) {
+            console.log(`[GroupManager] addToGroup error:`, e.message);
             if (e.message?.includes('already') || e.output?.statusCode === 409) {
                 return { success: false, alreadyMember: true };
             }
@@ -306,8 +320,8 @@ class GroupManager {
                     const item = groupItems[ji];
                     const jid = item.phone_number + '@s.whatsapp.net';
 
-                    // Validate number exists on WhatsApp (if enabled)
-                    if (config.checkExists) {
+                    // Validate number exists on WhatsApp (only for manual numbers — system chips are already connected)
+                    if (config.checkExists && item.source === 'manual') {
                         const exists = await this.isNumberOnWhatsApp(adminSessionId, item.phone_number);
                         if (!exists) {
                             db.updateOperationItem(item.id, {
