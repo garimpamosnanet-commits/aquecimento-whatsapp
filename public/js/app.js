@@ -577,7 +577,7 @@ function renderProxyList(proxies) {
                 return `<tr style="border-bottom:1px solid rgba(0,0,0,0.03)">
                     <td style="padding:8px 14px;font-family:monospace;font-size:12px;color:var(--text-secondary)">${masked}</td>
                     <td style="padding:8px 14px"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;${p.assigned_chip_id ? 'background:rgba(249,115,22,0.08);color:var(--warming)' : 'background:rgba(34,197,94,0.08);color:var(--success)'}">${p.assigned_chip_id ? 'Em uso' : 'Disponivel'}</span></td>
-                    <td style="padding:8px 14px;font-size:12px;color:var(--text-muted)">${chip ? (chip.phone || chip.name || 'Chip ' + chip.id) : '—'}</td>
+                    <td style="padding:8px 14px;font-size:12px;color:var(--text-muted)">${chip ? ((chip.name ? chip.name + ' — ' : '') + (chip.phone || 'Chip ' + chip.id)) : '—'}</td>
                     <td style="padding:8px 14px"><button class="btn-icon danger" onclick="deleteOneProxy(${p.id})" title="Remover">✕</button></td>
                 </tr>`;
             }).join('')}</tbody>
