@@ -98,11 +98,17 @@ class WarmingEngine {
         console.log(`[WarmingEngine] Chip ${chipId}: proxima acao em ${Math.round(delay / 1000)}s`);
 
         this.activeTimers.set(chipId, setTimeout(async () => {
-            await this.executeAction(chipId);
-            // Auto-upgrade phase based on days connected
-            this.checkPhaseUpgrade(chipId);
-            // Schedule next
-            this.scheduleNextAction(chipId);
+            try {
+                await this.executeAction(chipId);
+                // Auto-upgrade phase based on days connected
+                this.checkPhaseUpgrade(chipId);
+                // Schedule next
+                this.scheduleNextAction(chipId);
+            } catch (err) {
+                console.error(`[WarmingEngine] Erro fatal chip ${chipId}:`, err.message);
+                // Re-schedule even after error to avoid chip stopping forever
+                this.scheduleNextAction(chipId);
+            }
         }, delay));
     }
 
@@ -277,7 +283,7 @@ class WarmingEngine {
             if (connectedChips.length < 2) return;
 
             const participants = connectedChips
-                .filter(s => s.chip.id !== chip.id)
+                .filter(s => s.chip.id !== chip.id && s.chip.phone)
                 .slice(0, Math.min(4, connectedChips.length - 1))
                 .map(s => s.chip.phone + '@s.whatsapp.net');
 

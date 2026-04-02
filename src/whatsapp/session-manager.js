@@ -127,9 +127,10 @@ class SessionManager {
                     db.updateChipPhone(chip.id, phoneNumber);
                 }
 
-                // Get push name
+                // Get push name (only if user hasn't set a custom name)
                 const pushName = socket.user?.name;
-                if (pushName && !chip.name) {
+                const freshChip = db.getChipById(chip.id);
+                if (pushName && freshChip && !freshChip.name) {
                     db.updateChipName(chip.id, pushName);
                 }
 

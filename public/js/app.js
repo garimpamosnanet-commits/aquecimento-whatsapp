@@ -618,7 +618,12 @@ function refreshChips() {
         });
     fetch('/api/stats')
         .then(r => r.json())
-        .then(stats => socket.emit('stats', stats));
+        .then(stats => {
+            updateStat('stat-total', stats.total);
+            updateStat('stat-connected', stats.connected);
+            updateStat('stat-warming', stats.warming);
+            updateStat('stat-messages', stats.totalMessages);
+        });
 }
 
 // ==================== LIVE FEED (SIDEBAR) ====================
@@ -985,11 +990,21 @@ function showToast(message, type = 'accent') {
 
 // ==================== KEYBOARD SHORTCUTS ====================
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeQRModal();
+    if (e.key === 'Escape') {
+        closeQRModal();
+        closeInputModal();
+        closeConfirmModal();
+    }
 });
 
 document.getElementById('qr-modal').addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-overlay')) closeQRModal();
+});
+document.getElementById('input-modal').addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal-overlay')) closeInputModal();
+});
+document.getElementById('confirm-modal').addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal-overlay')) closeConfirmModal();
 });
 
 // ==================== HEALTH MONITOR — ADDITIVE CODE ====================

@@ -1372,3 +1372,9 @@ body::before {
 /* Feed action icons enhancement */
 .feed-icon.location { background: rgba(34, 197, 94, 0.08); }
 .feed-icon.image { background: rgba(168, 85, 247, 0.08); }
+
+/* Missing utility classes */
+.input-field { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--bg-secondary); color: var(--text-primary); outline: none; transition: border-color 0.2s; }
+.input-field:focus { border-color: var(--accent); }
+.chip-card.status-paused { border-left: 3px solid var(--warming); }
+.chip-card.status-paused .dot { background: var(--warming); }

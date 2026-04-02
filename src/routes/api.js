@@ -33,7 +33,7 @@ module.exports = function(sessionManager, warmingEngine) {
 
     // Rename chip
     router.put('/chips/:id/name', (req, res) => {
-        const chip = db.getChipById(req.params.id);
+        const chip = db.getChipById(parseInt(req.params.id));
         if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
         const { name } = req.body;
         if (!name) return res.status(400).json({ error: 'Nome obrigatorio' });
@@ -44,7 +44,7 @@ module.exports = function(sessionManager, warmingEngine) {
 
     // Disconnect chip
     router.post('/chips/:id/disconnect', async (req, res) => {
-        const chip = db.getChipById(req.params.id);
+        const chip = db.getChipById(parseInt(req.params.id));
         if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
 
         warmingEngine.stopChip(chip.id);
@@ -54,7 +54,7 @@ module.exports = function(sessionManager, warmingEngine) {
 
     // Delete chip
     router.delete('/chips/:id', async (req, res) => {
-        const chip = db.getChipById(req.params.id);
+        const chip = db.getChipById(parseInt(req.params.id));
         if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
 
         warmingEngine.stopChip(chip.id);
@@ -66,7 +66,7 @@ module.exports = function(sessionManager, warmingEngine) {
 
     // Start warming for a chip
     router.post('/chips/:id/warming/start', (req, res) => {
-        const chip = db.getChipById(req.params.id);
+        const chip = db.getChipById(parseInt(req.params.id));
         if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
         if (!sessionManager.isConnected(chip.session_id)) {
             return res.status(400).json({ error: 'Chip nao esta conectado' });
@@ -78,7 +78,7 @@ module.exports = function(sessionManager, warmingEngine) {
 
     // Stop warming for a chip
     router.post('/chips/:id/warming/stop', (req, res) => {
-        const chip = db.getChipById(req.params.id);
+        const chip = db.getChipById(parseInt(req.params.id));
         if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
 
         warmingEngine.stopChip(chip.id);
