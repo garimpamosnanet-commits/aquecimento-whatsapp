@@ -26,18 +26,33 @@ class GroupManager {
         return jid.split('@')[0].split(':')[0];
     }
 
+    // Check if a participant JID matches our user (supports both phone and LID formats)
+    _isMe(participantId, sock) {
+        const pClean = this._extractPhone(participantId);
+        // Match against phone-based JID
+        const myPhone = this._extractPhone(sock.user.id);
+        if (pClean === myPhone) return true;
+        // Match against LID-based JID (new WhatsApp format: 97092785676537@lid)
+        if (sock.user.lid) {
+            const myLid = this._extractPhone(sock.user.lid);
+            if (pClean === myLid) return true;
+        }
+        return false;
+    }
+
     async getAdminGroups(adminSessionId) {
         const sock = this.sessionManager.getSocket(adminSessionId);
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
         const groups = await sock.groupFetchAllParticipating();
-        const adminPhone = this._extractPhone(sock.user.id);
+        const myPhone = this._extractPhone(sock.user.id);
+        const myLid = sock.user.lid ? this._extractPhone(sock.user.lid) : null;
 
-        console.log(`[GroupManager] Admin phone: ${adminPhone}, total groups fetched: ${Object.keys(groups).length}`);
+        console.log(`[GroupManager] Admin phone: ${myPhone}, LID: ${myLid}, total groups: ${Object.keys(groups).length}`);
 
         const result = [];
         for (const [groupId, group] of Object.entries(groups)) {
-            const me = group.participants.find(p => this._extractPhone(p.id) === adminPhone);
+            const me = group.participants.find(p => this._isMe(p.id, sock));
             if (me && (me.admin === 'admin' || me.admin === 'superadmin')) {
                 result.push({
                     id: groupId,

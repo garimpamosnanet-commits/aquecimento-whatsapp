@@ -391,29 +391,29 @@ module.exports = function(sessionManager, warmingEngine, groupManager) {
         try {
             const sock = sessionManager.getSocket(chip.session_id);
             const userJid = sock.user?.id || 'unknown';
+            const userLid = sock.user?.lid || null;
             const phone = userJid.split('@')[0].split(':')[0];
+            const lid = userLid ? userLid.split('@')[0].split(':')[0] : null;
             const groups = await sock.groupFetchAllParticipating();
             const debug = [];
             for (const [gid, g] of Object.entries(groups)) {
                 const meParticipant = g.participants.find(p => {
-                    const pPhone = p.id.split('@')[0].split(':')[0];
-                    return pPhone === phone;
+                    const pClean = p.id.split('@')[0].split(':')[0];
+                    return pClean === phone || (lid && pClean === lid);
                 });
                 debug.push({
                     id: gid,
                     subject: g.subject,
                     participantCount: g.participants.length,
-                    myJid: userJid,
-                    myPhone: phone,
                     meFound: !!meParticipant,
                     meRole: meParticipant ? meParticipant.admin : null,
                     meId: meParticipant ? meParticipant.id : null,
                     firstThreeParticipants: g.participants.slice(0, 3).map(p => ({
-                        id: p.id, admin: p.admin, phone: p.id.split('@')[0].split(':')[0]
+                        id: p.id, admin: p.admin
                     }))
                 });
             }
-            res.json({ userJid, phone, totalGroups: Object.keys(groups).length, groups: debug });
+            res.json({ userJid, phone, userLid, lid, totalGroups: Object.keys(groups).length, groups: debug });
         } catch (err) {
             res.status(500).json({ error: err.message, stack: err.stack });
         }
