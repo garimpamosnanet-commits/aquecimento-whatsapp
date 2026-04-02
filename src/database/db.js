@@ -46,6 +46,21 @@ function getDb() {
         saveDb(data);
         console.log('[DB] Config migrada para incluir location/image');
     }
+    // Migrate: switch HTTP proxies to SOCKS5 (port 12323 -> 12324)
+    if (data.proxies && data.proxies.length > 0 && data.proxies[0].url && data.proxies[0].url.startsWith('http://')) {
+        let migrated = 0;
+        for (const proxy of data.proxies) {
+            if (proxy.url.startsWith('http://')) {
+                proxy.url = proxy.url.replace('http://', 'socks5://').replace(':12323', ':12324');
+                migrated++;
+            }
+        }
+        if (migrated > 0) {
+            saveDb(data);
+            console.log(`[DB] ${migrated} proxies migrados de HTTP para SOCKS5`);
+        }
+    }
+
     return data;
 }
 
