@@ -6,6 +6,7 @@ const path = require('path');
 
 const SessionManager = require('./src/whatsapp/session-manager');
 const WarmingEngine = require('./src/whatsapp/warming-engine');
+const HealthMonitor = require('./src/health-monitor');
 const apiRoutes = require('./src/routes/api');
 const setupWebSocket = require('./src/routes/websocket');
 
@@ -139,6 +140,11 @@ server.listen(PORT, async () => {
     // Start warming engine
     warmingEngine.start();
     console.log('[Warming] Motor de aquecimento pronto');
+
+    // Start health monitor (read-only intelligence layer)
+    const healthMonitor = new HealthMonitor(io);
+    healthMonitor.start();
+    console.log('[Health] Monitor de saude iniciado');
     console.log('');
 });
 

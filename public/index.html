@@ -74,6 +74,9 @@
             </div>
         </div>
 
+        <!-- ALERTS BAR (health-monitor) -->
+        <div id="alerts-bar" class="alerts-bar" style="display:none"></div>
+
         <!-- TABS -->
         <div class="tabs">
             <div class="tab active" onclick="switchTab('chips')">Chips</div>
@@ -106,6 +109,11 @@
             <div class="section-header">
                 <h2>Atividade Recente</h2>
                 <button class="btn btn-outline btn-sm" onclick="loadActivity()">↻ Atualizar</button>
+            </div>
+            <div class="activity-filters" id="activity-filters">
+                <button class="activity-filter-btn active" onclick="filterActivity('all')">Todos</button>
+                <button class="activity-filter-btn" onclick="filterActivity('chip')">Por Chip</button>
+                <button class="activity-filter-btn" onclick="filterActivity('errors')">Erros</button>
             </div>
             <div id="activity-log" class="activity-log">
                 <div class="empty-state">

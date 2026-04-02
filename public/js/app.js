@@ -150,8 +150,11 @@ function renderChipCard(chip) {
                 <span class="dot"></span>
                 ${getStatusLabel(chip.status)}
                 ${chip.proxy_ip ? `<div class="proxy-badge" title="Proxy ativo">🛡️ ${chip.proxy_ip}</div>` : '<div class="proxy-badge no-proxy">⚠️ Sem proxy</div>'}
+                ${getHealthBadgeHtml(chip.id)}
             </div>
         </div>
+
+        ${getLastActivityHtml(chip.id)}
 
         <div class="chip-temp">
             <div class="temp-bar-wrapper">
@@ -202,6 +205,7 @@ function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
         : `${folderName} (${count}/12)`;
     const dropId = isUnassigned ? 'drop-none' : `drop-folder-${folderId}`;
     const dataFolder = isUnassigned ? 'null' : folderId;
+    const folderKey = isUnassigned ? 'none' : folderId;
 
     return `
     <div class="folder-section" id="${dropId}">
@@ -209,6 +213,7 @@ function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
             <div class="folder-header-left">
                 <span class="folder-toggle" id="toggle-${dropId}">▼</span>
                 <span class="folder-title">${isUnassigned ? '📂' : '📁'} ${label}</span>
+                ${getFolderSummaryHtml(folderKey)}
             </div>
             ${!isUnassigned ? `
             <div class="folder-actions" onclick="event.stopPropagation()">
@@ -634,23 +639,26 @@ function renderFeed() {
     const feed = document.getElementById('live-feed');
     if (feedItems.length === 0) return;
 
-    feed.innerHTML = feedItems.map((item, i) => `
-        <div class="feed-item" ${i === 0 ? 'style="animation:feedFadeIn 0.4s ease"' : ''}>
+    feed.innerHTML = feedItems.map((item, i) => {
+        const colorClass = item.iconType === 'error' ? 'feed-error' : item.iconType === 'connect' || item.iconType === 'system' ? 'feed-info' : 'feed-success';
+        return `
+        <div class="feed-item ${colorClass}" ${i === 0 ? 'style="animation:feedFadeIn 0.4s ease"' : ''}>
             <div class="feed-icon ${item.iconType || 'system'}">${item.icon}</div>
             <div class="feed-content">
                 <div class="feed-chip">${item.chipLabel}</div>
                 <div class="feed-detail">${item.detail}${item.message ? ' — ' + truncate(item.message, 40) : ''}</div>
             </div>
             <div class="feed-time">${item.time}</div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 function getFeedIcon(type) {
     const icons = {
         'chat': '💬', 'audio': '🎤', 'group': '👥',
         'status': '📱', 'sticker': '🏷️', 'reaction': '👍',
-        'error': '❌', 'connect': '🟢', 'system': '⚡'
+        'error': '❌', 'connect': '🟢', 'system': '⚡',
+        'location': '📍', 'image': '🖼️'
     };
     return icons[type] || '📝';
 }
@@ -663,7 +671,9 @@ function getActionLabel(action) {
         'group_create': 'Grupo criado',
         'status': 'Status publicado',
         'sticker': 'Sticker enviado',
-        'reaction': 'Reagiu a msg'
+        'reaction': 'Reagiu a msg',
+        'location': 'Localizacao enviada',
+        'image': 'Imagem enviada'
     };
     return labels[action] || action;
 }
@@ -735,7 +745,7 @@ function getActionIcon(action) {
     const icons = {
         'private_chat': '💬', 'audio': '🎤', 'group_chat': '👥',
         'group_create': '📋', 'status': '📱', 'sticker': '🏷️',
-        'reaction': '👍', 'error': '❌'
+        'reaction': '👍', 'error': '❌', 'location': '📍', 'image': '🖼️'
     };
     return icons[action] || '📝';
 }
@@ -744,7 +754,7 @@ function getActionClass(action) {
     const classes = {
         'private_chat': 'chat', 'audio': 'audio', 'group_chat': 'group',
         'group_create': 'group', 'status': 'status', 'sticker': 'sticker',
-        'reaction': 'reaction', 'error': 'error'
+        'reaction': 'reaction', 'error': 'error', 'location': 'location', 'image': 'image'
     };
     return classes[action] || 'chat';
 }
@@ -981,3 +991,232 @@ document.addEventListener('keydown', (e) => {
 document.getElementById('qr-modal').addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-overlay')) closeQRModal();
 });
+
+// ==================== HEALTH MONITOR — ADDITIVE CODE ====================
+
+// Global state for health data (populated by health_update socket event)
+let _healthData = null;
+let _dismissedAlerts = new Set();
+let _activityFilter = 'all';
+
+// Socket listener for health updates (emitted every 30s by server)
+socket.on('health_update', (data) => {
+    _healthData = data;
+    updateHealthUI();
+});
+
+function updateHealthUI() {
+    if (!_healthData) return;
+
+    // Update stats cards with enriched data
+    updateEnrichedStats(_healthData.enrichedStats);
+
+    // Update alerts bar
+    updateAlertsBar(_healthData.alerts);
+
+    // Re-render chips to update health badges (only if chips tab visible)
+    if (document.getElementById('tab-chips').classList.contains('active')) {
+        renderChips();
+    }
+}
+
+// ==================== 3a. HEALTH BADGES ON CHIP CARDS ====================
+
+function getHealthBadgeHtml(chipId) {
+    if (!_healthData || !_healthData.chipHealth || !_healthData.chipHealth[chipId]) return '';
+    const h = _healthData.chipHealth[chipId];
+    const cls = 'health-' + h.status;
+    const labels = { 'healthy': 'Saudavel', 'attention': 'Atencao', 'critical': 'Critico' };
+    const label = labels[h.status] || h.status;
+    return `<div class="health-badge ${cls}"><span class="health-dot"></span>${label}</div>`;
+}
+
+function getLastActivityHtml(chipId) {
+    if (!_healthData || !_healthData.chipHealth || !_healthData.chipHealth[chipId]) return '';
+    const h = _healthData.chipHealth[chipId];
+    if (h.lastActivityMinutesAgo === null || h.lastActivityMinutesAgo === undefined) return '';
+    const text = formatTimeAgo(h.lastActivityMinutesAgo);
+    return `<div class="last-activity">Ultima acao: ${text} · ${h.todayMsgCount || 0} msgs hoje</div>`;
+}
+
+function formatTimeAgo(minutes) {
+    if (minutes < 1) return 'agora';
+    if (minutes < 60) return 'ha ' + minutes + ' min';
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return 'ha ' + hours + 'h';
+    const days = Math.floor(hours / 24);
+    return 'ha ' + days + 'd';
+}
+
+// ==================== 3b. ENHANCED STATS CARDS ====================
+
+function updateEnrichedStats(stats) {
+    if (!stats) return;
+
+    // Update messages stat to show today's count
+    const msgEl = document.getElementById('stat-messages');
+    if (msgEl) {
+        const current = parseInt(msgEl.dataset.raw || '0');
+        msgEl.dataset.raw = stats.messagesToday;
+        animateValue(msgEl, current, stats.messagesToday, 600);
+    }
+
+    // Update stat-sub for messages to say "hoje" and show rate
+    const msgCard = msgEl ? msgEl.closest('.stat-card') : null;
+    if (msgCard) {
+        const sub = msgCard.querySelector('.stat-sub');
+        if (sub) {
+            sub.innerHTML = 'Hoje <span class="msg-rate">' + stats.msgsPerHour + ' msgs/hora</span>';
+        }
+    }
+
+    // Add health summary below the warming stat
+    const warmingSub = document.getElementById('stat-warming');
+    const warmingCard = warmingSub ? warmingSub.closest('.stat-card') : null;
+    if (warmingCard) {
+        let summaryEl = warmingCard.querySelector('.health-summary');
+        if (!summaryEl) {
+            summaryEl = document.createElement('div');
+            summaryEl.className = 'health-summary';
+            warmingCard.appendChild(summaryEl);
+        }
+        summaryEl.innerHTML = buildHealthSummaryHtml(stats);
+    }
+}
+
+function buildHealthSummaryHtml(stats) {
+    let parts = [];
+    if (stats.healthyCnt > 0) {
+        parts.push('<span class="health-summary-item"><span class="hs-dot" style="background:#22C55E"></span>' + stats.healthyCnt + ' saudavel</span>');
+    }
+    if (stats.attentionCnt > 0) {
+        parts.push('<span class="health-summary-item"><span class="hs-dot" style="background:#F97316"></span>' + stats.attentionCnt + ' atencao</span>');
+    }
+    if (stats.criticalCnt > 0) {
+        parts.push('<span class="health-summary-item"><span class="hs-dot" style="background:#EF4444"></span>' + stats.criticalCnt + ' critico</span>');
+    }
+    return parts.join(' ');
+}
+
+// ==================== 3c. ALERTS BAR ====================
+
+function updateAlertsBar(alerts) {
+    const bar = document.getElementById('alerts-bar');
+    if (!bar) return;
+
+    // Filter dismissed alerts
+    const active = (alerts || []).filter(a => !_dismissedAlerts.has(alertKey(a)));
+
+    if (active.length === 0) {
+        bar.style.display = 'none';
+        return;
+    }
+
+    bar.style.display = 'flex';
+
+    // Show max 5
+    const visible = active.slice(0, 5);
+    bar.innerHTML = visible.map((a, i) => {
+        const cls = a.level === 'critical' ? 'alert-critical' : 'alert-warning';
+        const icon = a.level === 'critical' ? '🚨' : '⚠️';
+        return `<div class="alert-item ${cls}">
+            <span class="alert-text">${icon} ${a.message}</span>
+            <button class="alert-dismiss" onclick="dismissAlert(${i})" title="Fechar">✕</button>
+        </div>`;
+    }).join('');
+}
+
+function alertKey(alert) {
+    return (alert.chipId || '') + ':' + (alert.message || '');
+}
+
+function dismissAlert(index) {
+    if (_healthData && _healthData.alerts && _healthData.alerts[index]) {
+        _dismissedAlerts.add(alertKey(_healthData.alerts[index]));
+        updateAlertsBar(_healthData.alerts);
+    }
+}
+
+// Clear dismissed alerts periodically (every 5 min) so new alerts of same type show again
+setInterval(() => { _dismissedAlerts.clear(); }, 300000);
+
+// ==================== 3d. FOLDER SUMMARY ====================
+
+function getFolderSummaryHtml(folderKey) {
+    if (!_healthData || !_healthData.folderSummaries || !_healthData.folderSummaries[folderKey]) return '';
+    const s = _healthData.folderSummaries[folderKey];
+    if (s.total === 0) return '';
+
+    const statusLabels = { 'healthy': 'Saudavel', 'attention': 'Atencao', 'critical': 'Critico', 'empty': '' };
+    const statusLabel = statusLabels[s.overallStatus] || '';
+    const parts = [];
+    parts.push(s.connected + '/' + s.total + ' chips');
+    if (s.warming > 0) parts.push(s.warming + ' aquecendo');
+    parts.push(s.todayMessages + ' msgs hoje');
+    if (statusLabel) parts.push(statusLabel);
+
+    return '<span class="folder-summary">' + parts.map((p, i) => {
+        return (i > 0 ? '<span class="folder-summary-dot"></span>' : '') + p;
+    }).join('') + '</span>';
+}
+
+// ==================== 3e. ACTIVITY FILTER ====================
+
+function filterActivity(filter) {
+    _activityFilter = filter;
+    // Update button states
+    document.querySelectorAll('.activity-filter-btn').forEach(btn => btn.classList.remove('active'));
+    const buttons = document.querySelectorAll('.activity-filter-btn');
+    if (filter === 'all' && buttons[0]) buttons[0].classList.add('active');
+    if (filter === 'chip' && buttons[1]) buttons[1].classList.add('active');
+    if (filter === 'errors' && buttons[2]) buttons[2].classList.add('active');
+    renderActivity();
+}
+
+// Override renderActivity to respect filters — wrap original logic
+const _originalRenderActivity = renderActivity;
+renderActivity = function() {
+    const log = document.getElementById('activity-log');
+    let filtered = activityItems;
+
+    if (_activityFilter === 'errors') {
+        filtered = activityItems.filter(item => !item.success);
+    } else if (_activityFilter === 'chip') {
+        // Group by chip - show most recent per chip
+        const seen = new Set();
+        filtered = activityItems.filter(item => {
+            if (seen.has(item.chipId)) return false;
+            seen.add(item.chipId);
+            return true;
+        });
+    }
+
+    if (filtered.length === 0) {
+        log.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <h3>Sem atividade</h3>
+                <p>${_activityFilter === 'errors' ? 'Nenhum erro encontrado' : 'Eventos aparecerao aqui quando o aquecimento iniciar'}</p>
+            </div>`;
+        return;
+    }
+
+    log.innerHTML = filtered.map(item => {
+        const chip = chips.find(c => c.id === item.chipId);
+        const chipLabel = chip?.phone || chip?.name || `Chip ${item.chipId}`;
+        const icon = getActionIcon(item.action);
+        const iconClass = getActionClass(item.action);
+
+        return `
+        <div class="activity-item">
+            <div class="activity-icon ${iconClass}">${icon}</div>
+            <div class="activity-content">
+                <span class="activity-chip">${chipLabel}</span>
+                ${item.target ? ` → <span class="activity-target">${item.target}</span>` : ''}
+                ${item.message ? `<br><small style="color:var(--text-muted)">${truncate(item.message, 60)}</small>` : ''}
+                ${!item.success ? '<br><small style="color:var(--danger)">Erro</small>' : ''}
+            </div>
+            <div class="activity-time">${item.time || ''}</div>
+        </div>`;
+    }).join('');
+};

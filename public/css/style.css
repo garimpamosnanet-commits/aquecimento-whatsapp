@@ -1181,3 +1181,194 @@ body::before {
     .stats-bar { grid-template-columns: 1fr; }
     .header-right { gap: 4px; }
 }
+
+/* ==================== HEALTH MONITOR — ADDITIVE CSS ==================== */
+
+/* Health badges */
+.health-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    margin-top: 4px;
+}
+
+.health-badge .health-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.health-healthy {
+    color: #22C55E;
+    background: rgba(34, 197, 94, 0.08);
+}
+.health-healthy .health-dot {
+    background: #22C55E;
+}
+
+.health-attention {
+    color: #F97316;
+    background: rgba(249, 115, 22, 0.08);
+}
+.health-attention .health-dot {
+    background: #F97316;
+}
+
+.health-critical {
+    color: #EF4444;
+    background: rgba(239, 68, 68, 0.08);
+}
+.health-critical .health-dot {
+    background: #EF4444;
+}
+
+/* Alert bar */
+.alerts-bar {
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.alert-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    animation: fadeIn 0.3s ease;
+}
+
+.alert-item .alert-text {
+    flex: 1;
+}
+
+.alert-item .alert-dismiss {
+    cursor: pointer;
+    opacity: 0.5;
+    font-size: 14px;
+    padding: 0 4px;
+    background: none;
+    border: none;
+    color: inherit;
+    transition: opacity 0.2s;
+}
+.alert-item .alert-dismiss:hover {
+    opacity: 1;
+}
+
+.alert-warning {
+    background: #FEF3C7;
+    border-left: 3px solid #F59E0B;
+    color: #92400E;
+}
+
+.alert-critical {
+    background: #FEE2E2;
+    border-left: 3px solid #EF4444;
+    color: #991B1B;
+}
+
+/* Last activity indicator */
+.last-activity {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Folder summary stats */
+.folder-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-left: 8px;
+}
+
+.folder-summary .folder-summary-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    opacity: 0.4;
+}
+
+/* Messages rate indicator */
+.msg-rate {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    font-weight: 500;
+}
+
+/* Health summary in stats */
+.health-summary {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.health-summary-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.health-summary-item .hs-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+}
+
+/* Activity filter buttons */
+.activity-filters {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.activity-filter-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: var(--transition);
+}
+
+.activity-filter-btn:hover {
+    border-color: var(--border-hover);
+    color: var(--text-secondary);
+}
+
+.activity-filter-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+/* Feed item color coding */
+.feed-item.feed-success { border-left: 2px solid #22C55E; }
+.feed-item.feed-error { border-left: 2px solid #EF4444; }
+.feed-item.feed-info { border-left: 2px solid #3B82F6; }
+
+/* Feed action icons enhancement */
+.feed-icon.location { background: rgba(34, 197, 94, 0.08); }
+.feed-icon.image { background: rgba(168, 85, 247, 0.08); }
