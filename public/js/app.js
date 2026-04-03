@@ -2709,8 +2709,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function amLoadAddChips() {
     amUpdateAddCount();
-    fetch('/api/warming-chips').then(r => r.json()).then(chips => {
-        _amAddChips = chips.filter(c => c.phone); // Only chips with phone numbers
+    // Fetch ALL chips (not just warming) so ADM chips also appear
+    fetch('/api/chips').then(r => r.json()).then(allChips => {
+        _amAddChips = allChips.filter(c => c.phone && (c.status === 'connected' || c.status === 'warming'));
         amRenderAddChips();
     }).catch(() => {});
 }
