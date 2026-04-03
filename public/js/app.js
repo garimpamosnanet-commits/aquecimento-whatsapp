@@ -2542,11 +2542,14 @@ async function amCopyInviteLink(groupId) {
     }
 }
 
+let _amExportAbort = false;
+
 async function amExportAllLinks() {
     const chipId = document.getElementById('am-admin-select').value;
     if (!chipId) { showToast('Selecione um chip ADM primeiro', 'danger'); return; }
     if (_amGroups.length === 0) { showToast('Nenhum grupo carregado', 'danger'); return; }
 
+    _amExportAbort = false;
     const modal = document.getElementById('links-modal');
     const textarea = document.getElementById('am-links-textarea');
     const progressEl = document.getElementById('am-links-progress');
@@ -2556,27 +2559,50 @@ async function amExportAllLinks() {
 
     const results = [];
     let done = 0;
-    let errors = 0;
 
     for (const g of _amGroups) {
-        try {
-            const res = await fetch(`/api/admin-manage/invite-link/${chipId}/${encodeURIComponent(g.id)}`);
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Erro');
-            results.push({ name: g.subject || 'Sem nome', link: data.link, size: g.size || 0 });
-        } catch (err) {
-            results.push({ name: g.subject || 'Sem nome', link: '(erro: ' + err.message + ')', size: g.size || 0 });
-            errors++;
-        }
-        done++;
-        progressEl.textContent = `Buscando links... ${done}/${_amGroups.length}${errors ? ` (${errors} erros)` : ''}`;
+        if (_amExportAbort) break;
 
-        // Build formatted text incrementally
+        // Retry com backoff pra rate limit
+        let success = false;
+        let retries = 0;
+        const maxRetries = 5;
+
+        while (!success && retries <= maxRetries && !_amExportAbort) {
+            try {
+                const res = await fetch(`/api/admin-manage/invite-link/${chipId}/${encodeURIComponent(g.id)}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Erro');
+                results.push({ name: g.subject || 'Sem nome', link: data.link, size: g.size || 0 });
+                success = true;
+            } catch (err) {
+                if (err.message && err.message.includes('rate') && retries < maxRetries) {
+                    retries++;
+                    const wait = retries * 10;
+                    progressEl.textContent = `Rate limit — aguardando ${wait}s antes de tentar novamente... (${done}/${_amGroups.length})`;
+                    await new Promise(r => setTimeout(r, wait * 1000));
+                } else {
+                    results.push({ name: g.subject || 'Sem nome', link: '(erro: ' + err.message + ')', size: g.size || 0 });
+                    success = true; // sai do retry, registra erro
+                }
+            }
+        }
+
+        done++;
+        const errCount = results.filter(r => r.link.startsWith('(erro')).length;
+        progressEl.textContent = `Buscando links... ${done}/${_amGroups.length}${errCount ? ` (${errCount} erros)` : ''}`;
+
         textarea.value = _amFormatLinksText(results);
         textarea.scrollTop = textarea.scrollHeight;
+
+        // Delay de 2s entre cada grupo pra nao bater rate limit
+        if (done < _amGroups.length && !_amExportAbort) {
+            await new Promise(r => setTimeout(r, 2000));
+        }
     }
 
-    progressEl.innerHTML = `<span style="color:var(--success);font-weight:700">✅ ${done} grupos processados</span>${errors ? ` <span style="color:var(--danger)">(${errors} erros)</span>` : ''}`;
+    const errCount = results.filter(r => r.link.startsWith('(erro')).length;
+    progressEl.innerHTML = `<span style="color:var(--success);font-weight:700">✅ ${done} grupos processados</span>${errCount ? ` <span style="color:var(--danger)">(${errCount} erros)</span>` : ''}`;
 }
 
 function _amFormatLinksText(results) {
