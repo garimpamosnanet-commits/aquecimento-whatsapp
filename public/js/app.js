@@ -2376,7 +2376,12 @@ let _amGroups = [];
 let _amSelectedGroupId = null;
 let _amAdmins = [];
 let _amSelectedAdmins = new Set();
+let _amMembers = [];
+let _amSelectedMembers = new Set();
+let _amAddChips = [];
+let _amSelectedAddChips = new Set();
 let _amInviteLinksCache = {}; // { groupId: { link, fetched_at } }
+let _amPanelMode = 'admins'; // 'admins', 'members', 'add'
 let _amMode = 'demote';
 let _amRunning = false;
 let _amPaused = false;
@@ -2461,6 +2466,220 @@ function onAmAdminSelect() {
         .catch(err => {
             infoEl.innerHTML = '<div class="ga-error">Erro: ' + err.message + '</div>';
         });
+}
+
+// ==================== AM PANEL MODE SWITCHING ====================
+
+function amSwitchPanelMode(mode) {
+    _amPanelMode = mode;
+    document.querySelectorAll('.am-mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    document.getElementById('am-panel-admins').style.display = mode === 'admins' ? '' : 'none';
+    document.getElementById('am-panel-members').style.display = mode === 'members' ? '' : 'none';
+    document.getElementById('am-panel-add').style.display = mode === 'add' ? '' : 'none';
+
+    // Hide/show config section (only for admins mode)
+    const configEl = document.getElementById('am-config');
+    if (configEl) configEl.style.display = (mode === 'admins' && _amSelectedAdmins.size > 0) ? '' : 'none';
+
+    if (mode === 'members' && _amSelectedGroupId) {
+        amLoadMembers();
+    }
+    if (mode === 'add') {
+        amLoadAddChips();
+    }
+}
+
+// ==================== AM MEMBERS (PROMOTE) ====================
+
+function amLoadMembers() {
+    const chipId = document.getElementById('am-admin-select').value;
+    if (!chipId || !_amSelectedGroupId) return;
+
+    const list = document.getElementById('am-members-list');
+    list.innerHTML = '<div class="ga-loading">Carregando membros...</div>';
+
+    fetch(`/api/admin-manage/group-members/${chipId}/${encodeURIComponent(_amSelectedGroupId)}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { list.innerHTML = '<div class="ga-error">' + data.error + '</div>'; return; }
+            _amMembers = data;
+            _amSelectedMembers.clear();
+            document.getElementById('am-members-count').textContent = '(' + data.length + ')';
+            amRenderMembers();
+        })
+        .catch(err => {
+            list.innerHTML = '<div class="ga-error">Erro: ' + err.message + '</div>';
+        });
+}
+
+function amRenderMembers() {
+    const list = document.getElementById('am-members-list');
+    const search = (document.getElementById('am-members-search')?.value || '').toLowerCase();
+
+    let filtered = _amMembers;
+    if (search) filtered = filtered.filter(m => (m.phone || '').includes(search) || (m.name || '').toLowerCase().includes(search));
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="ga-empty">' + (_amMembers.length === 0 ? 'Nenhum membro (todos sao admin)' : 'Nenhum resultado') + '</div>';
+        amUpdatePromoteBar();
+        return;
+    }
+
+    list.innerHTML = filtered.map(m => {
+        const checked = _amSelectedMembers.has(m.jid) ? 'checked' : '';
+        const phone = m.phone || m.lid || 'Desconhecido';
+        let phoneDisplay = phone;
+        if (phone.length >= 12 && phone.startsWith('55')) {
+            const ddd = phone.substring(2, 4);
+            const num = phone.substring(4);
+            phoneDisplay = `55 (<b>${ddd}</b>) ${num}`;
+        }
+        return `<div class="ga-item">
+            <input type="checkbox" ${checked} onchange="amToggleMember('${m.jid}')">
+            <div class="ga-item-info">
+                <div class="ga-item-name">${phoneDisplay}</div>
+                <div class="ga-item-meta">${m.name ? m.name + ' · ' : ''}Membro</div>
+            </div>
+        </div>`;
+    }).join('');
+
+    amUpdatePromoteBar();
+}
+
+function amToggleMember(jid) {
+    if (_amSelectedMembers.has(jid)) _amSelectedMembers.delete(jid);
+    else _amSelectedMembers.add(jid);
+    amRenderMembers();
+}
+
+function amSelectAllMembers() {
+    _amMembers.forEach(m => { if (!m.isMe) _amSelectedMembers.add(m.jid); });
+    amRenderMembers();
+}
+
+function amDeselectAllMembers() {
+    _amSelectedMembers.clear();
+    amRenderMembers();
+}
+
+function amFilterMembers() { amRenderMembers(); }
+
+function amUpdatePromoteBar() {
+    const bar = document.getElementById('am-promote-bar');
+    const count = _amSelectedMembers.size;
+    if (bar) {
+        bar.style.display = count > 0 ? 'flex' : 'none';
+        document.getElementById('am-promote-count').textContent = count + ' selecionado' + (count > 1 ? 's' : '');
+    }
+}
+
+async function amPromoteSelected() {
+    const chipId = document.getElementById('am-admin-select').value;
+    if (!chipId || !_amSelectedGroupId || _amSelectedMembers.size === 0) return;
+
+    const count = _amSelectedMembers.size;
+    const groupName = _amGroups.find(g => g.id === _amSelectedGroupId)?.subject || '';
+    if (!confirm(`Promover ${count} membro(s) a ADMIN em "${groupName}"?`)) return;
+
+    const jids = [..._amSelectedMembers];
+    let ok = 0, fail = 0;
+
+    for (const jid of jids) {
+        try {
+            const res = await fetch('/api/admin-manage/promote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chipId: parseInt(chipId), groupId: _amSelectedGroupId, jid })
+            });
+            const data = await res.json();
+            if (data.success) ok++;
+            else fail++;
+        } catch { fail++; }
+
+        // Small delay between each
+        if (jids.indexOf(jid) < jids.length - 1) {
+            await new Promise(r => setTimeout(r, 1500));
+        }
+    }
+
+    showToast(`${ok} promovido(s) a admin${fail ? `, ${fail} falha(s)` : ''}`, ok > 0 ? 'success' : 'danger');
+    _amSelectedMembers.clear();
+    amLoadMembers(); // Reload to reflect changes
+}
+
+// ==================== AM ADD MEMBERS ====================
+
+function amLoadAddChips() {
+    fetch('/api/warming-chips').then(r => r.json()).then(chips => {
+        _amAddChips = chips;
+        amRenderAddChips();
+    }).catch(() => {});
+}
+
+function amRenderAddChips() {
+    const list = document.getElementById('am-add-chips-list');
+    if (_amAddChips.length === 0) {
+        list.innerHTML = '<div class="ga-empty">Nenhum chip de aquecimento</div>';
+        return;
+    }
+    list.innerHTML = _amAddChips.map(c => {
+        const checked = _amSelectedAddChips.has(c.id) ? 'checked' : '';
+        const statusLabel = c.status === 'connected' ? '🟢' : c.status === 'warming' ? '🔥' : '⚪';
+        return `<div class="ga-item">
+            <input type="checkbox" ${checked} onchange="amToggleAddChip(${c.id})">
+            <div class="ga-item-info">
+                <div class="ga-item-name">${c.name || 'Chip ' + c.id}</div>
+                <div class="ga-item-meta">${statusLabel} ${c.phone || 'Sem numero'}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function amToggleAddChip(chipId) {
+    if (_amSelectedAddChips.has(chipId)) _amSelectedAddChips.delete(chipId);
+    else _amSelectedAddChips.add(chipId);
+    amRenderAddChips();
+}
+
+function amStartAdd() {
+    const chipId = document.getElementById('am-admin-select').value;
+    if (!chipId) return showToast('Selecione uma instancia ADM', 'warning');
+    if (!_amSelectedGroupId) return showToast('Selecione um grupo na esquerda', 'warning');
+
+    // Collect numbers
+    const manualText = document.getElementById('am-add-manual')?.value || '';
+    const manualNumbers = manualText.split('\n').map(n => n.replace(/[^0-9+]/g, '').replace(/^\+/, '')).filter(n => n.length >= 10);
+    const chipNumbers = _amAddChips.filter(c => _amSelectedAddChips.has(c.id) && c.phone).map(c => c.phone.replace(/[^0-9]/g, ''));
+    const allNumbers = [...chipNumbers, ...manualNumbers];
+
+    if (allNumbers.length === 0) return showToast('Nenhum numero selecionado', 'warning');
+
+    const groupName = _amGroups.find(g => g.id === _amSelectedGroupId)?.subject || '';
+    if (!confirm(`Adicionar ${allNumbers.length} numero(s) ao grupo "${groupName}"?`)) return;
+
+    const body = {
+        adminChipId: parseInt(chipId),
+        groups: [{ id: _amSelectedGroupId, subject: groupName }],
+        numbers: allNumbers,
+        config: { delayMin: 5, delayMax: 15, groupDelayMin: 30, groupDelayMax: 60, checkExists: true }
+    };
+
+    fetch('/api/group-add/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    }).then(r => r.json()).then(data => {
+        if (data.operationId) {
+            showToast('Adicionando ' + allNumbers.length + ' numero(s)...', 'success');
+            _amSelectedAddChips.clear();
+            document.getElementById('am-add-manual').value = '';
+            amRenderAddChips();
+        } else {
+            showToast(data.error || 'Erro', 'danger');
+        }
+    }).catch(err => showToast('Erro: ' + err.message, 'danger'));
 }
 
 // ==================== AM INVITE LINKS CACHE ====================
@@ -2734,11 +2953,13 @@ function amToggleGroupDone(groupId) {
 function amSelectGroup(groupId, groupName) {
     _amSelectedGroupId = groupId;
     _amSelectedAdmins.clear();
+    _amSelectedMembers.clear();
     amRenderGroups();
 
     const chipId = document.getElementById('am-admin-select').value;
     if (!chipId) return;
 
+    // Load admins (always, for the admins panel)
     const list = document.getElementById('am-admins-list');
     list.innerHTML = '<div class="ga-loading">Carregando admins...</div>';
 
@@ -2751,11 +2972,16 @@ function amSelectGroup(groupId, groupName) {
             }
             _amAdmins = data;
             amRenderAdmins();
-            document.getElementById('am-config').style.display = 'block';
+            if (_amPanelMode === 'admins') document.getElementById('am-config').style.display = 'block';
         })
         .catch(err => {
             list.innerHTML = '<div class="ga-error">Erro: ' + err.message + '</div>';
         });
+
+    // If in members mode, also load members
+    if (_amPanelMode === 'members') {
+        amLoadMembers();
+    }
 }
 
 // ==================== AM ADMINS LIST ====================

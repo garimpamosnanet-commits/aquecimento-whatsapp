@@ -819,6 +819,37 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
     });
 
+    // Get members (non-admins) of a specific group
+    router.get('/admin-manage/group-members/:chipId/:groupId', async (req, res) => {
+        const chipId = parseInt(req.params.chipId);
+        const groupId = req.params.groupId;
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Instancia nao encontrada' });
+        if (!sessionManager.isConnected(chip.session_id)) {
+            return res.status(400).json({ error: 'Instancia nao esta conectada' });
+        }
+        try {
+            const members = await adminManager.getGroupMembers(chip.session_id, groupId);
+            res.json(members);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Promote member to admin
+    router.post('/admin-manage/promote', async (req, res) => {
+        const { chipId, groupId, jid } = req.body;
+        if (!chipId || !groupId || !jid) return res.status(400).json({ error: 'chipId, groupId and jid required' });
+        const chip = db.getChipById(parseInt(chipId));
+        if (!chip) return res.status(404).json({ error: 'Instancia nao encontrada' });
+        try {
+            const result = await adminManager.promoteToAdmin(chip.session_id, groupId, jid);
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // Start admin manage operation
     router.post('/admin-manage/start', async (req, res) => {
         if (adminManager.isRunning()) {

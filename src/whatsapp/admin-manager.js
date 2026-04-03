@@ -38,11 +38,12 @@ class AdminManager {
 
     // ==================== GET GROUP ADMINS (RAW QUERY) ====================
 
-    async getGroupAdmins(adminSessionId, groupId) {
+    // ==================== RAW GROUP QUERY (shared) ====================
+
+    async _getRawParticipants(adminSessionId, groupId) {
         const sock = this.sessionManager.getSocket(adminSessionId);
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
-        // RAW group query to get ALL binary attributes (not Baileys' parsed version)
         const rawResult = await sock.query({
             tag: 'iq',
             attrs: { type: 'get', xmlns: 'w:g2', to: groupId },
@@ -50,99 +51,98 @@ class AdminManager {
         });
 
         const groupNode = getBinaryNodeChild(rawResult, 'group');
-        const participants = getBinaryNodeChildren(groupNode, 'participant');
+        return { participants: getBinaryNodeChildren(groupNode, 'participant'), sock };
+    }
 
-        // Debug: log ALL attributes of first admin participant
-        const debugAttrs = [];
-        for (const p of participants) {
-            if (p.attrs.type === 'admin' || p.attrs.type === 'superadmin') {
-                debugAttrs.push({
-                    ALL_ATTRS: { ...p.attrs },
-                    CONTENT: Array.isArray(p.content) ? p.content.map(c => ({
-                        tag: c.tag, attrs: c.attrs,
-                        content: typeof c.content === 'string' ? c.content : (Buffer.isBuffer(c.content) ? c.content.toString('hex') : typeof c.content)
-                    })) : null
-                });
-                if (debugAttrs.length >= 3) break;
+    _resolveParticipant(p, sock) {
+        const attrs = p.attrs || {};
+        const isMe = this._isMe(attrs.jid, sock);
+        const lid = isLidUser(attrs.jid) ? this._extractPhone(attrs.jid) : (attrs.lid ? this._extractPhone(attrs.lid) : '');
+        const type = attrs.type || 'member'; // 'admin', 'superadmin', or undefined (member)
+
+        let phone = '';
+        const phoneCandidate = attrs.phone_number || attrs.pn || attrs.phone || attrs.number || attrs.participant_pn || null;
+
+        if (phoneCandidate) {
+            const normalized = jidNormalizedUser(phoneCandidate);
+            phone = normalized ? this._extractPhone(normalized) : phoneCandidate.replace(/[^0-9]/g, '');
+        } else if (isJidUser(attrs.jid)) {
+            phone = this._extractPhone(attrs.jid);
+        }
+
+        if (!phone && Array.isArray(p.content)) {
+            for (const child of p.content) {
+                if (child.tag === 'pn' || child.tag === 'phone' || child.tag === 'contact') {
+                    const val = child.attrs?.val || child.attrs?.value || (typeof child.content === 'string' ? child.content : '');
+                    if (val && val.length >= 10) {
+                        phone = val.replace(/[^0-9]/g, '');
+                    }
+                }
             }
         }
-        this._lastDebugAttrs = debugAttrs;
-        console.log('[AdminManager] RAW participant attrs sample:', JSON.stringify(debugAttrs, null, 2));
 
-        // Build admin list — try EVERY possible phone attribute
+        if (!phone) {
+            for (const [key, val] of Object.entries(attrs)) {
+                if (key === 'jid' || key === 'lid' || key === 'type') continue;
+                const strVal = String(val);
+                const digits = strVal.replace(/[^0-9]/g, '');
+                if (digits.length >= 10 && digits.length <= 15) {
+                    phone = digits;
+                    break;
+                }
+            }
+        }
+
+        if (phone && phone !== lid) {
+            this._lidCache[attrs.jid] = phone;
+        } else if (this._lidCache[attrs.jid]) {
+            phone = this._lidCache[attrs.jid];
+        }
+
+        let name = null;
+        if (isMe) {
+            phone = this._extractPhone(sock.user.id);
+            name = 'EU (ADM)';
+        }
+
+        return {
+            jid: attrs.jid,
+            lid,
+            phone: phone || lid,
+            name,
+            type, // 'admin', 'superadmin', or 'member'
+            isSuper: type === 'superadmin',
+            isAdmin: type === 'admin' || type === 'superadmin',
+            isMe
+        };
+    }
+
+    // ==================== GET GROUP ADMINS ====================
+
+    async getGroupAdmins(adminSessionId, groupId) {
+        const { participants, sock } = await this._getRawParticipants(adminSessionId, groupId);
+
         const admins = [];
         for (const p of participants) {
             const attrs = p.attrs || {};
             if (attrs.type !== 'admin' && attrs.type !== 'superadmin') continue;
-
-            const isMe = this._isMe(attrs.jid, sock);
-            const lid = isLidUser(attrs.jid) ? this._extractPhone(attrs.jid) : (attrs.lid ? this._extractPhone(attrs.lid) : '');
-
-            // Try EVERY possible attribute that might contain a phone number
-            let phone = '';
-            const phoneCandidate = attrs.phone_number || attrs.pn || attrs.phone || attrs.number || attrs.participant_pn || null;
-
-            if (phoneCandidate) {
-                // Might be raw number or JID format
-                const normalized = jidNormalizedUser(phoneCandidate);
-                phone = normalized ? this._extractPhone(normalized) : phoneCandidate.replace(/[^0-9]/g, '');
-                console.log(`[AdminManager] Phone found in attrs: ${phone} (from candidate: ${phoneCandidate})`);
-            } else if (isJidUser(attrs.jid)) {
-                // JID is already a phone number
-                phone = this._extractPhone(attrs.jid);
-            }
-
-            // Also check content children for phone info
-            if (!phone && Array.isArray(p.content)) {
-                for (const child of p.content) {
-                    if (child.tag === 'pn' || child.tag === 'phone' || child.tag === 'contact') {
-                        const val = child.attrs?.val || child.attrs?.value || (typeof child.content === 'string' ? child.content : '');
-                        if (val && val.length >= 10) {
-                            phone = val.replace(/[^0-9]/g, '');
-                            console.log(`[AdminManager] Phone found in child node <${child.tag}>: ${phone}`);
-                        }
-                    }
-                }
-            }
-
-            // Also scan ALL attrs for any value that looks like a phone number (10+ digits)
-            if (!phone) {
-                for (const [key, val] of Object.entries(attrs)) {
-                    if (key === 'jid' || key === 'lid' || key === 'type') continue;
-                    const strVal = String(val);
-                    const digits = strVal.replace(/[^0-9]/g, '');
-                    if (digits.length >= 10 && digits.length <= 15) {
-                        phone = digits;
-                        console.log(`[AdminManager] Phone found via scan in attrs.${key}: ${phone}`);
-                        break;
-                    }
-                }
-            }
-
-            // Cache if resolved
-            if (phone && phone !== lid) {
-                this._lidCache[attrs.jid] = phone;
-            } else if (this._lidCache[attrs.jid]) {
-                phone = this._lidCache[attrs.jid];
-            }
-
-            let name = null;
-            if (isMe) {
-                phone = this._extractPhone(sock.user.id);
-                name = 'EU (ADM)';
-            }
-
-            admins.push({
-                jid: attrs.jid,
-                lid,
-                phone: phone || lid,
-                name,
-                isSuper: attrs.type === 'superadmin',
-                isMe
-            });
+            admins.push(this._resolveParticipant(p, sock));
         }
-
         return admins;
+    }
+
+    // ==================== GET GROUP MEMBERS (non-admins only) ====================
+
+    async getGroupMembers(adminSessionId, groupId) {
+        const { participants, sock } = await this._getRawParticipants(adminSessionId, groupId);
+
+        const members = [];
+        for (const p of participants) {
+            const attrs = p.attrs || {};
+            if (attrs.type === 'admin' || attrs.type === 'superadmin') continue;
+            members.push(this._resolveParticipant(p, sock));
+        }
+        return members;
     }
 
     // Debug: get last raw attrs (accessible via API)
@@ -226,6 +226,18 @@ class AdminManager {
         this._fetchingLinks = false;
         console.log(`[AdminManager] Invite links done: ${done}/${total} (${errors} errors)`);
         this.io.emit('invite_links_progress', { done, total, errors, status: 'done' });
+    }
+
+    async promoteToAdmin(adminSessionId, groupId, jid) {
+        const sock = this.sessionManager.getSocket(adminSessionId);
+        if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
+
+        try {
+            await sock.groupParticipantsUpdate(groupId, [jid], 'promote');
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
     }
 
     async demoteFromAdmin(adminSessionId, groupId, jid) {

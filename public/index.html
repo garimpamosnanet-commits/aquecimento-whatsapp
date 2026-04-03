@@ -103,8 +103,8 @@
             <div class="tab" onclick="switchTab('config')">Config</div>
             <div class="tab" onclick="switchTab('rehab')">Reabilitação <span class="rehab-badge" id="rehab-badge" style="display:none">0</span></div>
             <div class="tab" onclick="switchTab('proxies')">Proxies</div>
-            <div class="tab" onclick="switchTab('groupadd')">Adicionar aos Grupos <span class="ga-badge" id="ga-badge" style="display:none">0</span></div>
-            <div class="tab" onclick="switchTab('adminmanage')">Gerenciar Admins</div>
+            <div class="tab" onclick="switchTab('groupadd')" style="display:none">Adicionar aos Grupos <span class="ga-badge" id="ga-badge" style="display:none">0</span></div>
+            <div class="tab" onclick="switchTab('adminmanage')">Grupos</div>
         </div>
 
         <!-- TAB: CHIPS -->
@@ -373,7 +373,7 @@
         <!-- TAB: ADMIN MANAGE -->
         <div id="tab-adminmanage" class="tab-content">
             <div class="section-header">
-                <h2>Gerenciar Admins</h2>
+                <h2>Grupos</h2>
                 <button class="btn btn-outline btn-sm" onclick="loadAdminManageHistory()">Historico</button>
             </div>
 
@@ -408,18 +408,61 @@
                     <div id="am-groups-list" class="ga-list"></div>
                 </div>
 
-                <!-- Right: Admins of selected group -->
+                <!-- Right: Mode panel -->
                 <div class="ga-panel">
-                    <div class="ga-panel-header">
-                        <span class="ga-panel-title">3. Admins do Grupo <span id="am-admins-count"></span></span>
-                        <div class="ga-panel-actions">
-                            <button class="btn btn-outline btn-xs" onclick="amSelectAllAdmins()">Todos</button>
-                            <button class="btn btn-outline btn-xs" onclick="amDeselectAllAdmins()">Nenhum</button>
+                    <!-- Mode toggle -->
+                    <div class="am-mode-bar">
+                        <button class="am-mode-btn active" data-mode="admins" onclick="amSwitchPanelMode('admins')">👑 Admins</button>
+                        <button class="am-mode-btn" data-mode="members" onclick="amSwitchPanelMode('members')">👤 Membros</button>
+                        <button class="am-mode-btn" data-mode="add" onclick="amSwitchPanelMode('add')">➕ Adicionar</button>
+                    </div>
+
+                    <!-- MODE: Admins (demote/remove) -->
+                    <div id="am-panel-admins" class="am-panel-content">
+                        <div class="ga-panel-header">
+                            <span class="ga-panel-title">Admins do Grupo <span id="am-admins-count"></span></span>
+                            <div class="ga-panel-actions">
+                                <button class="btn btn-outline btn-xs" onclick="amSelectAllAdmins()">Todos</button>
+                                <button class="btn btn-outline btn-xs" onclick="amDeselectAllAdmins()">Nenhum</button>
+                            </div>
+                        </div>
+                        <input type="text" id="am-admins-search" class="ga-search" placeholder="Buscar por DDD ou numero..." oninput="amFilterAdmins()">
+                        <div id="am-admins-list" class="ga-list">
+                            <div class="ga-empty">Selecione um grupo para ver os admins</div>
                         </div>
                     </div>
-                    <input type="text" id="am-admins-search" class="ga-search" placeholder="Buscar por DDD ou numero..." oninput="amFilterAdmins()">
-                    <div id="am-admins-list" class="ga-list">
-                        <div class="ga-empty">Selecione um grupo para ver os admins</div>
+
+                    <!-- MODE: Members (promote to admin) -->
+                    <div id="am-panel-members" class="am-panel-content" style="display:none">
+                        <div class="ga-panel-header">
+                            <span class="ga-panel-title">Membros do Grupo <span id="am-members-count"></span></span>
+                            <div class="ga-panel-actions">
+                                <button class="btn btn-outline btn-xs" onclick="amSelectAllMembers()">Todos</button>
+                                <button class="btn btn-outline btn-xs" onclick="amDeselectAllMembers()">Nenhum</button>
+                            </div>
+                        </div>
+                        <input type="text" id="am-members-search" class="ga-search" placeholder="Buscar por DDD ou numero..." oninput="amFilterMembers()">
+                        <div id="am-members-list" class="ga-list">
+                            <div class="ga-empty">Selecione um grupo para ver os membros</div>
+                        </div>
+                        <div id="am-promote-bar" class="am-action-bar" style="display:none">
+                            <span id="am-promote-count">0 selecionados</span>
+                            <button class="btn btn-primary btn-sm" onclick="amPromoteSelected()">👑 Promover a Admin</button>
+                        </div>
+                    </div>
+
+                    <!-- MODE: Add members -->
+                    <div id="am-panel-add" class="am-panel-content" style="display:none">
+                        <div class="ga-panel-header">
+                            <span class="ga-panel-title">Adicionar Membros</span>
+                        </div>
+                        <div class="am-add-section">
+                            <label class="ga-label-sm">Chips de aquecimento</label>
+                            <div id="am-add-chips-list" class="ga-list am-add-list"></div>
+                            <label class="ga-label-sm" style="margin-top:10px">Numeros manuais (um por linha)</label>
+                            <textarea id="am-add-manual" class="ga-textarea" rows="3" placeholder="5511999999999&#10;+5521988887777&#10;(11) 99999-0000"></textarea>
+                            <button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="amStartAdd()">➕ Adicionar ao Grupo</button>
+                        </div>
                     </div>
                 </div>
             </div>
