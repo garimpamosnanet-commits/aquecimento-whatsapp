@@ -463,7 +463,20 @@
                                     <span class="am-add-step-num">1</span>
                                     <span class="am-add-step-title">Numeros para adicionar</span>
                                 </div>
-                                <textarea id="am-add-manual" class="ga-textarea" rows="4" placeholder="Cole os numeros aqui (um por linha)&#10;&#10;Aceita qualquer formato:&#10;5511999999999&#10;+55 21 98888-7777&#10;(11) 99999-0000"></textarea>
+                                <div class="am-add-chips-section">
+                                    <div class="am-add-chips-header">
+                                        <span class="ga-label-sm" style="margin:0">Chips conectados</span>
+                                        <div style="display:flex;gap:4px">
+                                            <button class="btn btn-outline btn-xs" onclick="amSelectAllAddChips()">Todos</button>
+                                            <button class="btn btn-outline btn-xs" onclick="amDeselectAllAddChips()">Nenhum</button>
+                                        </div>
+                                    </div>
+                                    <div id="am-add-chips-list" class="ga-list am-add-list"></div>
+                                </div>
+                                <div class="am-add-separator">
+                                    <span>ou cole numeros manualmente</span>
+                                </div>
+                                <textarea id="am-add-manual" class="ga-textarea" rows="3" placeholder="5511999999999&#10;+55 21 98888-7777&#10;(11) 99999-0000"></textarea>
                                 <div class="am-add-hint" id="am-add-count-hint">0 numeros detectados</div>
                             </div>
 

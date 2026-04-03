@@ -2626,11 +2626,16 @@ function amSetAddAction(action) {
 
 function amUpdateAddCount() {
     const text = document.getElementById('am-add-manual')?.value || '';
-    const numbers = text.split('\n').map(n => n.replace(/[^0-9+]/g, '').replace(/^\+/, '')).filter(n => n.length >= 10);
+    const manualNums = text.split('\n').map(n => n.replace(/[^0-9+]/g, '').replace(/^\+/, '')).filter(n => n.length >= 10);
+    const chipCount = _amSelectedAddChips.size;
+    const total = manualNums.length + chipCount;
     const hint = document.getElementById('am-add-count-hint');
     if (hint) {
-        hint.textContent = numbers.length + ' numero' + (numbers.length !== 1 ? 's' : '') + ' detectado' + (numbers.length !== 1 ? 's' : '');
-        hint.style.color = numbers.length > 0 ? 'var(--success)' : 'var(--text-muted)';
+        const parts = [];
+        if (chipCount > 0) parts.push(chipCount + ' chip' + (chipCount > 1 ? 's' : ''));
+        if (manualNums.length > 0) parts.push(manualNums.length + ' manual');
+        hint.textContent = total > 0 ? total + ' numero' + (total > 1 ? 's' : '') + ' (' + parts.join(' + ') + ')' : '0 numeros detectados';
+        hint.style.color = total > 0 ? 'var(--success)' : 'var(--text-muted)';
     }
 }
 
@@ -2641,8 +2646,49 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function amLoadAddChips() {
-    // Nothing to load anymore (chips removed from UI)
-    // Just update the textarea counter
+    amUpdateAddCount();
+    fetch('/api/warming-chips').then(r => r.json()).then(chips => {
+        _amAddChips = chips.filter(c => c.phone); // Only chips with phone numbers
+        amRenderAddChips();
+    }).catch(() => {});
+}
+
+function amRenderAddChips() {
+    const list = document.getElementById('am-add-chips-list');
+    if (!list) return;
+    if (_amAddChips.length === 0) {
+        list.innerHTML = '<div class="ga-empty" style="padding:12px;font-size:12px">Nenhum chip com numero detectado</div>';
+        return;
+    }
+    list.innerHTML = _amAddChips.map(c => {
+        const checked = _amSelectedAddChips.has(c.id) ? 'checked' : '';
+        const statusIcon = c.status === 'connected' || c.status === 'warming' ? '🟢' : '⚪';
+        return `<div class="ga-item" style="padding:6px 10px">
+            <input type="checkbox" ${checked} onchange="amToggleAddChip(${c.id})">
+            <div class="ga-item-info">
+                <div class="ga-item-name" style="font-size:12px">${statusIcon} ${c.name || 'Chip ' + c.id}</div>
+                <div class="ga-item-meta">${c.phone}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function amToggleAddChip(chipId) {
+    if (_amSelectedAddChips.has(chipId)) _amSelectedAddChips.delete(chipId);
+    else _amSelectedAddChips.add(chipId);
+    amRenderAddChips();
+    amUpdateAddCount();
+}
+
+function amSelectAllAddChips() {
+    _amAddChips.forEach(c => _amSelectedAddChips.add(c.id));
+    amRenderAddChips();
+    amUpdateAddCount();
+}
+
+function amDeselectAllAddChips() {
+    _amSelectedAddChips.clear();
+    amRenderAddChips();
     amUpdateAddCount();
 }
 
@@ -2652,9 +2698,11 @@ async function amStartAdd() {
     if (!_amSelectedGroupId) return showToast('Selecione um grupo na esquerda primeiro', 'warning');
 
     const manualText = document.getElementById('am-add-manual')?.value || '';
-    const numbers = manualText.split('\n').map(n => n.replace(/[^0-9+]/g, '').replace(/^\+/, '')).filter(n => n.length >= 10);
+    const manualNumbers = manualText.split('\n').map(n => n.replace(/[^0-9+]/g, '').replace(/^\+/, '')).filter(n => n.length >= 10);
+    const chipNumbers = _amAddChips.filter(c => _amSelectedAddChips.has(c.id) && c.phone).map(c => c.phone.replace(/[^0-9]/g, ''));
+    const numbers = [...chipNumbers, ...manualNumbers];
 
-    if (numbers.length === 0) return showToast('Cole pelo menos um numero valido', 'warning');
+    if (numbers.length === 0) return showToast('Selecione chips ou cole numeros', 'warning');
 
     const groupName = _amGroups.find(g => g.id === _amSelectedGroupId)?.subject || '';
     const actionText = _amAddAction === 'add_promote' ? 'Adicionar + Promover a Admin' : 'Adicionar como membro';
