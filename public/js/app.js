@@ -1,4 +1,5 @@
 // ==================== KS DIGITAL — COMMAND CENTER ====================
+console.log('[KS] App.js carregado v2');
 const socket = io();
 let chips = [];
 let folders = [];
@@ -31,9 +32,17 @@ function updateStat(id, newValue) {
 
 // ==================== SOCKET EVENTS ====================
 socket.on('connect', () => {
-    console.log('[KS] Conectado ao servidor');
+    console.log('[KS] Socket.IO CONECTADO ao servidor');
     loadFeedHistory();
     addFeedItem('system', 'Conectado ao servidor', null, 'system');
+});
+
+socket.on('connect_error', (err) => {
+    console.error('[KS] Socket.IO ERRO de conexao:', err.message);
+});
+
+socket.on('disconnect', (reason) => {
+    console.warn('[KS] Socket.IO DESCONECTADO:', reason);
 });
 
 socket.on('stats', (stats) => {
@@ -69,16 +78,22 @@ socket.on('chip_deleted', ({ chipId }) => {
 });
 
 socket.on('qr', ({ sessionId, chipId, qr }) => {
+    console.log('[KS] QR recebido! sessionId:', sessionId, 'chipId:', chipId);
     currentQRSessionId = sessionId;
     clearTimeout(_qrTimeoutTimer); // QR arrived, clear timeout
     // Show scan step with QR
     document.getElementById('qr-step-name').style.display = 'none';
     document.getElementById('qr-step-scan').style.display = 'block';
-    const chipName = document.getElementById('chip-name-input').value.trim();
+    const chipName = document.getElementById('chip-name-input')?.value?.trim() || '';
     const modalTitle = document.querySelector('#qr-modal .modal h3');
     if (modalTitle && chipName) modalTitle.textContent = 'Conectar: ' + chipName;
     const qrImage = document.getElementById('qr-image');
-    qrImage.innerHTML = `<img src="${qr}" alt="QR Code">`;
+    if (qrImage) {
+        qrImage.innerHTML = `<img src="${qr}" alt="QR Code" style="max-width:280px">`;
+        console.log('[KS] QR exibido no modal');
+    } else {
+        console.error('[KS] ERRO: elemento qr-image nao encontrado!');
+    }
 });
 
 socket.on('qr_expired', ({ sessionId, chipId }) => {

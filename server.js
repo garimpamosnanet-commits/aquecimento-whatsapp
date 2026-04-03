@@ -99,8 +99,16 @@ app.post('/api/logout', (req, res) => {
     res.json({ ok: true });
 });
 
-// Static files (after auth middleware)
-app.use(express.static(path.join(__dirname, 'public')));
+// Static files (after auth middleware) — no cache for JS/CSS
+app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        }
+    }
+}));
 
 // Initialize components
 const Notifier = require('./src/notifier');
