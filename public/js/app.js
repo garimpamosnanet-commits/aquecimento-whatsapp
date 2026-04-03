@@ -2542,6 +2542,65 @@ async function amCopyInviteLink(groupId) {
     }
 }
 
+async function amExportAllLinks() {
+    const chipId = document.getElementById('am-admin-select').value;
+    if (!chipId) { showToast('Selecione um chip ADM primeiro', 'danger'); return; }
+    if (_amGroups.length === 0) { showToast('Nenhum grupo carregado', 'danger'); return; }
+
+    const modal = document.getElementById('links-modal');
+    const textarea = document.getElementById('am-links-textarea');
+    const progressEl = document.getElementById('am-links-progress');
+    modal.style.display = 'flex';
+    textarea.value = '';
+    progressEl.textContent = `Buscando links... 0/${_amGroups.length}`;
+
+    const results = [];
+    let done = 0;
+    let errors = 0;
+
+    for (const g of _amGroups) {
+        try {
+            const res = await fetch(`/api/admin-manage/invite-link/${chipId}/${encodeURIComponent(g.id)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro');
+            results.push({ name: g.subject || 'Sem nome', link: data.link, size: g.size || 0 });
+        } catch (err) {
+            results.push({ name: g.subject || 'Sem nome', link: '(erro: ' + err.message + ')', size: g.size || 0 });
+            errors++;
+        }
+        done++;
+        progressEl.textContent = `Buscando links... ${done}/${_amGroups.length}${errors ? ` (${errors} erros)` : ''}`;
+
+        // Build formatted text incrementally
+        textarea.value = _amFormatLinksText(results);
+        textarea.scrollTop = textarea.scrollHeight;
+    }
+
+    progressEl.innerHTML = `<span style="color:var(--success);font-weight:700">✅ ${done} grupos processados</span>${errors ? ` <span style="color:var(--danger)">(${errors} erros)</span>` : ''}`;
+}
+
+function _amFormatLinksText(results) {
+    const separator = '━'.repeat(50);
+    const header = `📋 LINKS DE CONVITE DOS GRUPOS\n${separator}\n\n`;
+    const lines = results.map((r, i) => {
+        return `${String(i + 1).padStart(2, '0')}. ${r.name}\n    👥 ${r.size} membros\n    🔗 ${r.link}`;
+    });
+    const footer = `\n${separator}\nTotal: ${results.length} grupos`;
+    return header + lines.join('\n\n') + footer;
+}
+
+function amCopyAllLinksText() {
+    const textarea = document.getElementById('am-links-textarea');
+    if (!textarea.value || textarea.value === 'Gerando links...') { showToast('Aguarde os links serem gerados', 'warning'); return; }
+    navigator.clipboard.writeText(textarea.value).then(() => {
+        showToast('Lista completa copiada!', 'success');
+    }).catch(() => {
+        textarea.select();
+        document.execCommand('copy');
+        showToast('Lista copiada!', 'success');
+    });
+}
+
 function amSetGroupFilter(filter) {
     _amGroupFilter = filter;
     amRenderGroups();

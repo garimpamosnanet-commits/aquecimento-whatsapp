@@ -401,6 +401,7 @@
                         <button class="am-group-filter-btn active" data-filter="all" onclick="amSetGroupFilter('all')">Todos</button>
                         <button class="am-group-filter-btn" data-filter="pending" onclick="amSetGroupFilter('pending')">Pendentes</button>
                         <button class="am-group-filter-btn" data-filter="done" onclick="amSetGroupFilter('done')">Feitos</button>
+                        <button class="am-export-links-btn" onclick="amExportAllLinks()" title="Gerar lista com todos os links de convite">📋 Exportar Links</button>
                         <span class="am-groups-progress" id="am-groups-progress"></span>
                     </div>
                     <input type="text" id="am-groups-search" class="ga-search" placeholder="Buscar grupo..." oninput="amFilterGroups()">
@@ -566,6 +567,21 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
             <button class="btn btn-outline" onclick="closeConfirmModal()">Cancelar</button>
             <button class="btn btn-danger" id="confirm-modal-btn" onclick="confirmConfirmModal()">Excluir</button>
         </div>
+    </div>
+</div>
+
+<!-- LINKS MODAL -->
+<div class="modal-overlay" id="links-modal" style="display:none">
+    <div class="modal am-links-modal">
+        <div class="am-links-header">
+            <h3>Links de Convite</h3>
+            <div class="am-links-header-actions">
+                <button class="btn btn-primary btn-sm" onclick="amCopyAllLinksText()">📋 Copiar Tudo</button>
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('links-modal').style.display='none'">Fechar</button>
+            </div>
+        </div>
+        <div class="am-links-progress" id="am-links-progress"></div>
+        <textarea class="am-links-textarea" id="am-links-textarea" readonly placeholder="Gerando links..."></textarea>
     </div>
 </div>
 
