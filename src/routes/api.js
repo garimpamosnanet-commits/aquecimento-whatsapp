@@ -22,6 +22,12 @@ const upload = multer({ storage: mediaStorage, limits: { fileSize: 10 * 1024 * 1
 
 module.exports = function(sessionManager, warmingEngine, groupManager, adminManager) {
 
+    // ==================== DEBUG ====================
+    router.get('/debug/logs', (req, res) => {
+        const logs = sessionManager.getDebugLogs();
+        res.json({ count: logs.length, logs });
+    });
+
     // ==================== CHIPS ====================
 
     // List all chips (with proxy info)

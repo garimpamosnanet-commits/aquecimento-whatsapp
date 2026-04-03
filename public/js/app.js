@@ -84,6 +84,8 @@ socket.on('qr', ({ sessionId, chipId, qr }) => {
 socket.on('qr_expired', ({ sessionId, chipId }) => {
     clearTimeout(_qrTimeoutTimer);
     if (currentQRSessionId === sessionId) {
+        // Session was cleaned up server-side, reset so reload creates fresh session
+        currentQRSessionId = null;
         const qrImage = document.getElementById('qr-image');
         qrImage.innerHTML = `<div style="text-align:center;padding:20px">
             <div style="font-size:48px;margin-bottom:10px">⏰</div>
@@ -91,6 +93,21 @@ socket.on('qr_expired', ({ sessionId, chipId }) => {
             <button class="btn btn-primary btn-sm" onclick="reloadQR()">🔄 Gerar novo QR Code</button>
         </div>`;
     }
+});
+
+socket.on('qr_error', ({ sessionId, chipId, error }) => {
+    clearTimeout(_qrTimeoutTimer);
+    console.error('[QR Error]', error);
+    const qrImage = document.getElementById('qr-image');
+    if (qrImage) {
+        qrImage.innerHTML = `<div style="text-align:center;padding:20px">
+            <div style="font-size:48px;margin-bottom:10px">❌</div>
+            <div style="color:#E74C3C;font-size:14px;margin-bottom:8px;font-weight:600">Erro ao gerar QR Code</div>
+            <div style="color:#666;font-size:12px;margin-bottom:16px;word-break:break-all">${error || 'Erro desconhecido'}</div>
+            <button class="btn btn-primary btn-sm" onclick="reloadQR()">🔄 Tentar novamente</button>
+        </div>`;
+    }
+    currentQRSessionId = null;
 });
 
 socket.on('connected', ({ sessionId, chipId, phone }) => {
@@ -575,15 +592,17 @@ function reloadQR() {
     if (qrLoading) return;
     qrLoading = true;
     document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
+    console.log('[QR] reloadQR chamado, currentQRSessionId:', currentQRSessionId);
     if (currentQRSessionId) {
-        // Reconnect existing session instead of creating new
+        // Try to reconnect existing session
         socket.emit('reconnect_chip', { sessionId: currentQRSessionId });
     } else {
-        const name = document.getElementById('chip-name-input').value.trim();
+        // Create new session
+        const name = document.getElementById('chip-name-input')?.value?.trim() || '';
         socket.emit('request_qr', { name: name });
     }
     _startQRTimeout();
-    setTimeout(() => { qrLoading = false; }, 3000); // cooldown 3s
+    setTimeout(() => { qrLoading = false; }, 2000); // cooldown 2s (was 3s)
 }
 
 function closeQRModal() {

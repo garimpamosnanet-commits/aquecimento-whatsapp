@@ -26,12 +26,27 @@ function createProxyAgent(proxyUrl) {
 const SESSIONS_DIR = path.join(__dirname, '..', '..', 'sessions');
 const logger = pino({ level: 'silent' });
 
+// In-memory log buffer for debugging
+const _debugLogs = [];
+const MAX_DEBUG_LOGS = 200;
+function debugLog(msg) {
+    const ts = new Date().toISOString().substr(11, 12);
+    const entry = `[${ts}] ${msg}`;
+    console.log(entry);
+    _debugLogs.push(entry);
+    if (_debugLogs.length > MAX_DEBUG_LOGS) _debugLogs.shift();
+}
+
 class SessionManager {
     constructor(io, notifier) {
         this.io = io;
         this.notifier = notifier;
         this.sessions = new Map(); // sessionId -> { socket, chip }
         this.reconnectTimers = new Map();
+    }
+
+    getDebugLogs() {
+        return _debugLogs.slice();
     }
 
     async initialize() {
@@ -52,36 +67,65 @@ class SessionManager {
 
     async createSession(name = '') {
         const sessionId = `chip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        debugLog(`[SessionManager] Criando sessao ${sessionId} (nome: ${name || 'sem nome'})`);
         const chip = db.createChip(sessionId, name);
         // Auto-assign proxy if available
         const proxy = db.assignProxyToChip(chip.id);
         if (proxy) {
-            console.log(`[SessionManager] Proxy atribuido ao chip ${chip.id}: ${proxy.url}`);
+            debugLog(`[SessionManager] Proxy atribuido ao chip ${chip.id}: ${proxy.url}`);
         }
-        await this.connect(sessionId);
+        try {
+            await this.connect(sessionId);
+        } catch (err) {
+            debugLog(`[SessionManager] ERRO ao conectar ${sessionId}: ${err.message}`);
+            this.io.emit('qr_error', { sessionId, chipId: chip.id, error: err.message });
+            throw err;
+        }
         return chip;
     }
 
     async connect(sessionId) {
+        debugLog(`[SM] connect(${sessionId})`);
         // Clean up existing session if any
         if (this.sessions.has(sessionId)) {
             const existing = this.sessions.get(sessionId);
             if (existing.socket) {
-                existing.socket.end();
+                try { existing.socket.end(); } catch(e) {}
             }
+            this.sessions.delete(sessionId);
+        }
+
+        // Clear any pending reconnect timer
+        if (this.reconnectTimers.has(sessionId)) {
+            clearTimeout(this.reconnectTimers.get(sessionId));
+            this.reconnectTimers.delete(sessionId);
         }
 
         const sessionPath = path.join(SESSIONS_DIR, sessionId);
         const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
-        const { version } = await fetchLatestBaileysVersion();
+
+        // Get version with fallback (fetchLatestBaileysVersion can fail/timeout)
+        let version;
+        try {
+            const result = await Promise.race([
+                fetchLatestBaileysVersion(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('version timeout')), 5000))
+            ]);
+            version = result.version;
+            debugLog(`[SM] Baileys version: ${JSON.stringify(version)}`);
+        } catch (e) {
+            version = [2, 3000, 1015901307];
+            debugLog(`[SM] Version fetch failed (${e.message}), using fallback: ${JSON.stringify(version)}`);
+        }
 
         // Check for proxy
         const chip = db.getChipBySession(sessionId);
-        const proxyData = chip ? db.getProxyForChip(chip.id) : null;
-        const agent = proxyData ? createProxyAgent(proxyData.url) : undefined;
-        if (agent) {
-            console.log(`[SessionManager] Usando proxy para ${sessionId}: ${proxyData.url.replace(/\/\/.*@/, '//***@')}`);
+        if (!chip) {
+            debugLog(`[SM] ERRO: chip nao encontrado para ${sessionId}`);
+            throw new Error('Chip nao encontrado no banco de dados');
         }
+        const proxyData = db.getProxyForChip(chip.id);
+        const agent = proxyData ? createProxyAgent(proxyData.url) : undefined;
 
         const socketOptions = {
             version,
@@ -101,25 +145,39 @@ class SessionManager {
 
         if (agent) {
             socketOptions.agent = agent;
+            debugLog(`[SM] Proxy ativo para ${sessionId}`);
         }
 
-        const socket = makeWASocket(socketOptions);
+        debugLog(`[SM] Criando socket para ${sessionId}...`);
+        let socket;
+        try {
+            socket = makeWASocket(socketOptions);
+        } catch (e) {
+            debugLog(`[SM] ERRO makeWASocket: ${e.message}`);
+            this.io.emit('qr_error', { sessionId, chipId: chip.id, error: `Falha ao criar socket: ${e.message}` });
+            throw e;
+        }
+        debugLog(`[SM] Socket criado OK para ${sessionId}`);
 
         this.sessions.set(sessionId, { socket, chip });
 
         // QR Code event
         socket.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
+            debugLog(`[SessionManager] connection.update para ${sessionId}: connection=${connection}, qr=${qr ? 'SIM' : 'NAO'}, error=${lastDisconnect?.error?.message || 'none'}`);
 
             if (qr) {
+                debugLog(`[SessionManager] QR recebido para ${sessionId}, convertendo...`);
                 db.updateChipStatus(chip.id, 'qr_pending');
                 const qrDataUrl = await QRCode.toDataURL(qr, { width: 300, margin: 2 });
+                debugLog(`[SessionManager] QR convertido, emitindo via socket.io...`);
                 this.io.emit('qr', { sessionId, chipId: chip.id, qr: qrDataUrl });
                 this.emitChipUpdate(chip.id);
+                debugLog(`[SessionManager] QR emitido para ${sessionId}`);
             }
 
             if (connection === 'open') {
-                console.log(`[SessionManager] ${sessionId} conectado!`);
+                debugLog(`[SessionManager] ${sessionId} conectado!`);
                 db.updateChipStatus(chip.id, 'connected');
 
                 // Get phone number from socket
@@ -146,7 +204,7 @@ class SessionManager {
                     }
                 } catch (e) {
                     // No profile pic or privacy setting - ignore
-                    console.log(`[SessionManager] Sem foto de perfil para ${sessionId}`);
+                    debugLog(`[SessionManager] Sem foto de perfil para ${sessionId}`);
                 }
 
                 this.io.emit('connected', { sessionId, chipId: chip.id, phone: phoneNumber });
@@ -160,7 +218,7 @@ class SessionManager {
                 const currentChip = db.getChipById(chip.id);
                 const wasInQRPhase = currentChip && currentChip.status === 'qr_pending';
 
-                console.log(`[SessionManager] ${sessionId} desconectado. Code: ${statusCode}, wasQR: ${wasInQRPhase}`);
+                debugLog(`[SessionManager] ${sessionId} desconectado. Code: ${statusCode}, wasQR: ${wasInQRPhase}, error: ${lastDisconnect?.error?.message || 'none'}`);
 
                 if (statusCode === reason.loggedOut) {
                     // User logged out - clean session
@@ -184,12 +242,14 @@ class SessionManager {
                 } else if (wasInQRPhase) {
                     // Was waiting for QR scan — DON'T auto-reconnect (causes QR oscillation)
                     // User can click "Recarregar QR Code" manually
-                    console.log(`[SessionManager] ${sessionId} QR expirou. Aguardando usuario recarregar.`);
+                    debugLog(`[SessionManager] ${sessionId} QR expirou. Aguardando usuario recarregar.`);
+                    db.updateChipStatus(chip.id, 'disconnected');
+                    this.sessions.delete(sessionId);
                     this.io.emit('qr_expired', { sessionId, chipId: chip.id });
                 } else if (statusCode !== reason.connectionClosed) {
                     // Already authenticated chip — try to reconnect after delay
                     const delay = Math.min(5000 + Math.random() * 5000, 30000);
-                    console.log(`[SessionManager] Reconectando ${sessionId} em ${Math.round(delay / 1000)}s...`);
+                    debugLog(`[SessionManager] Reconectando ${sessionId} em ${Math.round(delay / 1000)}s...`);
                     const timer = setTimeout(() => this.connect(sessionId), delay);
                     this.reconnectTimers.set(sessionId, timer);
                 }

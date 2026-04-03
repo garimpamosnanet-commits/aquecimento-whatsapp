@@ -17,19 +17,32 @@ module.exports = function(io, sessionManager, warmingEngine, groupManager, admin
         socket.on('request_qr', async (data) => {
             try {
                 const { name } = data || {};
+                console.log(`[WS] request_qr recebido (nome: ${name || 'vazio'})`);
                 await sessionManager.createSession(name || '');
             } catch (err) {
+                console.log(`[WS] request_qr ERRO: ${err.message}`);
                 socket.emit('error', { message: err.message });
+                socket.emit('qr_error', { error: err.message });
             }
         });
 
-        // Reconnect a chip
+        // Reconnect a chip (reload QR)
         socket.on('reconnect_chip', async (data) => {
             const { sessionId } = data;
+            console.log(`[WS] reconnect_chip: ${sessionId}`);
             try {
+                // Check if chip still exists
+                const chip = db.getChipBySession(sessionId);
+                if (!chip) {
+                    console.log(`[WS] Chip nao encontrado para ${sessionId}, criando novo`);
+                    socket.emit('error', { message: 'Sessao expirada. Clique novamente para criar nova.' });
+                    return;
+                }
                 await sessionManager.connect(sessionId);
             } catch (err) {
+                console.log(`[WS] reconnect_chip ERRO: ${err.message}`);
                 socket.emit('error', { message: err.message });
+                socket.emit('qr_error', { sessionId, error: err.message });
             }
         });
 
