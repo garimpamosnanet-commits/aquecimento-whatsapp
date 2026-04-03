@@ -96,45 +96,55 @@ socket.on('qr', ({ sessionId, chipId, qr }) => {
     }
 });
 
-socket.on('qr_expired', ({ sessionId, chipId }) => {
-    clearTimeout(_qrTimeoutTimer);
-    if (currentQRSessionId === sessionId) {
-        // Session was cleaned up server-side, reset so reload creates fresh session
-        currentQRSessionId = null;
-        const qrImage = document.getElementById('qr-image');
-        qrImage.innerHTML = `<div style="text-align:center;padding:20px">
-            <div style="font-size:48px;margin-bottom:10px">⏰</div>
-            <div style="color:#666;font-size:14px;margin-bottom:16px">QR Code expirou.<br>Clique abaixo para gerar um novo.</div>
-            <button class="btn btn-primary btn-sm" onclick="reloadQR()">🔄 Gerar novo QR Code</button>
-        </div>`;
-    }
-});
-
 socket.on('qr_error', ({ sessionId, chipId, error }) => {
     clearTimeout(_qrTimeoutTimer);
     console.error('[QR Error]', error);
-    const qrImage = document.getElementById('qr-image');
-    if (qrImage) {
-        qrImage.innerHTML = `<div style="text-align:center;padding:20px">
-            <div style="font-size:48px;margin-bottom:10px">❌</div>
-            <div style="color:#E74C3C;font-size:14px;margin-bottom:8px;font-weight:600">Erro ao gerar QR Code</div>
-            <div style="color:#666;font-size:12px;margin-bottom:16px;word-break:break-all">${error || 'Erro desconhecido'}</div>
-            <button class="btn btn-primary btn-sm" onclick="reloadQR()">🔄 Tentar novamente</button>
-        </div>`;
+    if (_connectMode === 'phone') {
+        const btn = document.getElementById('btn-request-pairing');
+        if (btn) { btn.disabled = false; btn.textContent = '📞 Gerar Codigo'; }
+        showToast(error || 'Erro ao gerar codigo', 'danger');
+    } else {
+        const qrImage = document.getElementById('qr-image');
+        if (qrImage) {
+            qrImage.innerHTML = `<div style="text-align:center;padding:20px">
+                <div style="font-size:48px;margin-bottom:10px">❌</div>
+                <div style="color:#E74C3C;font-size:14px;margin-bottom:8px;font-weight:600">Erro ao gerar QR Code</div>
+                <div style="color:#666;font-size:12px;margin-bottom:16px;word-break:break-all">${error || 'Erro desconhecido'}</div>
+                <button class="btn btn-primary btn-sm" onclick="reloadQR()">🔄 Tentar novamente</button>
+            </div>`;
+        }
     }
-    currentQRSessionId = null;
+});
+
+socket.on('pairing_code', ({ sessionId, chipId, code }) => {
+    console.log('[KS] Pairing code recebido:', code);
+    // Format code with dash: XXXX-XXXX
+    const formatted = code.length === 8 ? code.slice(0, 4) + '-' + code.slice(4) : code;
+    document.getElementById('pairing-code-display').style.display = 'block';
+    document.getElementById('pairing-code-value').textContent = formatted;
+    const btn = document.getElementById('btn-request-pairing');
+    if (btn) { btn.disabled = false; btn.textContent = '📞 Gerar Codigo'; }
+    showToast('Codigo gerado! Digite no WhatsApp do celular.', 'success');
 });
 
 socket.on('connected', ({ sessionId, chipId, phone }) => {
     clearTimeout(_qrTimeoutTimer);
     if (currentQRSessionId === sessionId) {
-        const qrImage = document.getElementById('qr-image');
-        if (_pendingAdmConnect) {
-            qrImage.innerHTML = `<div style="color:#8B5CF6;font-size:48px">👤</div><div style="margin-top:8px;color:#666;font-size:14px">ADM Conectado!<br><small>${phone || ''}</small></div>`;
+        const successHtml = _pendingAdmConnect
+            ? `<div style="color:#8B5CF6;font-size:48px">👤</div><div style="margin-top:8px;color:#666;font-size:14px">ADM Conectado!<br><small>${phone || ''}</small></div>`
+            : `<div style="color:#22C55E;font-size:48px">✓</div><div style="margin-top:8px;color:#666;font-size:14px">Conectado!<br><small>${phone || ''}</small></div>`;
+
+        if (_connectMode === 'phone') {
+            // Phone mode — show success in phone step
+            document.getElementById('pairing-code-display').innerHTML = successHtml;
+            document.getElementById('btn-request-pairing').style.display = 'none';
+            document.getElementById('btn-next-qr-phone').style.display = 'inline-flex';
         } else {
-            qrImage.innerHTML = `<div style="color:#22C55E;font-size:48px">✓</div><div style="margin-top:8px;color:#666;font-size:14px">Conectado!<br><small>${phone || ''}</small></div>`;
+            // QR mode
+            const qrImage = document.getElementById('qr-image');
+            qrImage.innerHTML = successHtml;
+            document.getElementById('btn-next-qr').style.display = 'inline-flex';
         }
-        document.getElementById('btn-next-qr').style.display = 'inline-flex';
     }
     // Auto-mark as ADM if connected via "Adicionar aos Grupos" flow
     if (_pendingAdmConnect && chipId) {
@@ -554,21 +564,25 @@ function getStatusLabel(status) {
 }
 
 // ==================== ACTIONS ====================
+let _connectMode = 'qr'; // 'qr' or 'phone'
+
 function openQRModal() {
     document.getElementById('qr-modal').classList.add('active');
     document.getElementById('qr-step-name').style.display = 'block';
     document.getElementById('qr-step-scan').style.display = 'none';
+    document.getElementById('qr-step-phone').style.display = 'none';
     document.getElementById('chip-name-input').value = '';
     document.getElementById('chip-name-input').focus();
     currentQRSessionId = null;
+    _connectMode = 'qr';
 }
 
-// Enter no input de nome confirma
+// Enter no input de nome confirma com QR
 document.addEventListener('DOMContentLoaded', () => {
     const nameInput = document.getElementById('chip-name-input');
     if (nameInput) {
         nameInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') confirmChipName();
+            if (e.key === 'Enter') confirmChipName('qr');
         });
     }
 });
@@ -582,24 +596,59 @@ function _startQRTimeout() {
         if (qrImage && qrImage.querySelector('.qr-waiting')) {
             qrImage.innerHTML = `<div style="text-align:center;padding:20px">
                 <div style="font-size:48px;margin-bottom:10px">⚠️</div>
-                <div style="color:#666;font-size:14px;margin-bottom:16px">QR Code demorou demais para gerar.<br>Verifique a conexão e tente novamente.</div>
+                <div style="color:#666;font-size:14px;margin-bottom:16px">QR Code demorou demais.<br>Verifique a conexao.</div>
                 <button class="btn btn-primary btn-sm" onclick="reloadQR()">🔄 Tentar novamente</button>
             </div>`;
         }
-    }, 25000); // 25s timeout
+    }, 30000);
 }
-function confirmChipName() {
+
+function confirmChipName(mode) {
     if (chipCreating) return;
     chipCreating = true;
+    _connectMode = mode || 'qr';
     const name = document.getElementById('chip-name-input').value.trim();
     document.getElementById('qr-step-name').style.display = 'none';
-    document.getElementById('qr-step-scan').style.display = 'block';
-    document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
-    document.getElementById('btn-next-qr').style.display = 'none';
     currentQRSessionId = null;
-    socket.emit('request_qr', { name: name });
-    _startQRTimeout();
-    setTimeout(() => { chipCreating = false; }, 5000);
+
+    if (_connectMode === 'phone') {
+        // Show phone input step
+        document.getElementById('qr-step-phone').style.display = 'block';
+        document.getElementById('qr-step-scan').style.display = 'none';
+        document.getElementById('pairing-code-display').style.display = 'none';
+        document.getElementById('btn-request-pairing').style.display = 'inline-flex';
+        document.getElementById('btn-next-qr-phone').style.display = 'none';
+        const phoneInput = document.getElementById('pairing-phone-input');
+        phoneInput.value = '';
+        phoneInput.focus();
+        // Create session in background (needed for pairing)
+        socket.emit('request_qr', { name: name });
+        setTimeout(() => { chipCreating = false; }, 3000);
+    } else {
+        // QR Code mode
+        document.getElementById('qr-step-scan').style.display = 'block';
+        document.getElementById('qr-step-phone').style.display = 'none';
+        document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
+        document.getElementById('btn-next-qr').style.display = 'none';
+        socket.emit('request_qr', { name: name });
+        _startQRTimeout();
+        setTimeout(() => { chipCreating = false; }, 3000);
+    }
+}
+
+function requestPairingCode() {
+    const phone = document.getElementById('pairing-phone-input').value.trim();
+    if (!phone || phone.length < 10) {
+        showToast('Digite um numero valido com DDI+DDD (ex: 5511999999999)', 'warning');
+        return;
+    }
+    if (!currentQRSessionId) {
+        showToast('Aguarde a sessao ser criada...', 'warning');
+        return;
+    }
+    document.getElementById('btn-request-pairing').disabled = true;
+    document.getElementById('btn-request-pairing').textContent = '⏳ Gerando...';
+    socket.emit('request_pairing', { sessionId: currentQRSessionId, phone: phone });
 }
 
 let qrLoading = false;
@@ -607,17 +656,14 @@ function reloadQR() {
     if (qrLoading) return;
     qrLoading = true;
     document.getElementById('qr-image').innerHTML = '<div class="qr-waiting">Gerando QR Code...</div>';
-    console.log('[QR] reloadQR chamado, currentQRSessionId:', currentQRSessionId);
     if (currentQRSessionId) {
-        // Try to reconnect existing session
         socket.emit('reconnect_chip', { sessionId: currentQRSessionId });
     } else {
-        // Create new session
         const name = document.getElementById('chip-name-input')?.value?.trim() || '';
         socket.emit('request_qr', { name: name });
     }
     _startQRTimeout();
-    setTimeout(() => { qrLoading = false; }, 2000); // cooldown 2s (was 3s)
+    setTimeout(() => { qrLoading = false; }, 2000);
 }
 
 function closeQRModal() {
@@ -630,9 +676,11 @@ function closeQRModal() {
 function nextQR() {
     document.getElementById('qr-step-name').style.display = 'block';
     document.getElementById('qr-step-scan').style.display = 'none';
+    document.getElementById('qr-step-phone').style.display = 'none';
     document.getElementById('chip-name-input').value = '';
     document.getElementById('chip-name-input').focus();
     currentQRSessionId = null;
+    _connectMode = 'qr';
 }
 
 function editChipName(chipId, currentName) {

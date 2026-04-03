@@ -240,12 +240,11 @@ class SessionManager {
                         }
                     }
                 } else if (wasInQRPhase) {
-                    // Was waiting for QR scan — DON'T auto-reconnect (causes QR oscillation)
-                    // User can click "Recarregar QR Code" manually
-                    debugLog(`[SessionManager] ${sessionId} QR expirou. Aguardando usuario recarregar.`);
-                    db.updateChipStatus(chip.id, 'disconnected');
+                    // QR phase — auto-reconnect after short delay (keeps QR rotating)
+                    debugLog(`[SM] ${sessionId} QR expirou, auto-reconectando em 3s...`);
                     this.sessions.delete(sessionId);
-                    this.io.emit('qr_expired', { sessionId, chipId: chip.id });
+                    const timer = setTimeout(() => this.connect(sessionId), 3000);
+                    this.reconnectTimers.set(sessionId, timer);
                 } else if (statusCode !== reason.connectionClosed) {
                     // Already authenticated chip — try to reconnect after delay
                     const delay = Math.min(5000 + Math.random() * 5000, 30000);
@@ -275,6 +274,34 @@ class SessionManager {
         });
 
         return socket;
+    }
+
+    async connectWithPhone(sessionId, phoneNumber) {
+        debugLog(`[SM] connectWithPhone(${sessionId}, ${phoneNumber})`);
+        const session = this.sessions.get(sessionId);
+        if (!session || !session.socket) {
+            throw new Error('Sessao nao encontrada. Crie a sessao primeiro.');
+        }
+        const { socket, chip } = session;
+
+        // Clean phone number: remove +, spaces, dashes
+        const cleanPhone = phoneNumber.replace(/[\s\-\+\(\)]/g, '');
+        debugLog(`[SM] Requesting pairing code for ${cleanPhone}...`);
+
+        try {
+            const code = await socket.requestPairingCode(cleanPhone);
+            debugLog(`[SM] Pairing code received: ${code}`);
+            this.io.emit('pairing_code', {
+                sessionId,
+                chipId: chip.id,
+                code: code
+            });
+            return code;
+        } catch (e) {
+            debugLog(`[SM] ERRO pairing code: ${e.message}`);
+            this.io.emit('qr_error', { sessionId, chipId: chip.id, error: `Erro ao gerar codigo: ${e.message}` });
+            throw e;
+        }
     }
 
     async disconnect(sessionId) {

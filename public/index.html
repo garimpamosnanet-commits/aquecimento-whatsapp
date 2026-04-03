@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KS Digital — Command Center</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260403">
+    <link rel="stylesheet" href="/css/style.css?v=20260403b">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -633,23 +633,42 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="modal-overlay" id="qr-modal">
     <div class="modal">
         <h3>Conectar Chip</h3>
+        <!-- STEP 1: Name + Mode -->
         <div id="qr-step-name">
             <p>Dê um nome para identificar este chip:</p>
             <input type="text" id="chip-name-input" class="input-field" placeholder="Ex: Chip Marketing 1" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-top:8px">
-            <div class="modal-actions" style="margin-top:12px">
-                <button class="btn btn-outline" onclick="closeQRModal()">Cancelar</button>
-                <button class="btn btn-primary" onclick="confirmChipName()">Gerar QR Code →</button>
+            <div style="display:flex;gap:8px;margin-top:12px">
+                <button class="btn btn-primary" onclick="confirmChipName('qr')" style="flex:1">📱 QR Code</button>
+                <button class="btn btn-outline" onclick="confirmChipName('phone')" style="flex:1;border-color:#8B5CF6;color:#8B5CF6">📞 Numero</button>
+            </div>
+            <div style="margin-top:8px;text-align:center">
+                <button class="btn btn-outline" onclick="closeQRModal()" style="font-size:12px">Cancelar</button>
             </div>
         </div>
+        <!-- STEP 2A: QR Code scan -->
         <div id="qr-step-scan" style="display:none">
-            <p>Escaneie o QR Code com WhatsApp > Aparelhos conectados</p>
+            <p style="color:#666;font-size:13px;text-align:center">WhatsApp > Aparelhos conectados > Conectar</p>
             <div class="qr-container">
-                <div id="qr-image" class="qr-waiting">Aguardando QR Code...</div>
+                <div id="qr-image" class="qr-waiting">Gerando QR Code...</div>
             </div>
-            <button class="btn-reload-qr" onclick="reloadQR()">🔄 Recarregar QR Code</button>
             <div class="modal-actions">
                 <button class="btn btn-outline" onclick="closeQRModal()">Cancelar</button>
                 <button class="btn btn-primary" id="btn-next-qr" style="display:none" onclick="nextQR()">Proximo Chip →</button>
+            </div>
+        </div>
+        <!-- STEP 2B: Phone number input -->
+        <div id="qr-step-phone" style="display:none">
+            <p style="color:#666;font-size:13px;text-align:center;margin-bottom:12px">Digite o numero com DDD + DDI (ex: 5511999999999)</p>
+            <input type="tel" id="pairing-phone-input" class="input-field" placeholder="5511999999999" style="width:100%;padding:12px;border:2px solid #8B5CF6;border-radius:10px;font-size:18px;text-align:center;letter-spacing:2px;font-weight:600">
+            <div id="pairing-code-display" style="display:none;margin-top:16px;text-align:center">
+                <p style="color:#666;font-size:13px;margin-bottom:8px">Digite este codigo no WhatsApp:</p>
+                <div id="pairing-code-value" style="font-size:32px;font-weight:800;letter-spacing:6px;color:#8B5CF6;background:#F5F3FF;padding:16px 24px;border-radius:12px;display:inline-block;font-family:monospace"></div>
+                <p style="color:#999;font-size:11px;margin-top:8px">WhatsApp > Aparelhos conectados > Conectar > Conectar com numero</p>
+            </div>
+            <div class="modal-actions" style="margin-top:12px">
+                <button class="btn btn-outline" onclick="closeQRModal()">Cancelar</button>
+                <button class="btn btn-primary" id="btn-request-pairing" onclick="requestPairingCode()" style="background:#8B5CF6">📞 Gerar Codigo</button>
+                <button class="btn btn-primary" id="btn-next-qr-phone" style="display:none" onclick="nextQR()">Proximo Chip →</button>
             </div>
         </div>
     </div>
@@ -699,6 +718,6 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js?v=20260403"></script>
+<script src="/js/app.js?v=20260403b"></script>
 </body>
 </html>

@@ -31,10 +31,8 @@ module.exports = function(io, sessionManager, warmingEngine, groupManager, admin
             const { sessionId } = data;
             console.log(`[WS] reconnect_chip: ${sessionId}`);
             try {
-                // Check if chip still exists
                 const chip = db.getChipBySession(sessionId);
                 if (!chip) {
-                    console.log(`[WS] Chip nao encontrado para ${sessionId}, criando novo`);
                     socket.emit('error', { message: 'Sessao expirada. Clique novamente para criar nova.' });
                     return;
                 }
@@ -43,6 +41,18 @@ module.exports = function(io, sessionManager, warmingEngine, groupManager, admin
                 console.log(`[WS] reconnect_chip ERRO: ${err.message}`);
                 socket.emit('error', { message: err.message });
                 socket.emit('qr_error', { sessionId, error: err.message });
+            }
+        });
+
+        // Request pairing code (connect via phone number)
+        socket.on('request_pairing', async (data) => {
+            const { sessionId, phone } = data;
+            console.log(`[WS] request_pairing: ${sessionId}, phone: ${phone}`);
+            try {
+                await sessionManager.connectWithPhone(sessionId, phone);
+            } catch (err) {
+                console.log(`[WS] request_pairing ERRO: ${err.message}`);
+                socket.emit('error', { message: err.message });
             }
         });
 
