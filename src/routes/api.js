@@ -414,6 +414,51 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
     });
 
+    // Debug: diagnose why groups aren't showing
+    router.get('/admin-instances/:id/debug-groups', async (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        const sock = sessionManager.getSocket(chip.session_id);
+        if (!sock || !sock.user) return res.status(400).json({ error: 'Nao conectado' });
+
+        try {
+            const myId = sock.user.id;
+            const myLid = sock.user.lid || null;
+            const myPhone = myId ? myId.split('@')[0].split(':')[0] : null;
+            const myLidClean = myLid ? myLid.split('@')[0].split(':')[0] : null;
+
+            const allGroups = await sock.groupFetchAllParticipating();
+            const groupKeys = Object.keys(allGroups);
+
+            // Sample first 3 groups to show participant formats
+            const samples = [];
+            for (let i = 0; i < Math.min(3, groupKeys.length); i++) {
+                const g = allGroups[groupKeys[i]];
+                const meInGroup = (g.participants || []).find(p => {
+                    const pClean = p.id.split('@')[0].split(':')[0];
+                    return pClean === myPhone || (myLidClean && pClean === myLidClean);
+                });
+                samples.push({
+                    id: groupKeys[i],
+                    subject: g.subject,
+                    participantCount: (g.participants || []).length,
+                    firstParticipants: (g.participants || []).slice(0, 5).map(p => ({ id: p.id, admin: p.admin })),
+                    meFound: !!meInGroup,
+                    meAdmin: meInGroup?.admin || null
+                });
+            }
+
+            res.json({
+                myId, myLid, myPhone, myLidClean,
+                totalGroupsFetched: groupKeys.length,
+                samples
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message, stack: err.stack });
+        }
+    });
+
     // List warming chips (for selection in group-add)
     router.get('/warming-chips', (req, res) => {
         res.json(db.getWarmingChipsForAdd());
