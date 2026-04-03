@@ -2451,6 +2451,11 @@ function amRenderGroups() {
     const search = (document.getElementById('am-groups-search')?.value || '').toLowerCase();
     document.getElementById('am-groups-count').textContent = _amGroups.length;
 
+    // Total de participantes somando todos os grupos
+    const totalMembers = _amGroups.reduce((sum, g) => sum + (g.size || 0), 0);
+    const totalEl = document.getElementById('am-total-members');
+    if (totalEl) totalEl.textContent = totalMembers.toLocaleString('pt-BR') + ' membros total';
+
     const filtered = search ? _amGroups.filter(g => (g.subject || '').toLowerCase().includes(search)) : _amGroups;
 
     if (filtered.length === 0) {
@@ -2500,10 +2505,13 @@ function amSelectGroup(groupId, groupName) {
 
 // ==================== AM ADMINS LIST ====================
 
+function amFilterAdmins() { amRenderAdmins(); }
+
 function amRenderAdmins() {
     const list = document.getElementById('am-admins-list');
     if (!list) return;
     const countEl = document.getElementById('am-admins-count');
+    const search = (document.getElementById('am-admins-search')?.value || '').toLowerCase().trim();
 
     if (_amAdmins.length === 0) {
         list.innerHTML = '<div class="ga-empty">Selecione um grupo para ver os admins</div>';
@@ -2512,9 +2520,24 @@ function amRenderAdmins() {
         return;
     }
 
-    if (countEl) countEl.textContent = '(' + _amAdmins.length + ')';
+    // Filter by search (DDD, phone number, or name)
+    const filtered = search
+        ? _amAdmins.filter(a => {
+            const phone = (a.phone || '').toLowerCase();
+            const name = (a.name || '').toLowerCase();
+            const lid = (a.lid || '').toLowerCase();
+            return phone.includes(search) || name.includes(search) || lid.includes(search);
+        })
+        : _amAdmins;
 
-    list.innerHTML = _amAdmins.map(a => {
+    if (countEl) countEl.textContent = '(' + filtered.length + (search ? '/' + _amAdmins.length : '') + ')';
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="ga-empty">Nenhum admin encontrado para "' + search + '"</div>';
+        return;
+    }
+
+    list.innerHTML = filtered.map(a => {
         const checked = _amSelectedAdmins.has(a.jid) ? 'checked' : '';
         const isProtected = a.isMe || a.isSuper;
         const badge = a.isMe ? '<span class="am-badge am-badge-me">EU (ADM)</span>'
@@ -2522,16 +2545,24 @@ function amRenderAdmins() {
             : '';
         const displayName = a.name || '';
         const displayPhone = a.phone || a.lid || '?';
-        // Only show "ID interno" if phone is still a LID (not resolved to real number)
         const hasRealPhone = a.phone && a.phone.length >= 10 && a.phone !== a.lid;
         const lidHint = !hasRealPhone && !a.name ? '<span class="am-lid-hint">ID interno</span>' : '';
+
+        // Format phone with DDD highlight
+        let phoneDisplay = displayPhone;
+        if (hasRealPhone && displayPhone.length >= 12) {
+            const countryCode = displayPhone.slice(0, 2);
+            const ddd = displayPhone.slice(2, 4);
+            const rest = displayPhone.slice(4);
+            phoneDisplay = countryCode + ' <strong>(' + ddd + ')</strong> ' + rest;
+        }
 
         if (isProtected) {
             return `<label class="ga-item am-protected">
                 <input type="checkbox" disabled>
                 <div class="ga-item-info">
                     <div class="ga-item-name">${displayName ? displayName + ' ' : ''}${badge}</div>
-                    <div class="ga-item-meta">${displayPhone} · Protegido</div>
+                    <div class="ga-item-meta">${phoneDisplay} · Protegido</div>
                 </div>
             </label>`;
         }
@@ -2539,8 +2570,8 @@ function amRenderAdmins() {
         return `<label class="ga-item ${checked ? 'selected' : ''}">
             <input type="checkbox" ${checked} onchange="amToggleAdmin('${a.jid}')">
             <div class="ga-item-info">
-                <div class="ga-item-name">${displayName || displayPhone} ${lidHint}</div>
-                <div class="ga-item-meta">${displayName ? displayPhone + ' · ' : ''}Admin</div>
+                <div class="ga-item-name">${phoneDisplay} ${lidHint}</div>
+                <div class="ga-item-meta">${displayName ? displayName + ' · ' : ''}Admin</div>
             </div>
         </label>`;
     }).join('');

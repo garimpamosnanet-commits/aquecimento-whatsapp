@@ -395,6 +395,7 @@
                 <div class="ga-panel">
                     <div class="ga-panel-header">
                         <span class="ga-panel-title">2. Grupos (<span id="am-groups-count">0</span>)</span>
+                        <span class="am-total-members" id="am-total-members"></span>
                     </div>
                     <input type="text" id="am-groups-search" class="ga-search" placeholder="Buscar grupo..." oninput="amFilterGroups()">
                     <div id="am-groups-list" class="ga-list"></div>
@@ -409,6 +410,7 @@
                             <button class="btn btn-outline btn-xs" onclick="amDeselectAllAdmins()">Nenhum</button>
                         </div>
                     </div>
+                    <input type="text" id="am-admins-search" class="ga-search" placeholder="Buscar por DDD ou numero..." oninput="amFilterAdmins()">
                     <div id="am-admins-list" class="ga-list">
                         <div class="ga-empty">Selecione um grupo para ver os admins</div>
                     </div>

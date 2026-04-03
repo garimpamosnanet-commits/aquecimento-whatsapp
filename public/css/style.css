@@ -2182,3 +2182,9 @@ body::before {
     color: var(--text-muted);
     margin-left: 4px;
 }
+.am-total-members {
+    font-size: 11px;
+    color: var(--primary);
+    font-weight: 600;
+    margin-left: 8px;
+}
