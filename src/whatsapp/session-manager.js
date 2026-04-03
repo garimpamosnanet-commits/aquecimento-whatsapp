@@ -96,7 +96,9 @@ class SessionManager {
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 30000,
             emitOwnEvents: true,
-            generateHighQualityLinkPreview: false
+            generateHighQualityLinkPreview: false,
+            retryRequestDelayMs: 2000,
+            qrTimeout: 40000
         };
 
         if (agent) {
@@ -157,8 +159,10 @@ class SessionManager {
             if (connection === 'close') {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const reason = DisconnectReason;
+                const currentChip = db.getChipById(chip.id);
+                const wasInQRPhase = currentChip && currentChip.status === 'qr_pending';
 
-                console.log(`[SessionManager] ${sessionId} desconectado. Code: ${statusCode}`);
+                console.log(`[SessionManager] ${sessionId} desconectado. Code: ${statusCode}, wasQR: ${wasInQRPhase}`);
 
                 if (statusCode === reason.loggedOut) {
                     // User logged out - clean session
@@ -179,8 +183,13 @@ class SessionManager {
                             this.notifier.chipDisconnected(name);
                         }
                     }
+                } else if (wasInQRPhase) {
+                    // Was waiting for QR scan — DON'T auto-reconnect (causes QR oscillation)
+                    // User can click "Recarregar QR Code" manually
+                    console.log(`[SessionManager] ${sessionId} QR expirou. Aguardando usuario recarregar.`);
+                    this.io.emit('qr_expired', { sessionId, chipId: chip.id });
                 } else if (statusCode !== reason.connectionClosed) {
-                    // Try to reconnect after delay
+                    // Already authenticated chip — try to reconnect after delay
                     const delay = Math.min(5000 + Math.random() * 5000, 30000);
                     console.log(`[SessionManager] Reconectando ${sessionId} em ${Math.round(delay / 1000)}s...`);
                     const timer = setTimeout(() => this.connect(sessionId), delay);

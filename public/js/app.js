@@ -80,6 +80,17 @@ socket.on('qr', ({ sessionId, chipId, qr }) => {
     qrImage.innerHTML = `<img src="${qr}" alt="QR Code">`;
 });
 
+socket.on('qr_expired', ({ sessionId, chipId }) => {
+    if (currentQRSessionId === sessionId) {
+        const qrImage = document.getElementById('qr-image');
+        qrImage.innerHTML = `<div style="text-align:center;padding:20px">
+            <div style="font-size:48px;margin-bottom:10px">⏰</div>
+            <div style="color:#666;font-size:14px;margin-bottom:16px">QR Code expirou.<br>Clique abaixo para gerar um novo.</div>
+            <button class="btn btn-primary btn-sm" onclick="reloadQR()">🔄 Gerar novo QR Code</button>
+        </div>`;
+    }
+});
+
 socket.on('connected', ({ sessionId, chipId, phone }) => {
     if (currentQRSessionId === sessionId) {
         const qrImage = document.getElementById('qr-image');
