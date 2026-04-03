@@ -45,26 +45,23 @@ class GroupManager {
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
         const groups = await sock.groupFetchAllParticipating();
-        const myPhone = this._extractPhone(sock.user.id);
-        const myLid = sock.user.lid ? this._extractPhone(sock.user.lid) : null;
-
-        console.log(`[GroupManager] Admin phone: ${myPhone}, LID: ${myLid}, total groups: ${Object.keys(groups).length}`);
+        console.log(`[GroupManager] Total groups: ${Object.keys(groups).length}`);
 
         const result = [];
         for (const [groupId, group] of Object.entries(groups)) {
-            const me = group.participants.find(p => this._isMe(p.id, sock));
-            if (me && (me.admin === 'admin' || me.admin === 'superadmin')) {
-                result.push({
-                    id: groupId,
-                    subject: group.subject || 'Sem nome',
-                    size: group.participants.length,
-                    creation: group.creation,
-                    desc: group.desc || ''
-                });
-            }
+            // Skip communities (only show regular groups)
+            if (group.isCommunity) continue;
+
+            result.push({
+                id: groupId,
+                subject: group.subject || 'Sem nome',
+                size: group.participants.length,
+                creation: group.creation,
+                desc: group.desc || ''
+            });
         }
 
-        console.log(`[GroupManager] Admin groups found: ${result.length} of ${Object.keys(groups).length} total`);
+        console.log(`[GroupManager] Groups (non-community): ${result.length}`);
         return result.sort((a, b) => (a.subject || '').localeCompare(b.subject || ''));
     }
 
