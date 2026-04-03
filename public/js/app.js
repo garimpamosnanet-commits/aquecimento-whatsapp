@@ -2522,8 +2522,9 @@ function amRenderAdmins() {
             : '';
         const displayName = a.name || '';
         const displayPhone = a.phone || a.lid || '?';
-        const isLid = a.jid && a.jid.includes('@lid');
-        const lidHint = isLid && !a.name ? '<span class="am-lid-hint">ID interno</span>' : '';
+        // Only show "ID interno" if phone is still a LID (not resolved to real number)
+        const hasRealPhone = a.phone && a.phone.length >= 10 && a.phone !== a.lid;
+        const lidHint = !hasRealPhone && !a.name ? '<span class="am-lid-hint">ID interno</span>' : '';
 
         if (isProtected) {
             return `<label class="ga-item am-protected">
