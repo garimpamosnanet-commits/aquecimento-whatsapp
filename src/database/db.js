@@ -122,6 +122,13 @@ function getDb() {
         console.log('[DB] Migrated: added admin_manage collections');
     }
 
+    // Migrate: add group_done_marks (shared group tracking)
+    if (!data.group_done_marks) {
+        data.group_done_marks = {};  // { groupId: { done_at, done_by } }
+        saveDb(data);
+        console.log('[DB] Migrated: added group_done_marks');
+    }
+
     return data;
 }
 
@@ -760,6 +767,25 @@ function getFailedAdminManageItems(operationId) {
     return (data.admin_manage_items || []).filter(i => i.operation_id === operationId && i.status === 'failed');
 }
 
+// ==================== GROUP DONE MARKS ====================
+
+function getGroupDoneMarks() {
+    const data = loadDb();
+    return data.group_done_marks || {};
+}
+
+function setGroupDoneMark(groupId, done, userName) {
+    const data = loadDb();
+    if (!data.group_done_marks) data.group_done_marks = {};
+    if (done) {
+        data.group_done_marks[groupId] = { done_at: new Date().toISOString(), done_by: userName || 'unknown' };
+    } else {
+        delete data.group_done_marks[groupId];
+    }
+    saveDb(data);
+    return data.group_done_marks;
+}
+
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
@@ -780,5 +806,6 @@ module.exports = {
     getCustomMessages, saveCustomMessages,
     createAdminManageOperation, getAdminManageOperation, updateAdminManageOperation,
     getAdminManageOperations, addAdminManageItems, getAdminManageItems,
-    updateAdminManageItem, getFailedAdminManageItems
+    updateAdminManageItem, getFailedAdminManageItems,
+    getGroupDoneMarks, setGroupDoneMark
 };

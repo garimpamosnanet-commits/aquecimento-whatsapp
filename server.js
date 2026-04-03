@@ -84,6 +84,10 @@ app.use((req, res, next) => {
         }
         return res.redirect('/login');
     }
+    // Attach user name to request for tracking
+    const cookies = parseCookies(req.headers.cookie);
+    const session = sessions.get(cookies.auth_token);
+    if (session) req.userName = session.name;
     next();
 });
 

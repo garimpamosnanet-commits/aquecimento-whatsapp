@@ -419,6 +419,19 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json(adminManager.getLastDebugAttrs() || { message: 'No data yet. Click a group in Gerenciar Admins first.' });
     });
 
+    // ==================== GROUP DONE MARKS ====================
+
+    router.get('/group-done-marks', (req, res) => {
+        res.json(db.getGroupDoneMarks());
+    });
+
+    router.post('/group-done-marks', (req, res) => {
+        const { groupId, done } = req.body;
+        if (!groupId) return res.status(400).json({ error: 'groupId required' });
+        const marks = db.setGroupDoneMark(groupId, !!done, req.userName || 'unknown');
+        res.json(marks);
+    });
+
     // List warming chips (for selection in group-add)
     router.get('/warming-chips', (req, res) => {
         res.json(db.getWarmingChipsForAdd());

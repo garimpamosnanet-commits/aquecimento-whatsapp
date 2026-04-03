@@ -2381,22 +2381,23 @@ let _amRunning = false;
 let _amPaused = false;
 let _amCurrentOpId = null;
 let _amGroupFilter = 'all'; // 'all', 'pending', 'done'
+let _amDoneMarks = {}; // Shared via server DB { groupId: { done_at, done_by } }
 
-// Persist done groups in localStorage
-function _amGetDoneGroups() {
-    try { return JSON.parse(localStorage.getItem('am_done_groups') || '{}'); } catch(e) { return {}; }
-}
-function _amSetGroupDone(groupId, done) {
-    const map = _amGetDoneGroups();
-    if (done) map[groupId] = Date.now();
-    else delete map[groupId];
-    localStorage.setItem('am_done_groups', JSON.stringify(map));
+function _amLoadDoneMarks() {
+    fetch('/api/group-done-marks').then(r => r.json()).then(marks => {
+        _amDoneMarks = marks || {};
+        amRenderGroups();
+    }).catch(() => {});
 }
 function _amIsGroupDone(groupId) {
-    return !!_amGetDoneGroups()[groupId];
+    return !!_amDoneMarks[groupId];
+}
+function _amGetDoneInfo(groupId) {
+    return _amDoneMarks[groupId] || null;
 }
 
 function loadAdminManageTab() {
+    _amLoadDoneMarks();
     loadAmAdminInstances();
 }
 
@@ -2498,12 +2499,14 @@ function amRenderGroups() {
     list.innerHTML = filtered.map(g => {
         const selected = _amSelectedGroupId === g.id ? 'selected' : '';
         const isDone = _amIsGroupDone(g.id);
+        const doneInfo = _amGetDoneInfo(g.id);
+        const doneTooltip = doneInfo ? `Feito por ${doneInfo.done_by || '?'} em ${new Date(doneInfo.done_at).toLocaleString('pt-BR')}` : 'Marcar como feito';
         return `<div class="ga-item ${selected} ${isDone ? 'am-group-done' : ''}" onclick="amSelectGroup('${g.id}', '${(g.subject || '').replace(/'/g, "\\'")}')">
             <div class="ga-item-info">
                 <div class="ga-item-name">${isDone ? '✅ ' : ''}${g.subject || 'Sem nome'}</div>
-                <div class="ga-item-meta">${g.size} participantes</div>
+                <div class="ga-item-meta">${g.size} participantes${isDone && doneInfo ? ' · feito por ' + (doneInfo.done_by || '?') : ''}</div>
             </div>
-            <button class="am-done-btn ${isDone ? 'done' : ''}" onclick="event.stopPropagation(); amToggleGroupDone('${g.id}')" title="${isDone ? 'Desmarcar' : 'Marcar como feito'}">
+            <button class="am-done-btn ${isDone ? 'done' : ''}" onclick="event.stopPropagation(); amToggleGroupDone('${g.id}')" title="${doneTooltip}">
                 ${isDone ? '✓' : '○'}
             </button>
         </div>`;
@@ -2518,8 +2521,21 @@ function amSetGroupFilter(filter) {
 }
 
 function amToggleGroupDone(groupId) {
-    _amSetGroupDone(groupId, !_amIsGroupDone(groupId));
+    const newState = !_amIsGroupDone(groupId);
+    // Optimistic update
+    if (newState) _amDoneMarks[groupId] = { done_at: new Date().toISOString(), done_by: 'eu' };
+    else delete _amDoneMarks[groupId];
     amRenderGroups();
+
+    // Persist to server
+    fetch('/api/group-done-marks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, done: newState })
+    }).then(r => r.json()).then(marks => {
+        _amDoneMarks = marks;
+        amRenderGroups();
+    }).catch(() => {});
 }
 
 function amSelectGroup(groupId, groupName) {
