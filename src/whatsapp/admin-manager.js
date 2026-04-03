@@ -150,6 +150,15 @@ class AdminManager {
         return this._lastDebugAttrs;
     }
 
+    async getGroupInviteLink(adminSessionId, groupId) {
+        const sock = this.sessionManager.getSocket(adminSessionId);
+        if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
+
+        const code = await sock.groupInviteCode(groupId);
+        if (!code) throw new Error('Nao foi possivel obter o link de convite');
+        return `https://chat.whatsapp.com/${code}`;
+    }
+
     async demoteFromAdmin(adminSessionId, groupId, jid) {
         const sock = this.sessionManager.getSocket(adminSessionId);
         if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');

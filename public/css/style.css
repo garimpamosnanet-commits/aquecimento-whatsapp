@@ -2267,6 +2267,35 @@ body::before {
     text-decoration: line-through;
     text-decoration-color: var(--success);
 }
+.am-group-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.am-copy-link-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid rgba(59, 130, 246, 0.3);
+    background: rgba(59, 130, 246, 0.08);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+}
+.am-copy-link-btn:hover {
+    border-color: #3B82F6;
+    background: rgba(59, 130, 246, 0.18);
+    transform: scale(1.1);
+}
+.am-copy-link-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
 .am-done-btn {
     width: 28px;
     height: 28px;

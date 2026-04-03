@@ -2506,14 +2506,41 @@ function amRenderGroups() {
                 <div class="ga-item-name">${isDone ? '✅ ' : ''}${g.subject || 'Sem nome'}</div>
                 <div class="ga-item-meta">${g.size} participantes${isDone && doneInfo ? ' · feito por ' + (doneInfo.done_by || '?') : ''}</div>
             </div>
-            <button class="am-done-btn ${isDone ? 'done' : ''}" onclick="event.stopPropagation(); amToggleGroupDone('${g.id}')" title="${doneTooltip}">
-                ${isDone ? '✓' : '○'}
-            </button>
+            <div class="am-group-actions">
+                <button class="am-copy-link-btn" id="am-copy-${g.id.replace(/[@.]/g, '_')}" onclick="event.stopPropagation(); amCopyInviteLink('${g.id}')" title="Copiar link de convite">
+                    🔗
+                </button>
+                <button class="am-done-btn ${isDone ? 'done' : ''}" onclick="event.stopPropagation(); amToggleGroupDone('${g.id}')" title="${doneTooltip}">
+                    ${isDone ? '✓' : '○'}
+                </button>
+            </div>
         </div>`;
     }).join('');
 }
 
 function amFilterGroups() { amRenderGroups(); }
+
+async function amCopyInviteLink(groupId) {
+    const chipId = document.getElementById('am-admin-select').value;
+    if (!chipId) { showToast('Selecione um chip ADM primeiro', 'danger'); return; }
+
+    const btnId = 'am-copy-' + groupId.replace(/[@.]/g, '_');
+    const btn = document.getElementById(btnId);
+    if (btn) { btn.innerHTML = '⏳'; btn.disabled = true; }
+
+    try {
+        const res = await fetch(`/api/admin-manage/invite-link/${chipId}/${encodeURIComponent(groupId)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro');
+
+        await navigator.clipboard.writeText(data.link);
+        showToast('Link copiado!', 'success');
+        if (btn) { btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = '🔗'; btn.disabled = false; }, 2000); }
+    } catch (err) {
+        showToast('Erro ao copiar link: ' + err.message, 'danger');
+        if (btn) { btn.innerHTML = '❌'; setTimeout(() => { btn.innerHTML = '🔗'; btn.disabled = false; }, 2000); }
+    }
+}
 
 function amSetGroupFilter(filter) {
     _amGroupFilter = filter;

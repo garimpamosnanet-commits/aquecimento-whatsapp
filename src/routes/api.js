@@ -419,6 +419,19 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json(adminManager.getLastDebugAttrs() || { message: 'No data yet. Click a group in Gerenciar Admins first.' });
     });
 
+    // ==================== GROUP INVITE LINK ====================
+
+    router.get('/admin-manage/invite-link/:chipId/:groupId', async (req, res) => {
+        try {
+            const chip = db.getChipById(parseInt(req.params.chipId));
+            if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+            const link = await adminManager.getGroupInviteLink(chip.session_id, req.params.groupId);
+            res.json({ link });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // ==================== GROUP DONE MARKS ====================
 
     router.get('/group-done-marks', (req, res) => {
