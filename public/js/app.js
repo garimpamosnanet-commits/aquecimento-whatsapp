@@ -2376,6 +2376,7 @@ let _amGroups = [];
 let _amSelectedGroupId = null;
 let _amAdmins = [];
 let _amSelectedAdmins = new Set();
+let _amInviteLinksCache = {}; // { groupId: { link, fetched_at } }
 let _amMode = 'demote';
 let _amRunning = false;
 let _amPaused = false;
@@ -2454,10 +2455,55 @@ function onAmAdminSelect() {
             panels.style.display = 'grid';
             amRenderGroups();
             amRenderAdmins();
+            // Load cached links + trigger background fetch for missing ones
+            amLoadAndFetchInviteLinks(chipId, data);
         })
         .catch(err => {
             infoEl.innerHTML = '<div class="ga-error">Erro: ' + err.message + '</div>';
         });
+}
+
+// ==================== AM INVITE LINKS CACHE ====================
+
+function amLoadAndFetchInviteLinks(chipId, groups) {
+    // 1. Load whatever is already cached
+    fetch('/api/admin-manage/invite-links-cache')
+        .then(r => r.json())
+        .then(cache => {
+            _amInviteLinksCache = cache || {};
+            amUpdateLinksBadge();
+
+            // 2. Check how many are missing
+            const missing = groups.filter(g => !_amInviteLinksCache[g.id] || !_amInviteLinksCache[g.id].link);
+            if (missing.length === 0) {
+                console.log('[Links] All ' + groups.length + ' links already cached');
+                return;
+            }
+
+            console.log('[Links] ' + (groups.length - missing.length) + ' cached, ' + missing.length + ' missing — fetching in background...');
+
+            // 3. Trigger background fetch on server
+            fetch('/api/admin-manage/fetch-all-invite-links', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chipId: parseInt(chipId), groups: groups.map(g => ({ id: g.id })) })
+            });
+        })
+        .catch(() => {});
+}
+
+function amUpdateLinksBadge() {
+    const btn = document.querySelector('.am-export-links-btn');
+    if (!btn) return;
+    const cached = Object.keys(_amInviteLinksCache).filter(id => _amGroups.some(g => g.id === id)).length;
+    const total = _amGroups.length;
+    if (cached >= total && total > 0) {
+        btn.innerHTML = '📋 Exportar Links ✅';
+    } else if (cached > 0) {
+        btn.innerHTML = '📋 Exportar Links (' + cached + '/' + total + ')';
+    } else {
+        btn.innerHTML = '📋 Exportar Links';
+    }
 }
 
 // ==================== AM GROUPS ====================
@@ -2521,21 +2567,30 @@ function amRenderGroups() {
 function amFilterGroups() { amRenderGroups(); }
 
 async function amCopyInviteLink(groupId) {
-    const chipId = document.getElementById('am-admin-select').value;
-    if (!chipId) { showToast('Selecione um chip ADM primeiro', 'danger'); return; }
-
     const btnId = 'am-copy-' + groupId.replace(/[@.]/g, '_');
     const btn = document.getElementById(btnId);
+
+    // Try cache first (instant)
+    if (_amInviteLinksCache[groupId] && _amInviteLinksCache[groupId].link) {
+        await navigator.clipboard.writeText(_amInviteLinksCache[groupId].link);
+        showToast('Link copiado!', 'success');
+        if (btn) { btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = '🔗'; }, 1500); }
+        return;
+    }
+
+    // Fallback: fetch live
+    const chipId = document.getElementById('am-admin-select').value;
+    if (!chipId) { showToast('Selecione um chip ADM primeiro', 'danger'); return; }
     if (btn) { btn.innerHTML = '⏳'; btn.disabled = true; }
 
     try {
         const res = await fetch(`/api/admin-manage/invite-link/${chipId}/${encodeURIComponent(groupId)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erro');
-
+        _amInviteLinksCache[groupId] = { link: data.link, fetched_at: new Date().toISOString() };
         await navigator.clipboard.writeText(data.link);
         showToast('Link copiado!', 'success');
-        if (btn) { btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = '🔗'; btn.disabled = false; }, 2000); }
+        if (btn) { btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = '🔗'; btn.disabled = false; }, 1500); }
     } catch (err) {
         showToast('Erro ao copiar link: ' + err.message, 'danger');
         if (btn) { btn.innerHTML = '❌'; setTimeout(() => { btn.innerHTML = '🔗'; btn.disabled = false; }, 2000); }
@@ -2545,64 +2600,90 @@ async function amCopyInviteLink(groupId) {
 let _amExportAbort = false;
 
 async function amExportAllLinks() {
-    const chipId = document.getElementById('am-admin-select').value;
-    if (!chipId) { showToast('Selecione um chip ADM primeiro', 'danger'); return; }
     if (_amGroups.length === 0) { showToast('Nenhum grupo carregado', 'danger'); return; }
 
-    _amExportAbort = false;
     const modal = document.getElementById('links-modal');
     const textarea = document.getElementById('am-links-textarea');
     const progressEl = document.getElementById('am-links-progress');
     modal.style.display = 'flex';
     textarea.value = '';
-    progressEl.textContent = `Buscando links... 0/${_amGroups.length}`;
 
+    // Check how many are cached
     const results = [];
-    let done = 0;
+    let cachedCount = 0;
+    let missingGroups = [];
 
     for (const g of _amGroups) {
+        if (_amInviteLinksCache[g.id] && _amInviteLinksCache[g.id].link) {
+            results.push({ name: g.subject || 'Sem nome', link: _amInviteLinksCache[g.id].link, size: g.size || 0 });
+            cachedCount++;
+        } else {
+            missingGroups.push(g);
+            results.push({ name: g.subject || 'Sem nome', link: '(buscando...)', size: g.size || 0 });
+        }
+    }
+
+    // Show cached immediately
+    textarea.value = _amFormatLinksText(results);
+
+    if (missingGroups.length === 0) {
+        progressEl.innerHTML = '<span style="color:var(--success);font-weight:700">✅ ' + _amGroups.length + ' links prontos (todos do cache)</span>';
+        return;
+    }
+
+    progressEl.textContent = cachedCount + '/' + _amGroups.length + ' do cache — buscando ' + missingGroups.length + ' restantes...';
+
+    // Fetch missing ones with delay
+    _amExportAbort = false;
+    const chipId = document.getElementById('am-admin-select').value;
+    if (!chipId) { showToast('Selecione um chip ADM primeiro', 'danger'); return; }
+
+    let fetchedCount = 0;
+    let errors = 0;
+
+    for (const g of missingGroups) {
         if (_amExportAbort) break;
 
-        // Retry com backoff pra rate limit
         let success = false;
         let retries = 0;
-        const maxRetries = 5;
-
-        while (!success && retries <= maxRetries && !_amExportAbort) {
+        while (!success && retries <= 4 && !_amExportAbort) {
             try {
                 const res = await fetch(`/api/admin-manage/invite-link/${chipId}/${encodeURIComponent(g.id)}`);
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Erro');
-                results.push({ name: g.subject || 'Sem nome', link: data.link, size: g.size || 0 });
+                // Update in results array
+                const idx = results.findIndex(r => r.name === (g.subject || 'Sem nome') && r.link === '(buscando...)');
+                if (idx !== -1) results[idx].link = data.link;
+                _amInviteLinksCache[g.id] = { link: data.link, fetched_at: new Date().toISOString() };
                 success = true;
             } catch (err) {
-                if (err.message && err.message.includes('rate') && retries < maxRetries) {
+                if (err.message && err.message.includes('rate') && retries < 4) {
                     retries++;
-                    const wait = retries * 10;
-                    progressEl.textContent = `Rate limit — aguardando ${wait}s antes de tentar novamente... (${done}/${_amGroups.length})`;
+                    const wait = retries * 12;
+                    progressEl.textContent = `Rate limit — aguardando ${wait}s... (${cachedCount + fetchedCount}/${_amGroups.length})`;
                     await new Promise(r => setTimeout(r, wait * 1000));
                 } else {
-                    results.push({ name: g.subject || 'Sem nome', link: '(erro: ' + err.message + ')', size: g.size || 0 });
-                    success = true; // sai do retry, registra erro
+                    const idx = results.findIndex(r => r.name === (g.subject || 'Sem nome') && r.link === '(buscando...)');
+                    if (idx !== -1) results[idx].link = '(erro)';
+                    errors++;
+                    success = true;
                 }
             }
         }
 
-        done++;
-        const errCount = results.filter(r => r.link.startsWith('(erro')).length;
-        progressEl.textContent = `Buscando links... ${done}/${_amGroups.length}${errCount ? ` (${errCount} erros)` : ''}`;
-
+        fetchedCount++;
+        progressEl.textContent = (cachedCount + fetchedCount) + '/' + _amGroups.length + (errors ? ` (${errors} erros)` : '');
         textarea.value = _amFormatLinksText(results);
         textarea.scrollTop = textarea.scrollHeight;
 
-        // Delay de 2s entre cada grupo pra nao bater rate limit
-        if (done < _amGroups.length && !_amExportAbort) {
-            await new Promise(r => setTimeout(r, 2000));
+        if (fetchedCount < missingGroups.length && !_amExportAbort) {
+            await new Promise(r => setTimeout(r, 2500));
         }
     }
 
-    const errCount = results.filter(r => r.link.startsWith('(erro')).length;
-    progressEl.innerHTML = `<span style="color:var(--success);font-weight:700">✅ ${done} grupos processados</span>${errCount ? ` <span style="color:var(--danger)">(${errCount} erros)</span>` : ''}`;
+    amUpdateLinksBadge();
+    const totalErrors = results.filter(r => r.link.startsWith('(erro')).length;
+    progressEl.innerHTML = '<span style="color:var(--success);font-weight:700">✅ ' + _amGroups.length + ' grupos processados</span>' + (totalErrors ? ' <span style="color:var(--danger)">(' + totalErrors + ' erros)</span>' : '');
 }
 
 function _amFormatLinksText(results) {
@@ -2977,6 +3058,20 @@ socket.on('admin_manage_complete', (summary) => {
     document.getElementById('am-execution').style.display = 'none';
     amShowReport(summary);
     showToast('Operacao concluida! ' + summary.demoteOk + ' rebaixados', 'success');
+});
+
+socket.on('invite_links_progress', (data) => {
+    if (data.status === 'done') {
+        // Reload cache from server
+        fetch('/api/admin-manage/invite-links-cache')
+            .then(r => r.json())
+            .then(cache => { _amInviteLinksCache = cache || {}; amUpdateLinksBadge(); })
+            .catch(() => {});
+    } else {
+        // Update badge with progress
+        const btn = document.querySelector('.am-export-links-btn');
+        if (btn) btn.innerHTML = '📋 Links... ' + data.done + '/' + data.total;
+    }
 });
 
 // ==================== AM REPORT ====================

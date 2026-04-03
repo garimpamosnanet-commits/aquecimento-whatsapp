@@ -129,6 +129,13 @@ function getDb() {
         console.log('[DB] Migrated: added group_done_marks');
     }
 
+    // Migrate: add group_invite_links cache
+    if (!data.group_invite_links) {
+        data.group_invite_links = {};  // { groupId: { link, fetched_at } }
+        saveDb(data);
+        console.log('[DB] Migrated: added group_invite_links');
+    }
+
     return data;
 }
 
@@ -786,6 +793,30 @@ function setGroupDoneMark(groupId, done, userName) {
     return data.group_done_marks;
 }
 
+// ==================== GROUP INVITE LINKS CACHE ====================
+
+function getGroupInviteLinks() {
+    const data = loadDb();
+    return data.group_invite_links || {};
+}
+
+function setGroupInviteLink(groupId, link) {
+    const data = loadDb();
+    if (!data.group_invite_links) data.group_invite_links = {};
+    data.group_invite_links[groupId] = { link, fetched_at: new Date().toISOString() };
+    saveDb(data);
+}
+
+function setGroupInviteLinksBulk(linksMap) {
+    const data = loadDb();
+    if (!data.group_invite_links) data.group_invite_links = {};
+    for (const [groupId, link] of Object.entries(linksMap)) {
+        data.group_invite_links[groupId] = { link, fetched_at: new Date().toISOString() };
+    }
+    saveDb(data);
+    return data.group_invite_links;
+}
+
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
@@ -807,5 +838,6 @@ module.exports = {
     createAdminManageOperation, getAdminManageOperation, updateAdminManageOperation,
     getAdminManageOperations, addAdminManageItems, getAdminManageItems,
     updateAdminManageItem, getFailedAdminManageItems,
-    getGroupDoneMarks, setGroupDoneMark
+    getGroupDoneMarks, setGroupDoneMark,
+    getGroupInviteLinks, setGroupInviteLink, setGroupInviteLinksBulk
 };

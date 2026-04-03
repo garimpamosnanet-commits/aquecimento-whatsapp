@@ -156,7 +156,76 @@ class AdminManager {
 
         const code = await sock.groupInviteCode(groupId);
         if (!code) throw new Error('Nao foi possivel obter o link de convite');
-        return `https://chat.whatsapp.com/${code}`;
+        const link = `https://chat.whatsapp.com/${code}`;
+
+        // Cache in DB
+        db.setGroupInviteLink(groupId, link);
+        return link;
+    }
+
+    // Fetch all invite links in background with rate limit protection
+    async fetchAllInviteLinks(adminSessionId, groups) {
+        if (this._fetchingLinks) return; // Already running
+        this._fetchingLinks = true;
+
+        const cached = db.getGroupInviteLinks();
+        const total = groups.length;
+        let done = 0;
+        let errors = 0;
+
+        console.log(`[AdminManager] Fetching invite links for ${total} groups in background...`);
+        this.io.emit('invite_links_progress', { done: 0, total, status: 'running' });
+
+        for (const g of groups) {
+            // Skip if already cached (less than 24h old)
+            if (cached[g.id] && cached[g.id].link && cached[g.id].fetched_at) {
+                const age = Date.now() - new Date(cached[g.id].fetched_at).getTime();
+                if (age < 24 * 60 * 60 * 1000) {
+                    done++;
+                    continue;
+                }
+            }
+
+            // Fetch with retry
+            let success = false;
+            let retries = 0;
+            while (!success && retries <= 4) {
+                try {
+                    const sock = this.sessionManager.getSocket(adminSessionId);
+                    if (!sock || !sock.user) throw new Error('Desconectado');
+                    const code = await sock.groupInviteCode(g.id);
+                    if (code) {
+                        db.setGroupInviteLink(g.id, `https://chat.whatsapp.com/${code}`);
+                        success = true;
+                    } else {
+                        throw new Error('Codigo vazio');
+                    }
+                } catch (err) {
+                    if (err.message && err.message.includes('rate') && retries < 4) {
+                        retries++;
+                        const wait = retries * 15000; // 15s, 30s, 45s, 60s
+                        console.log(`[AdminManager] Rate limit on invite link, waiting ${wait/1000}s...`);
+                        await this._delay(wait);
+                    } else {
+                        errors++;
+                        console.log(`[AdminManager] Failed invite link for ${g.id}: ${err.message}`);
+                        success = true; // Skip this one
+                    }
+                }
+            }
+
+            done++;
+            if (done % 5 === 0 || done === total) {
+                this.io.emit('invite_links_progress', { done, total, errors, status: done === total ? 'done' : 'running' });
+            }
+
+            // 2.5s delay between each to avoid rate limit
+            if (done < total) await this._delay(2500);
+        }
+
+        this._fetchingLinks = false;
+        console.log(`[AdminManager] Invite links done: ${done}/${total} (${errors} errors)`);
+        this.io.emit('invite_links_progress', { done, total, errors, status: 'done' });
     }
 
     async demoteFromAdmin(adminSessionId, groupId, jid) {
