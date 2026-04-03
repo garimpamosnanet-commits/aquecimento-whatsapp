@@ -425,6 +425,41 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json(adminManager.getLastDebugAttrs() || { message: 'No data yet. Click a group in Gerenciar Admins first.' });
     });
 
+    // Debug: raw group data to diagnose group fetching issues
+    router.get('/debug/raw-groups/:chipId', async (req, res) => {
+        const chipId = parseInt(req.params.chipId);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        const sock = sessionManager.getSocket(chip.session_id);
+        if (!sock || !sock.user) return res.status(400).json({ error: 'Socket nao conectado' });
+        try {
+            const groups = await sock.groupFetchAllParticipating();
+            const totalGroups = Object.keys(groups).length;
+            const myPhone = sock.user.id?.split('@')[0]?.split(':')[0];
+            const myLid = sock.user.lid?.split('@')[0]?.split(':')[0];
+
+            // Sample first 3 groups with participant detail
+            const sample = Object.entries(groups).slice(0, 3).map(([gid, g]) => {
+                const meParticipant = g.participants.find(p => {
+                    const pClean = p.id.split('@')[0].split(':')[0];
+                    return pClean === myPhone || pClean === myLid;
+                });
+                return {
+                    id: gid,
+                    subject: g.subject,
+                    participantCount: g.participants.length,
+                    meFound: !!meParticipant,
+                    meJid: meParticipant?.id,
+                    meAdmin: meParticipant?.admin,
+                    sampleParticipants: g.participants.slice(0, 3).map(p => ({ id: p.id, admin: p.admin }))
+                };
+            });
+            res.json({ totalGroups, myPhone, myLid, userJid: sock.user.id, userLid: sock.user.lid, sample });
+        } catch (err) {
+            res.status(500).json({ error: err.message, stack: err.stack?.split('\n').slice(0, 3) });
+        }
+    });
+
     // ==================== GROUP INVITE LINKS ====================
 
     // Get single invite link (tries cache first, then fetches)
