@@ -104,6 +104,7 @@
             <div class="tab" onclick="switchTab('rehab')">Reabilitação <span class="rehab-badge" id="rehab-badge" style="display:none">0</span></div>
             <div class="tab" onclick="switchTab('proxies')">Proxies</div>
             <div class="tab" onclick="switchTab('groupadd')">Adicionar aos Grupos <span class="ga-badge" id="ga-badge" style="display:none">0</span></div>
+            <div class="tab" onclick="switchTab('adminmanage')">Gerenciar Admins</div>
         </div>
 
         <!-- TAB: CHIPS -->
@@ -367,6 +368,103 @@
 
             <!-- STEP 7: History -->
             <div id="ga-history" class="ga-history" style="display:none"></div>
+        </div>
+
+        <!-- TAB: ADMIN MANAGE -->
+        <div id="tab-adminmanage" class="tab-content">
+            <div class="section-header">
+                <h2>Gerenciar Admins</h2>
+                <button class="btn btn-outline btn-sm" onclick="loadAdminManageHistory()">Historico</button>
+            </div>
+
+            <!-- STEP 1: Admin Instance Selector -->
+            <div class="ga-section">
+                <label class="ga-label">1. Instancia ADM do Cliente</label>
+                <div class="ga-row">
+                    <select id="am-admin-select" class="ga-select" onchange="onAmAdminSelect()">
+                        <option value="">Selecione uma instancia ADM...</option>
+                    </select>
+                    <button class="btn btn-outline btn-sm" onclick="loadAmAdminInstances()">Atualizar</button>
+                </div>
+                <div id="am-admin-info" class="ga-admin-info" style="display:none"></div>
+            </div>
+
+            <!-- STEP 2: Groups + Admins (side by side) -->
+            <div class="ga-panels" id="am-panels" style="display:none">
+                <!-- Left: Groups -->
+                <div class="ga-panel">
+                    <div class="ga-panel-header">
+                        <span class="ga-panel-title">2. Grupos (<span id="am-groups-count">0</span>)</span>
+                    </div>
+                    <input type="text" id="am-groups-search" class="ga-search" placeholder="Buscar grupo..." oninput="amFilterGroups()">
+                    <div id="am-groups-list" class="ga-list"></div>
+                </div>
+
+                <!-- Right: Admins of selected group -->
+                <div class="ga-panel">
+                    <div class="ga-panel-header">
+                        <span class="ga-panel-title">3. Admins do Grupo <span id="am-admins-count"></span></span>
+                        <div class="ga-panel-actions">
+                            <button class="btn btn-outline btn-xs" onclick="amSelectAllAdmins()">Todos</button>
+                            <button class="btn btn-outline btn-xs" onclick="amDeselectAllAdmins()">Nenhum</button>
+                        </div>
+                    </div>
+                    <div id="am-admins-list" class="ga-list">
+                        <div class="ga-empty">Selecione um grupo para ver os admins</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 4: Mode + Config -->
+            <div id="am-config" class="am-config" style="display:none">
+                <label class="ga-label">4. Modo de Acao</label>
+                <div class="am-modes">
+                    <label class="am-mode-option selected" onclick="amSetMode('demote')">
+                        <input type="radio" name="am-mode" value="demote" checked>
+                        <div class="am-mode-info">
+                            <strong>Rebaixar</strong>
+                            <small>Remove admin, mantem no grupo</small>
+                        </div>
+                    </label>
+                    <label class="am-mode-option" onclick="amSetMode('demote_remove')">
+                        <input type="radio" name="am-mode" value="demote_remove">
+                        <div class="am-mode-info">
+                            <strong>Rebaixar + Remover</strong>
+                            <small>Remove admin E expulsa do grupo</small>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- STEP 5: Summary -->
+            <div id="am-summary" class="ga-summary" style="display:none"></div>
+
+            <!-- STEP 6: Execution -->
+            <div id="am-execution" class="ga-execution" style="display:none">
+                <div class="ga-progress-section">
+                    <div class="ga-progress-header">
+                        <span id="am-progress-text">0/0 (0%)</span>
+                        <div class="ga-controls">
+                            <button class="btn btn-warning btn-sm" id="am-btn-pause" onclick="amTogglePause()">Pausar</button>
+                            <button class="btn btn-danger btn-sm" onclick="amStop()">Parar</button>
+                        </div>
+                    </div>
+                    <div class="ga-progress-bar">
+                        <div class="ga-progress-fill" id="am-progress-fill" style="width:0%"></div>
+                    </div>
+                    <div id="am-progress-stats" class="ga-progress-stats"></div>
+                </div>
+                <div class="ga-log-section">
+                    <div class="ga-log-header">Log em tempo real</div>
+                    <div id="am-log" class="ga-log"></div>
+                </div>
+            </div>
+
+            <!-- STEP 7: Report -->
+            <div id="am-report" class="ga-report" style="display:none"></div>
+
+            <!-- STEP 8: History -->
+            <div id="am-history" class="ga-history" style="display:none"></div>
         </div>
 
         <!-- TAB: PROXIES -->

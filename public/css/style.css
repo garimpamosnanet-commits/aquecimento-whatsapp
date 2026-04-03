@@ -2088,3 +2088,86 @@ body::before {
     font-size: 13px;
 }
 .bulk-bar .btn { flex-shrink: 0; }
+
+/* ==================== ADMIN MANAGE (GERENCIAR ADMINS) ==================== */
+.am-config {
+    margin-top: 16px;
+}
+.am-modes {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+}
+.am-mode-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.am-mode-option:hover {
+    border-color: var(--border-hover);
+}
+.am-mode-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-light);
+}
+.am-mode-option input[type="radio"] {
+    margin: 0;
+    accent-color: var(--accent);
+}
+.am-mode-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.am-mode-info strong {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.am-mode-info small {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+.am-warning-box {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 500;
+}
+.am-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-left: 6px;
+}
+.am-badge-me {
+    background: rgba(139, 92, 246, 0.12);
+    color: #8B5CF6;
+}
+.am-badge-super {
+    background: rgba(249, 115, 22, 0.12);
+    color: var(--warming);
+}
+.am-protected {
+    opacity: 0.5;
+    pointer-events: none;
+}
+.am-protected .ga-item-meta {
+    color: var(--text-muted);
+    font-style: italic;
+}

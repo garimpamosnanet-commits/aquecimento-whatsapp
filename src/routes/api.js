@@ -20,7 +20,7 @@ const mediaStorage = multer.diskStorage({
 });
 const upload = multer({ storage: mediaStorage, limits: { fileSize: 10 * 1024 * 1024 } });
 
-module.exports = function(sessionManager, warmingEngine, groupManager) {
+module.exports = function(sessionManager, warmingEngine, groupManager, adminManager) {
 
     // ==================== CHIPS ====================
 
@@ -739,6 +739,134 @@ module.exports = function(sessionManager, warmingEngine, groupManager) {
         } catch (err) {
             res.json({ success: false, error: err.message });
         }
+    });
+
+    // ==================== ADMIN MANAGE (GERENCIAR ADMINS) ====================
+
+    // Get admins of a specific group
+    router.get('/admin-manage/group-admins/:chipId/:groupId', async (req, res) => {
+        const chipId = parseInt(req.params.chipId);
+        const groupId = req.params.groupId;
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Instancia nao encontrada' });
+        if (!sessionManager.isConnected(chip.session_id)) {
+            return res.status(400).json({ error: 'Instancia nao esta conectada' });
+        }
+        try {
+            const admins = await adminManager.getGroupAdmins(chip.session_id, groupId);
+            res.json(admins);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Start admin manage operation
+    router.post('/admin-manage/start', async (req, res) => {
+        if (adminManager.isRunning()) {
+            return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
+        }
+        const { adminChipId, items, config } = req.body;
+        if (!adminChipId || !items || items.length === 0) {
+            return res.status(400).json({ error: 'Instancia ADM e pelo menos 1 admin sao obrigatorios' });
+        }
+
+        const operation = db.createAdminManageOperation(adminChipId, config || {});
+        db.addAdminManageItems(operation.id, items);
+
+        adminManager.executeAdminManage(operation.id).catch(err => {
+            console.error('[AdminManage] Erro:', err);
+        });
+
+        res.json({ success: true, operationId: operation.id, totalItems: items.length });
+    });
+
+    // Pause
+    router.post('/admin-manage/pause', (req, res) => {
+        adminManager.pause();
+        res.json({ success: true });
+    });
+
+    // Resume
+    router.post('/admin-manage/resume', (req, res) => {
+        adminManager.resume();
+        res.json({ success: true });
+    });
+
+    // Stop
+    router.post('/admin-manage/stop', (req, res) => {
+        adminManager.stop();
+        res.json({ success: true });
+    });
+
+    // Operations history
+    router.get('/admin-manage/operations', (req, res) => {
+        const limit = parseInt(req.query.limit) || 20;
+        const ops = db.getAdminManageOperations(limit).map(op => {
+            const adminChip = db.getChipById(op.admin_chip_id);
+            return { ...op, admin_name: adminChip?.name, admin_phone: adminChip?.phone };
+        });
+        res.json(ops);
+    });
+
+    // Operation details
+    router.get('/admin-manage/operations/:id', (req, res) => {
+        const opId = parseInt(req.params.id);
+        const op = db.getAdminManageOperation(opId);
+        if (!op) return res.status(404).json({ error: 'Operacao nao encontrada' });
+        const items = db.getAdminManageItems(opId);
+        const adminChip = db.getChipById(op.admin_chip_id);
+        res.json({ ...op, items, admin_name: adminChip?.name, admin_phone: adminChip?.phone });
+    });
+
+    // Export CSV
+    router.get('/admin-manage/operations/:id/csv', (req, res) => {
+        const opId = parseInt(req.params.id);
+        const op = db.getAdminManageOperation(opId);
+        if (!op) return res.status(404).json({ error: 'Operacao nao encontrada' });
+        const items = db.getAdminManageItems(opId);
+        const config = JSON.parse(op.config || '{}');
+
+        let csv = 'Numero,Grupo,Rebaixar,Remover,Status,Erro\n';
+        for (const item of items) {
+            const demoteLabel = item.demote_status === 'success' ? 'OK' : item.demote_status === 'failed' ? 'Falhou' : 'N/A';
+            const removeLabel = config.mode === 'demote_remove' ? (item.remove_status === 'success' ? 'OK' : item.remove_status === 'failed' ? 'Falhou' : 'N/A') : 'N/A';
+            csv += `${item.phone},"${(item.group_name || '').replace(/"/g, '""')}",${demoteLabel},${removeLabel},${item.status},"${(item.error_message || '').replace(/"/g, '""')}"\n`;
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=admin_manage_${opId}.csv`);
+        res.send(csv);
+    });
+
+    // Retry failed items
+    router.post('/admin-manage/retry/:id', async (req, res) => {
+        if (adminManager.isRunning()) {
+            return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
+        }
+        const opId = parseInt(req.params.id);
+        const originalOp = db.getAdminManageOperation(opId);
+        if (!originalOp) return res.status(404).json({ error: 'Operacao nao encontrada' });
+
+        const failedItems = db.getFailedAdminManageItems(opId);
+        if (failedItems.length === 0) {
+            return res.status(400).json({ error: 'Nenhum item falhou nesta operacao' });
+        }
+
+        const config = JSON.parse(originalOp.config || '{}');
+        const retryOp = db.createAdminManageOperation(originalOp.admin_chip_id, config);
+
+        const items = failedItems.map(fi => ({
+            jid: fi.jid, phone: fi.phone,
+            group_id: fi.group_id, group_name: fi.group_name,
+            is_me: fi.is_me, is_super: fi.is_super
+        }));
+        db.addAdminManageItems(retryOp.id, items);
+
+        adminManager.executeAdminManage(retryOp.id).catch(err => {
+            console.error('[AdminManage Retry] Erro:', err);
+        });
+
+        res.json({ success: true, operationId: retryOp.id, retrying: items.length });
     });
 
     return router;

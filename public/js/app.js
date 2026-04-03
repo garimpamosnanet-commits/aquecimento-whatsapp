@@ -877,7 +877,7 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
     const tabs = document.querySelectorAll('.tab');
-    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2, 'rehab': 3, 'proxies': 4, 'groupadd': 5 };
+    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2, 'rehab': 3, 'proxies': 4, 'groupadd': 5, 'adminmanage': 6 };
     tabs[tabMap[tabName]].classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
 
@@ -886,6 +886,7 @@ function switchTab(tabName) {
     if (tabName === 'rehab') loadRehab();
     if (tabName === 'proxies') loadProxies();
     if (tabName === 'groupadd') loadGroupAddTab();
+    if (tabName === 'adminmanage') loadAdminManageTab();
 }
 
 // ==================== TEST MESSAGE ====================
@@ -2368,3 +2369,529 @@ function bulkAction(action) {
 
 // Toast listener for server-side toasts
 socket.on('toast', (data) => { showToast(data.message, data.type || 'info'); });
+
+// ==================== ADMIN MANAGE TAB (GERENCIAR ADMINS) ====================
+
+let _amGroups = [];
+let _amSelectedGroupId = null;
+let _amAdmins = [];
+let _amSelectedAdmins = new Set();
+let _amMode = 'demote';
+let _amRunning = false;
+let _amPaused = false;
+let _amCurrentOpId = null;
+
+function loadAdminManageTab() {
+    loadAmAdminInstances();
+}
+
+function loadAmAdminInstances() {
+    fetch('/api/admin-instances').then(r => r.json()).then(admins => {
+        const select = document.getElementById('am-admin-select');
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="">Selecione uma instancia ADM...</option>';
+        for (const adm of admins) {
+            const label = (adm.name || 'ADM') + (adm.phone ? ' (' + adm.phone + ')' : '');
+            const status = adm.is_connected ? '🟢' : '🔴';
+            const opt = document.createElement('option');
+            opt.value = adm.id;
+            opt.textContent = status + ' ' + label;
+            opt.disabled = !adm.is_connected;
+            select.appendChild(opt);
+        }
+        if (current) select.value = current;
+    });
+}
+
+function onAmAdminSelect() {
+    const chipId = document.getElementById('am-admin-select').value;
+    const infoEl = document.getElementById('am-admin-info');
+    const panels = document.getElementById('am-panels');
+    const configEl = document.getElementById('am-config');
+
+    if (!chipId) {
+        infoEl.style.display = 'none';
+        panels.style.display = 'none';
+        configEl.style.display = 'none';
+        amHideSummary();
+        return;
+    }
+
+    infoEl.style.display = 'block';
+    infoEl.innerHTML = '<div class="ga-loading">Buscando grupos...</div>';
+    panels.style.display = 'none';
+    configEl.style.display = 'none';
+
+    fetch('/api/admin-instances/' + chipId + '/groups')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                infoEl.innerHTML = '<div class="ga-error">' + data.error + '</div>';
+                return;
+            }
+            _amGroups = data;
+            _amSelectedGroupId = null;
+            _amAdmins = [];
+            _amSelectedAdmins.clear();
+            infoEl.innerHTML = '<span class="ga-success-text">🟢 Conectado — ' + data.length + ' grupos encontrados</span>';
+            panels.style.display = 'grid';
+            amRenderGroups();
+            amRenderAdmins();
+        })
+        .catch(err => {
+            infoEl.innerHTML = '<div class="ga-error">Erro: ' + err.message + '</div>';
+        });
+}
+
+// ==================== AM GROUPS ====================
+
+function amRenderGroups() {
+    const list = document.getElementById('am-groups-list');
+    const search = (document.getElementById('am-groups-search')?.value || '').toLowerCase();
+    document.getElementById('am-groups-count').textContent = _amGroups.length;
+
+    const filtered = search ? _amGroups.filter(g => (g.subject || '').toLowerCase().includes(search)) : _amGroups;
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="ga-empty">Nenhum grupo encontrado</div>';
+        return;
+    }
+
+    list.innerHTML = filtered.map(g => {
+        const selected = _amSelectedGroupId === g.id ? 'selected' : '';
+        return `<div class="ga-item ${selected}" onclick="amSelectGroup('${g.id}', '${(g.subject || '').replace(/'/g, "\\'")}')">
+            <div class="ga-item-info">
+                <div class="ga-item-name">${g.subject || 'Sem nome'}</div>
+                <div class="ga-item-meta">${g.size} participantes</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function amFilterGroups() { amRenderGroups(); }
+
+function amSelectGroup(groupId, groupName) {
+    _amSelectedGroupId = groupId;
+    _amSelectedAdmins.clear();
+    amRenderGroups();
+
+    const chipId = document.getElementById('am-admin-select').value;
+    if (!chipId) return;
+
+    const list = document.getElementById('am-admins-list');
+    list.innerHTML = '<div class="ga-loading">Carregando admins...</div>';
+
+    fetch('/api/admin-manage/group-admins/' + chipId + '/' + encodeURIComponent(groupId))
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                list.innerHTML = '<div class="ga-error">' + data.error + '</div>';
+                return;
+            }
+            _amAdmins = data;
+            amRenderAdmins();
+            document.getElementById('am-config').style.display = 'block';
+        })
+        .catch(err => {
+            list.innerHTML = '<div class="ga-error">Erro: ' + err.message + '</div>';
+        });
+}
+
+// ==================== AM ADMINS LIST ====================
+
+function amRenderAdmins() {
+    const list = document.getElementById('am-admins-list');
+    if (!list) return;
+    const countEl = document.getElementById('am-admins-count');
+
+    if (_amAdmins.length === 0) {
+        list.innerHTML = '<div class="ga-empty">Selecione um grupo para ver os admins</div>';
+        if (countEl) countEl.textContent = '';
+        amHideSummary();
+        return;
+    }
+
+    if (countEl) countEl.textContent = '(' + _amAdmins.length + ')';
+
+    list.innerHTML = _amAdmins.map(a => {
+        const checked = _amSelectedAdmins.has(a.jid) ? 'checked' : '';
+        const isProtected = a.isMe || a.isSuper;
+        const badge = a.isMe ? '<span class="am-badge am-badge-me">EU (ADM)</span>'
+            : a.isSuper ? '<span class="am-badge am-badge-super">CRIADOR</span>'
+            : '';
+
+        if (isProtected) {
+            return `<label class="ga-item am-protected">
+                <input type="checkbox" disabled>
+                <div class="ga-item-info">
+                    <div class="ga-item-name">${a.phone} ${badge}</div>
+                    <div class="ga-item-meta">Protegido — nao pode ser rebaixado</div>
+                </div>
+            </label>`;
+        }
+
+        return `<label class="ga-item ${checked ? 'selected' : ''}">
+            <input type="checkbox" ${checked} onchange="amToggleAdmin('${a.jid}')">
+            <div class="ga-item-info">
+                <div class="ga-item-name">${a.phone}</div>
+                <div class="ga-item-meta">Admin</div>
+            </div>
+        </label>`;
+    }).join('');
+
+    amUpdateSummary();
+}
+
+function amToggleAdmin(jid) {
+    if (_amSelectedAdmins.has(jid)) _amSelectedAdmins.delete(jid);
+    else _amSelectedAdmins.add(jid);
+    amRenderAdmins();
+}
+
+function amSelectAllAdmins() {
+    for (const a of _amAdmins) {
+        if (!a.isMe && !a.isSuper) _amSelectedAdmins.add(a.jid);
+    }
+    amRenderAdmins();
+}
+
+function amDeselectAllAdmins() {
+    _amSelectedAdmins.clear();
+    amRenderAdmins();
+}
+
+// ==================== AM MODE ====================
+
+function amSetMode(mode) {
+    _amMode = mode;
+    document.querySelectorAll('.am-mode-option').forEach(el => el.classList.remove('selected'));
+    const radio = document.querySelector('input[name="am-mode"][value="' + mode + '"]');
+    if (radio) {
+        radio.checked = true;
+        radio.closest('.am-mode-option').classList.add('selected');
+    }
+    amUpdateSummary();
+}
+
+// ==================== AM SUMMARY ====================
+
+function amUpdateSummary() {
+    const el = document.getElementById('am-summary');
+    if (!el) return;
+
+    const count = _amSelectedAdmins.size;
+    if (count === 0 || !_amSelectedGroupId) {
+        el.style.display = 'none';
+        return;
+    }
+
+    const group = _amGroups.find(g => g.id === _amSelectedGroupId);
+    const groupName = group?.subject || _amSelectedGroupId;
+    const adminSelect = document.getElementById('am-admin-select');
+    const adminText = adminSelect.options[adminSelect.selectedIndex]?.textContent || '?';
+    const modeText = _amMode === 'demote' ? 'Rebaixar apenas' : 'Rebaixar + Remover';
+    const estSeconds = count * 6;
+    const estText = estSeconds > 60 ? Math.ceil(estSeconds / 60) + ' minutos' : estSeconds + ' segundos';
+
+    el.style.display = 'block';
+    el.innerHTML = `
+        <div class="ga-summary-card">
+            <div class="ga-summary-title">Resumo da Operacao</div>
+            <div class="ga-summary-grid">
+                <div class="ga-summary-row"><span>Instancia ADM:</span><strong>${adminText}</strong></div>
+                <div class="ga-summary-row"><span>Grupo:</span><strong>${groupName}</strong></div>
+                <div class="ga-summary-row"><span>Admins selecionados:</span><strong>${count}</strong></div>
+                <div class="ga-summary-row"><span>Modo:</span><strong>${modeText}</strong></div>
+                <div class="ga-summary-row"><span>Estimativa:</span><strong>~${estText}</strong></div>
+            </div>
+            ${_amMode === 'demote_remove' ? '<div class="am-warning-box">⚠️ ATENCAO: Os admins selecionados serao rebaixados E removidos do grupo!</div>' : ''}
+            <button class="btn btn-danger" onclick="amStartOperation()" id="am-btn-start" style="margin-top:16px;width:100%">
+                ${_amMode === 'demote' ? '⬇️ Rebaixar Admins' : '⬇️ Rebaixar + Remover'}
+            </button>
+        </div>`;
+}
+
+function amHideSummary() {
+    const el = document.getElementById('am-summary');
+    if (el) el.style.display = 'none';
+}
+
+// ==================== AM EXECUTION ====================
+
+function amStartOperation() {
+    const adminChipId = parseInt(document.getElementById('am-admin-select').value);
+    if (!adminChipId) return showToast('Selecione uma instancia ADM', 'warning');
+    if (_amSelectedAdmins.size === 0) return showToast('Selecione pelo menos 1 admin', 'warning');
+    if (!_amSelectedGroupId) return showToast('Selecione um grupo', 'warning');
+
+    const group = _amGroups.find(g => g.id === _amSelectedGroupId);
+    const groupName = group?.subject || _amSelectedGroupId;
+
+    // Double confirmation for demote_remove
+    if (_amMode === 'demote_remove') {
+        if (!confirm('CONFIRMACAO: Rebaixar E REMOVER ' + _amSelectedAdmins.size + ' admin(s) do grupo "' + groupName + '"?\n\nEsta acao NAO pode ser desfeita!')) {
+            return;
+        }
+    }
+
+    const items = [];
+    for (const jid of _amSelectedAdmins) {
+        const admin = _amAdmins.find(a => a.jid === jid);
+        if (!admin) continue;
+        items.push({
+            jid: admin.jid,
+            phone: admin.phone,
+            group_id: _amSelectedGroupId,
+            group_name: groupName,
+            is_me: admin.isMe,
+            is_super: admin.isSuper
+        });
+    }
+
+    const config = {
+        mode: _amMode,
+        delayMin: 3, delayMax: 8,
+        groupDelayMin: 15, groupDelayMax: 30
+    };
+
+    const btn = document.getElementById('am-btn-start');
+    if (btn) { btn.disabled = true; btn.textContent = 'Iniciando...'; }
+
+    fetch('/api/admin-manage/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminChipId, items, config })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            _amCurrentOpId = data.operationId;
+            _amRunning = true;
+            _amPaused = false;
+            amShowExecutionUI(data.totalItems);
+            showToast('Operacao iniciada!', 'success');
+        } else {
+            showToast(data.error || 'Erro ao iniciar', 'danger');
+            if (btn) { btn.disabled = false; btn.textContent = _amMode === 'demote' ? '⬇️ Rebaixar Admins' : '⬇️ Rebaixar + Remover'; }
+        }
+    })
+    .catch(err => {
+        showToast('Erro: ' + err.message, 'danger');
+        if (btn) { btn.disabled = false; btn.textContent = _amMode === 'demote' ? '⬇️ Rebaixar Admins' : '⬇️ Rebaixar + Remover'; }
+    });
+}
+
+function amShowExecutionUI(totalItems) {
+    document.getElementById('am-summary').style.display = 'none';
+    document.getElementById('am-config').style.display = 'none';
+    document.getElementById('am-execution').style.display = 'block';
+    document.getElementById('am-report').style.display = 'none';
+    document.getElementById('am-progress-text').textContent = '0/' + totalItems + ' (0%)';
+    document.getElementById('am-progress-fill').style.width = '0%';
+    document.getElementById('am-progress-stats').innerHTML = '';
+    document.getElementById('am-log').innerHTML = '';
+    document.getElementById('am-btn-pause').textContent = 'Pausar';
+}
+
+function amTogglePause() {
+    if (_amPaused) {
+        fetch('/api/admin-manage/resume', { method: 'POST' });
+        _amPaused = false;
+        document.getElementById('am-btn-pause').textContent = 'Pausar';
+    } else {
+        fetch('/api/admin-manage/pause', { method: 'POST' });
+        _amPaused = true;
+        document.getElementById('am-btn-pause').textContent = 'Retomar';
+    }
+}
+
+function amStop() {
+    openConfirmModal('Parar Operacao', 'Deseja parar a operacao? Itens ja processados serao mantidos.', 'Parar', () => {
+        fetch('/api/admin-manage/stop', { method: 'POST' });
+        _amRunning = false;
+    });
+}
+
+// ==================== AM SOCKET LISTENERS ====================
+
+socket.on('admin_manage_stats', (data) => {
+    if (!_amRunning) return;
+    document.getElementById('am-progress-text').textContent =
+        data.processed + '/' + data.total + ' (' + data.percent + '%)';
+    document.getElementById('am-progress-fill').style.width = data.percent + '%';
+
+    let statsHtml = `<span class="ga-stat-item ga-stat-success">⬇️ ${data.demoteOk} rebaixados</span>`;
+    if (data.removeOk > 0) statsHtml += `<span class="ga-stat-item ga-stat-fail">🚫 ${data.removeOk} removidos</span>`;
+    if (data.demoteFail > 0) statsHtml += `<span class="ga-stat-item ga-stat-fail">❌ ${data.demoteFail} falhas</span>`;
+    if (data.removeFail > 0) statsHtml += `<span class="ga-stat-item ga-stat-warn">⚠️ ${data.removeFail} remocao falhou</span>`;
+    if (data.skipCount > 0) statsHtml += `<span class="ga-stat-item ga-stat-skip">⏭️ ${data.skipCount} protegidos</span>`;
+    if (data.currentGroup) statsHtml += `<span class="ga-stat-item ga-stat-group">📂 ${data.currentGroup}</span>`;
+
+    document.getElementById('am-progress-stats').innerHTML = statsHtml;
+});
+
+socket.on('admin_manage_log', (data) => {
+    const logEl = document.getElementById('am-log');
+    if (!logEl) return;
+
+    const icons = {
+        'demote_ok': '⬇️', 'demote_fail': '❌', 'remove_ok': '🚫',
+        'remove_fail': '⚠️', 'skip': '⏭️', 'error': '❌',
+        'warning': '⚠️', 'system': '🔄'
+    };
+    const icon = icons[data.type] || '📝';
+    const time = new Date(data.timestamp || Date.now()).toLocaleTimeString('pt-BR');
+    const cls = data.type === 'demote_ok' || data.type === 'remove_ok' ? 'ga-log-success'
+        : data.type === 'demote_fail' || data.type === 'error' ? 'ga-log-error'
+        : data.type === 'remove_fail' || data.type === 'warning' ? 'ga-log-warn'
+        : data.type === 'skip' ? 'ga-log-info'
+        : 'ga-log-info';
+
+    const item = document.createElement('div');
+    item.className = 'ga-log-item ' + cls;
+    item.innerHTML = '<span class="ga-log-icon">' + icon + '</span><span class="ga-log-msg">' + data.message + '</span><span class="ga-log-time">' + time + '</span>';
+    logEl.appendChild(item);
+    logEl.scrollTop = logEl.scrollHeight;
+});
+
+socket.on('admin_manage_status', (data) => {
+    if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed') {
+        _amRunning = false;
+        _amPaused = false;
+    }
+});
+
+socket.on('admin_manage_complete', (summary) => {
+    _amRunning = false;
+    document.getElementById('am-execution').style.display = 'none';
+    amShowReport(summary);
+    showToast('Operacao concluida! ' + summary.demoteOk + ' rebaixados', 'success');
+});
+
+// ==================== AM REPORT ====================
+
+function amShowReport(summary) {
+    const el = document.getElementById('am-report');
+    el.style.display = 'block';
+
+    const durationMin = Math.floor(summary.duration / 60);
+    const durationSec = summary.duration % 60;
+    const durationText = durationMin > 0 ? durationMin + 'min ' + durationSec + 's' : durationSec + 's';
+    const modeText = summary.mode === 'demote' ? 'Rebaixar' : 'Rebaixar + Remover';
+    const statusLabel = summary.status === 'completed' ? '✅ Concluida' : summary.status === 'stopped' ? '⏹ Parada' : '❌ Falhou';
+
+    let gridHtml = `
+        <div class="ga-report-stat"><div class="ga-report-value">${summary.total}</div><div class="ga-report-label">Total</div></div>
+        <div class="ga-report-stat success"><div class="ga-report-value">${summary.demoteOk}</div><div class="ga-report-label">Rebaixados</div></div>`;
+
+    if (summary.mode === 'demote_remove') {
+        gridHtml += `<div class="ga-report-stat fail"><div class="ga-report-value">${summary.removeOk}</div><div class="ga-report-label">Removidos</div></div>`;
+    }
+
+    gridHtml += `
+        <div class="ga-report-stat skip"><div class="ga-report-value">${summary.skipCount}</div><div class="ga-report-label">Protegidos</div></div>
+        <div class="ga-report-stat fail"><div class="ga-report-value">${summary.demoteFail}</div><div class="ga-report-label">Falhas</div></div>`;
+
+    if (summary.mode === 'demote_remove' && summary.removeFail > 0) {
+        gridHtml += `<div class="ga-report-stat warn"><div class="ga-report-value">${summary.removeFail}</div><div class="ga-report-label">Remocao falhou</div></div>`;
+    }
+
+    el.innerHTML = `
+        <div class="ga-report-card">
+            <div class="ga-report-header">${statusLabel} — ${modeText}</div>
+            <div class="ga-report-grid">${gridHtml}</div>
+            <div class="ga-report-duration">Duracao: ${durationText}</div>
+            <div class="ga-report-actions">
+                <button class="btn btn-outline btn-sm" onclick="amExportCSV(${summary.operationId})">Exportar CSV</button>
+                ${summary.demoteFail > 0 ? '<button class="btn btn-warning btn-sm" onclick="amRetry(' + summary.operationId + ')">Reexecutar falhas (' + summary.demoteFail + ')</button>' : ''}
+                <button class="btn btn-primary btn-sm" onclick="amNewOperation()">Nova Operacao</button>
+            </div>
+        </div>`;
+}
+
+function amExportCSV(opId) {
+    window.open('/api/admin-manage/operations/' + opId + '/csv', '_blank');
+}
+
+function amRetry(opId) {
+    openConfirmModal('Reexecutar Falhas', 'Reexecutar apenas os itens que falharam?', 'Reexecutar', () => {
+        fetch('/api/admin-manage/retry/' + opId, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                _amCurrentOpId = data.operationId;
+                _amRunning = true;
+                _amPaused = false;
+                amShowExecutionUI(data.retrying);
+                showToast('Reexecutando ' + data.retrying + ' itens', 'success');
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}
+
+function amNewOperation() {
+    document.getElementById('am-report').style.display = 'none';
+    document.getElementById('am-execution').style.display = 'none';
+    document.getElementById('am-summary').style.display = 'none';
+    document.getElementById('am-config').style.display = 'none';
+    _amSelectedGroupId = null;
+    _amAdmins = [];
+    _amSelectedAdmins.clear();
+    amRenderGroups();
+    amRenderAdmins();
+}
+
+// ==================== AM HISTORY ====================
+
+function loadAdminManageHistory() {
+    const el = document.getElementById('am-history');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    if (el.style.display === 'none') return;
+
+    el.innerHTML = '<div class="ga-loading">Carregando historico...</div>';
+
+    fetch('/api/admin-manage/operations?limit=20')
+    .then(r => r.json())
+    .then(ops => {
+        if (ops.length === 0) {
+            el.innerHTML = '<div class="ga-empty" style="padding:20px">Nenhuma operacao realizada ainda</div>';
+            return;
+        }
+        el.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead><tr style="border-bottom:1px solid var(--border)">
+                    <th class="rehab-th">Data</th>
+                    <th class="rehab-th">ADM</th>
+                    <th class="rehab-th">Total</th>
+                    <th class="rehab-th">Rebaixados</th>
+                    <th class="rehab-th">Removidos</th>
+                    <th class="rehab-th">Falhas</th>
+                    <th class="rehab-th">Status</th>
+                    <th class="rehab-th">Acoes</th>
+                </tr></thead>
+                <tbody>${ops.map(op => {
+                    const date = op.created_at ? new Date(op.created_at).toLocaleString('pt-BR') : '—';
+                    const config = JSON.parse(op.config || '{}');
+                    const statusCls = op.status === 'completed' ? 'ga-status-ok' : op.status === 'running' ? 'ga-status-run' : op.status === 'failed' ? 'ga-status-fail' : 'ga-status-other';
+                    return `<tr style="border-bottom:1px solid rgba(0,0,0,0.03)">
+                        <td style="padding:8px 14px;font-size:12px">${date}</td>
+                        <td style="padding:8px 14px;font-size:12px">${op.admin_name || op.admin_phone || '—'}</td>
+                        <td style="padding:8px 14px">${op.total_items}</td>
+                        <td style="padding:8px 14px;color:var(--success)">${op.demote_ok || 0}</td>
+                        <td style="padding:8px 14px;color:var(--danger)">${config.mode === 'demote_remove' ? (op.remove_ok || 0) : '—'}</td>
+                        <td style="padding:8px 14px;color:var(--danger)">${(op.demote_fail || 0) + (op.remove_fail || 0)}</td>
+                        <td style="padding:8px 14px"><span class="${statusCls}">${op.status}</span></td>
+                        <td style="padding:8px 14px">
+                            <button class="btn btn-outline btn-xs" onclick="amExportCSV(${op.id})">CSV</button>
+                            ${(op.demote_fail || 0) > 0 ? '<button class="btn btn-warning btn-xs" onclick="amRetry(' + op.id + ')" style="margin-left:4px">Retry</button>' : ''}
+                        </td>
+                    </tr>`;
+                }).join('')}</tbody>
+            </table>
+        </div>`;
+    });
+}

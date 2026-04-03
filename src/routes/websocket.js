@@ -1,4 +1,4 @@
-module.exports = function(io, sessionManager, warmingEngine, groupManager) {
+module.exports = function(io, sessionManager, warmingEngine, groupManager, adminManager) {
 
     io.on('connection', (socket) => {
         console.log('[WebSocket] Cliente conectado');
@@ -182,6 +182,20 @@ module.exports = function(io, sessionManager, warmingEngine, groupManager) {
         // Stop group add
         socket.on('stop_group_add', () => {
             if (groupManager) groupManager.stop();
+        });
+
+        // ==================== ADMIN MANAGE ====================
+
+        socket.on('pause_admin_manage', () => {
+            if (adminManager) adminManager.pause();
+        });
+
+        socket.on('resume_admin_manage', () => {
+            if (adminManager) adminManager.resume();
+        });
+
+        socket.on('stop_admin_manage', () => {
+            if (adminManager) adminManager.stop();
         });
 
         socket.on('disconnect', () => {

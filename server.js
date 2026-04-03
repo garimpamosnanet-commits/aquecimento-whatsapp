@@ -104,9 +104,11 @@ const notifier = new Notifier(io);
 const sessionManager = new SessionManager(io, notifier);
 const warmingEngine = new WarmingEngine(sessionManager, io, notifier);
 const groupManager = new GroupManager(sessionManager, io);
+const AdminManager = require('./src/whatsapp/admin-manager');
+const adminManager = new AdminManager(sessionManager, io);
 
 // Routes
-app.use('/api', apiRoutes(sessionManager, warmingEngine, groupManager));
+app.use('/api', apiRoutes(sessionManager, warmingEngine, groupManager, adminManager));
 
 // WebSocket auth
 io.use((socket, next) => {
@@ -120,7 +122,7 @@ io.use((socket, next) => {
 });
 
 // WebSocket
-setupWebSocket(io, sessionManager, warmingEngine, groupManager);
+setupWebSocket(io, sessionManager, warmingEngine, groupManager, adminManager);
 
 // Start server
 const PORT = process.env.PORT || 3001;

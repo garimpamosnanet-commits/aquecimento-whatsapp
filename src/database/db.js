@@ -112,6 +112,16 @@ function getDb() {
         console.log('[DB] Migrated: added daily_stats');
     }
 
+    // Migrate: add admin_manage collections
+    if (!data.admin_manage_operations) {
+        data.admin_manage_operations = [];
+        data.admin_manage_items = [];
+        if (!data._nextId.admin_manage_operations) data._nextId.admin_manage_operations = 1;
+        if (!data._nextId.admin_manage_items) data._nextId.admin_manage_items = 1;
+        saveDb(data);
+        console.log('[DB] Migrated: added admin_manage collections');
+    }
+
     return data;
 }
 
@@ -660,6 +670,96 @@ function getFailedItems(operationId) {
     return (data.group_add_items || []).filter(i => i.operation_id === operationId && i.status === 'failed');
 }
 
+// ==================== ADMIN MANAGE OPERATIONS ====================
+
+function createAdminManageOperation(adminChipId, config) {
+    const data = loadDb();
+    if (!data.admin_manage_operations) data.admin_manage_operations = [];
+    if (!data._nextId.admin_manage_operations) data._nextId.admin_manage_operations = 1;
+    const id = data._nextId.admin_manage_operations;
+    data._nextId.admin_manage_operations = id + 1;
+    const op = {
+        id, admin_chip_id: adminChipId, status: 'pending',
+        total_items: 0, demote_ok: 0, demote_fail: 0,
+        remove_ok: 0, remove_fail: 0, skip_count: 0,
+        config: JSON.stringify(config || {}),
+        started_at: null, completed_at: null, created_at: now()
+    };
+    data.admin_manage_operations.push(op);
+    saveDb(data);
+    return op;
+}
+
+function getAdminManageOperation(id) {
+    const data = loadDb();
+    return (data.admin_manage_operations || []).find(o => o.id === id) || null;
+}
+
+function updateAdminManageOperation(id, updates) {
+    const data = loadDb();
+    const op = (data.admin_manage_operations || []).find(o => o.id === id);
+    if (!op) return null;
+    Object.assign(op, updates);
+    saveDb(data);
+    return op;
+}
+
+function getAdminManageOperations(limit) {
+    const data = loadDb();
+    const ops = (data.admin_manage_operations || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return limit ? ops.slice(0, limit) : ops;
+}
+
+function addAdminManageItems(operationId, items) {
+    const data = loadDb();
+    if (!data.admin_manage_items) data.admin_manage_items = [];
+    if (!data._nextId.admin_manage_items) data._nextId.admin_manage_items = 1;
+    const added = [];
+    for (const item of items) {
+        const id = data._nextId.admin_manage_items;
+        data._nextId.admin_manage_items = id + 1;
+        const record = {
+            id, operation_id: operationId,
+            jid: item.jid,
+            phone: item.phone,
+            group_id: item.group_id,
+            group_name: item.group_name || null,
+            is_me: item.is_me || false,
+            is_super: item.is_super || false,
+            status: 'pending',
+            demote_status: null,
+            remove_status: null,
+            error_message: null,
+            processed_at: null
+        };
+        data.admin_manage_items.push(record);
+        added.push(record);
+    }
+    const op = data.admin_manage_operations.find(o => o.id === operationId);
+    if (op) op.total_items = added.length;
+    saveDb(data);
+    return added;
+}
+
+function getAdminManageItems(operationId) {
+    const data = loadDb();
+    return (data.admin_manage_items || []).filter(i => i.operation_id === operationId);
+}
+
+function updateAdminManageItem(id, updates) {
+    const data = loadDb();
+    const item = (data.admin_manage_items || []).find(i => i.id === id);
+    if (!item) return null;
+    Object.assign(item, updates);
+    saveDb(data);
+    return item;
+}
+
+function getFailedAdminManageItems(operationId) {
+    const data = loadDb();
+    return (data.admin_manage_items || []).filter(i => i.operation_id === operationId && i.status === 'failed');
+}
+
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
@@ -677,5 +777,8 @@ module.exports = {
     createAddOperation, getAddOperation, updateAddOperation, getAddOperations,
     addOperationItems, getOperationItems, updateOperationItem, getFailedItems,
     getSettings, updateSettings, addDailyStat, getDailyStats,
-    getCustomMessages, saveCustomMessages
+    getCustomMessages, saveCustomMessages,
+    createAdminManageOperation, getAdminManageOperation, updateAdminManageOperation,
+    getAdminManageOperations, addAdminManageItems, getAdminManageItems,
+    updateAdminManageItem, getFailedAdminManageItems
 };
