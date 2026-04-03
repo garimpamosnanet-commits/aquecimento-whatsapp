@@ -70,6 +70,7 @@ socket.on('chip_deleted', ({ chipId }) => {
 
 socket.on('qr', ({ sessionId, chipId, qr }) => {
     currentQRSessionId = sessionId;
+    clearTimeout(_qrTimeoutTimer); // QR arrived, clear timeout
     // Show scan step with QR
     document.getElementById('qr-step-name').style.display = 'none';
     document.getElementById('qr-step-scan').style.display = 'block';
@@ -81,6 +82,7 @@ socket.on('qr', ({ sessionId, chipId, qr }) => {
 });
 
 socket.on('qr_expired', ({ sessionId, chipId }) => {
+    clearTimeout(_qrTimeoutTimer);
     if (currentQRSessionId === sessionId) {
         const qrImage = document.getElementById('qr-image');
         qrImage.innerHTML = `<div style="text-align:center;padding:20px">
@@ -92,6 +94,7 @@ socket.on('qr_expired', ({ sessionId, chipId }) => {
 });
 
 socket.on('connected', ({ sessionId, chipId, phone }) => {
+    clearTimeout(_qrTimeoutTimer);
     if (currentQRSessionId === sessionId) {
         const qrImage = document.getElementById('qr-image');
         if (_pendingAdmConnect) {
@@ -539,6 +542,20 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 let chipCreating = false;
+let _qrTimeoutTimer = null;
+function _startQRTimeout() {
+    clearTimeout(_qrTimeoutTimer);
+    _qrTimeoutTimer = setTimeout(() => {
+        const qrImage = document.getElementById('qr-image');
+        if (qrImage && qrImage.querySelector('.qr-waiting')) {
+            qrImage.innerHTML = `<div style="text-align:center;padding:20px">
+                <div style="font-size:48px;margin-bottom:10px">⚠️</div>
+                <div style="color:#666;font-size:14px;margin-bottom:16px">QR Code demorou demais para gerar.<br>Verifique a conexão e tente novamente.</div>
+                <button class="btn btn-primary btn-sm" onclick="reloadQR()">🔄 Tentar novamente</button>
+            </div>`;
+        }
+    }, 25000); // 25s timeout
+}
 function confirmChipName() {
     if (chipCreating) return;
     chipCreating = true;
@@ -549,6 +566,7 @@ function confirmChipName() {
     document.getElementById('btn-next-qr').style.display = 'none';
     currentQRSessionId = null;
     socket.emit('request_qr', { name: name });
+    _startQRTimeout();
     setTimeout(() => { chipCreating = false; }, 5000);
 }
 
@@ -564,6 +582,7 @@ function reloadQR() {
         const name = document.getElementById('chip-name-input').value.trim();
         socket.emit('request_qr', { name: name });
     }
+    _startQRTimeout();
     setTimeout(() => { qrLoading = false; }, 3000); // cooldown 3s
 }
 
@@ -571,6 +590,7 @@ function closeQRModal() {
     document.getElementById('qr-modal').classList.remove('active');
     currentQRSessionId = null;
     _pendingAdmConnect = false;
+    clearTimeout(_qrTimeoutTimer);
 }
 
 function nextQR() {

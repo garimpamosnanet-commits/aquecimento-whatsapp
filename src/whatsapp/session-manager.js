@@ -96,9 +96,7 @@ class SessionManager {
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 30000,
             emitOwnEvents: true,
-            generateHighQualityLinkPreview: false,
-            retryRequestDelayMs: 2000,
-            qrTimeout: 40000
+            generateHighQualityLinkPreview: false
         };
 
         if (agent) {
