@@ -95,8 +95,8 @@ socket.on('connected', ({ sessionId, chipId, phone }) => {
         _pendingAdmConnect = false;
         setInstanceType(chipId, 'admin');
         showToast(`ADM ${phone || ''} conectado e marcado!`, 'success');
-        // Refresh group-add tab if visible
-        setTimeout(() => loadAdminInstances(), 1000);
+        // Refresh both tabs
+        setTimeout(() => { loadAdminInstances(); loadAmAdminInstances(); }, 1000);
     } else {
         showToast(`Chip ${phone || 'novo'} conectado!`, 'success');
     }
@@ -2410,9 +2410,17 @@ function loadAdminManageTab() {
 function loadAmAdminInstances() {
     fetch('/api/admin-instances').then(r => r.json()).then(admins => {
         const select = document.getElementById('am-admin-select');
+        const noAdminBox = document.getElementById('am-no-admin');
         if (!select) return;
         const current = select.value;
         select.innerHTML = '<option value="">Selecione uma instancia ADM...</option>';
+
+        if (admins.length === 0 && noAdminBox) {
+            noAdminBox.style.display = 'block';
+        } else if (noAdminBox) {
+            noAdminBox.style.display = 'none';
+        }
+
         for (const adm of admins) {
             const label = (adm.name || 'ADM') + (adm.phone ? ' (' + adm.phone + ')' : '');
             const status = adm.is_connected ? '🟢' : '🔴';
@@ -2424,6 +2432,34 @@ function loadAmAdminInstances() {
         }
         if (current) select.value = current;
     });
+}
+
+function amConnectAdmInstance() {
+    _pendingAdmConnect = true;
+    openQRModal();
+    const nameInput = document.getElementById('chip-name-input');
+    if (nameInput) {
+        nameInput.value = 'ADM ';
+        nameInput.focus();
+        nameInput.setSelectionRange(4, 4);
+    }
+}
+
+function amMarkExistingAsAdm() {
+    const available = chips.filter(c => c.status === 'connected' && (c.instance_type || 'warming') === 'warming');
+    if (available.length === 0) {
+        showToast('Nenhum chip conectado disponivel para marcar como ADM', 'warning');
+        return;
+    }
+    const options = available.map(c => `${c.name || 'Chip ' + c.id} (${c.phone || 'sem numero'})`);
+    const choice = prompt('Chips disponiveis:\n\n' + options.map((o, i) => `${i + 1}. ${o}`).join('\n') + '\n\nDigite o numero:');
+    if (!choice) return;
+    const idx = parseInt(choice) - 1;
+    if (idx >= 0 && idx < available.length) {
+        setInstanceType(available[idx].id, 'admin');
+        setTimeout(() => loadAmAdminInstances(), 500);
+        showToast('Chip marcado como ADM!', 'success');
+    }
 }
 
 function onAmAdminSelect() {

@@ -2189,6 +2189,40 @@ body::before {
     margin-left: 8px;
 }
 
+/* No admin instance box */
+.am-no-admin-box {
+    margin-top: 12px;
+    padding: 24px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.06), rgba(139,92,246,0.06));
+    border: 2px dashed rgba(59,130,246,0.3);
+    border-radius: 12px;
+    text-align: center;
+}
+.am-no-admin-icon {
+    font-size: 36px;
+    margin-bottom: 10px;
+}
+.am-no-admin-box p {
+    margin: 0;
+}
+.am-no-admin-box p strong {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+.am-no-admin-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 6px !important;
+    margin-bottom: 16px !important;
+    line-height: 1.5;
+}
+.am-no-admin-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
 /* Panel mode bar */
 .am-mode-bar {
     display: flex;

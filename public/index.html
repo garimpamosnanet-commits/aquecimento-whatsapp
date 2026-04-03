@@ -387,6 +387,15 @@
                     <button class="btn btn-outline btn-sm" onclick="loadAmAdminInstances()">Atualizar</button>
                 </div>
                 <div id="am-admin-info" class="ga-admin-info" style="display:none"></div>
+                <div id="am-no-admin" class="am-no-admin-box" style="display:none">
+                    <div class="am-no-admin-icon">🔑</div>
+                    <p><strong>Nenhuma instancia administradora conectada</strong></p>
+                    <p class="am-no-admin-desc">Voce precisa de uma instancia ADM para gerenciar grupos. Conecte um chip via QR Code ou marque um chip ja conectado como ADM.</p>
+                    <div class="am-no-admin-actions">
+                        <button class="btn btn-primary btn-sm" onclick="amConnectAdmInstance()">📱 Conectar nova ADM</button>
+                        <button class="btn btn-outline btn-sm" onclick="amMarkExistingAsAdm()">👤 Marcar chip existente</button>
+                    </div>
+                </div>
             </div>
 
             <!-- STEP 2: Groups + Admins (side by side) -->
