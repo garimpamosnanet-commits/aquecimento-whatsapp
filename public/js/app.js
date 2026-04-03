@@ -2380,6 +2380,21 @@ let _amMode = 'demote';
 let _amRunning = false;
 let _amPaused = false;
 let _amCurrentOpId = null;
+let _amGroupFilter = 'all'; // 'all', 'pending', 'done'
+
+// Persist done groups in localStorage
+function _amGetDoneGroups() {
+    try { return JSON.parse(localStorage.getItem('am_done_groups') || '{}'); } catch(e) { return {}; }
+}
+function _amSetGroupDone(groupId, done) {
+    const map = _amGetDoneGroups();
+    if (done) map[groupId] = Date.now();
+    else delete map[groupId];
+    localStorage.setItem('am_done_groups', JSON.stringify(map));
+}
+function _amIsGroupDone(groupId) {
+    return !!_amGetDoneGroups()[groupId];
+}
 
 function loadAdminManageTab() {
     loadAmAdminInstances();
@@ -2449,32 +2464,63 @@ function onAmAdminSelect() {
 function amRenderGroups() {
     const list = document.getElementById('am-groups-list');
     const search = (document.getElementById('am-groups-search')?.value || '').toLowerCase();
-    document.getElementById('am-groups-count').textContent = _amGroups.length;
 
     // Total de participantes somando todos os grupos
     const totalMembers = _amGroups.reduce((sum, g) => sum + (g.size || 0), 0);
     const totalEl = document.getElementById('am-total-members');
     if (totalEl) totalEl.textContent = totalMembers.toLocaleString('pt-BR') + ' membros total';
 
-    const filtered = search ? _amGroups.filter(g => (g.subject || '').toLowerCase().includes(search)) : _amGroups;
+    // Count done groups
+    const doneCount = _amGroups.filter(g => _amIsGroupDone(g.id)).length;
+    const pendingCount = _amGroups.length - doneCount;
+    document.getElementById('am-groups-count').textContent = _amGroups.length;
+    const progressEl = document.getElementById('am-groups-progress');
+    if (progressEl) {
+        progressEl.textContent = doneCount > 0 ? `✓ ${doneCount} feitos · ${pendingCount} pendentes` : '';
+    }
+
+    // Update filter button states
+    document.querySelectorAll('.am-group-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === _amGroupFilter);
+    });
+
+    // Apply search + filter
+    let filtered = _amGroups;
+    if (search) filtered = filtered.filter(g => (g.subject || '').toLowerCase().includes(search));
+    if (_amGroupFilter === 'pending') filtered = filtered.filter(g => !_amIsGroupDone(g.id));
+    else if (_amGroupFilter === 'done') filtered = filtered.filter(g => _amIsGroupDone(g.id));
 
     if (filtered.length === 0) {
-        list.innerHTML = '<div class="ga-empty">Nenhum grupo encontrado</div>';
+        list.innerHTML = '<div class="ga-empty">' + (_amGroupFilter === 'done' ? 'Nenhum grupo marcado como feito' : _amGroupFilter === 'pending' ? 'Todos os grupos foram feitos!' : 'Nenhum grupo encontrado') + '</div>';
         return;
     }
 
     list.innerHTML = filtered.map(g => {
         const selected = _amSelectedGroupId === g.id ? 'selected' : '';
-        return `<div class="ga-item ${selected}" onclick="amSelectGroup('${g.id}', '${(g.subject || '').replace(/'/g, "\\'")}')">
+        const isDone = _amIsGroupDone(g.id);
+        return `<div class="ga-item ${selected} ${isDone ? 'am-group-done' : ''}" onclick="amSelectGroup('${g.id}', '${(g.subject || '').replace(/'/g, "\\'")}')">
             <div class="ga-item-info">
-                <div class="ga-item-name">${g.subject || 'Sem nome'}</div>
+                <div class="ga-item-name">${isDone ? '✅ ' : ''}${g.subject || 'Sem nome'}</div>
                 <div class="ga-item-meta">${g.size} participantes</div>
             </div>
+            <button class="am-done-btn ${isDone ? 'done' : ''}" onclick="event.stopPropagation(); amToggleGroupDone('${g.id}')" title="${isDone ? 'Desmarcar' : 'Marcar como feito'}">
+                ${isDone ? '✓' : '○'}
+            </button>
         </div>`;
     }).join('');
 }
 
 function amFilterGroups() { amRenderGroups(); }
+
+function amSetGroupFilter(filter) {
+    _amGroupFilter = filter;
+    amRenderGroups();
+}
+
+function amToggleGroupDone(groupId) {
+    _amSetGroupDone(groupId, !_amIsGroupDone(groupId));
+    amRenderGroups();
+}
 
 function amSelectGroup(groupId, groupName) {
     _amSelectedGroupId = groupId;
