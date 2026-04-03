@@ -228,6 +228,23 @@ class AdminManager {
         this.io.emit('invite_links_progress', { done, total, errors, status: 'done' });
     }
 
+    async addToGroup(adminSessionId, groupId, jid) {
+        const sock = this.sessionManager.getSocket(adminSessionId);
+        if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
+
+        try {
+            const result = await sock.groupParticipantsUpdate(groupId, [jid], 'add');
+            // result is array, check status
+            const status = result?.[0]?.status || result?.[0]?.content?.attrs?.type;
+            if (status === '403') return { success: false, error: 'Numero bloqueou convites de grupo' };
+            if (status === '409') return { success: false, error: 'Ja esta no grupo' };
+            if (status === '408') return { success: false, error: 'Numero saiu recentemente, nao pode ser adicionado agora' };
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
     async promoteToAdmin(adminSessionId, groupId, jid) {
         const sock = this.sessionManager.getSocket(adminSessionId);
         if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');

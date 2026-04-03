@@ -2258,6 +2258,127 @@ body::before {
     overflow-y: auto;
 }
 
+/* Add step layout */
+.am-add-step {
+    margin-bottom: 16px;
+}
+.am-add-step-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.am-add-step-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.am-add-step-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.am-add-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+/* Action mode cards */
+.am-add-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.am-add-action-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: white;
+}
+.am-add-action-option:hover {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.04);
+}
+.am-add-action-option.selected {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.06);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+.am-add-action-option input[type="radio"] {
+    display: none;
+}
+.am-add-action-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+}
+.am-add-action-info strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+.am-add-action-info small {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Start button */
+.am-add-start-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    margin-top: 8px;
+    border-radius: 10px;
+}
+
+/* Progress */
+.am-add-progress {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+.am-add-progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.am-add-progress-header span {
+    font-size: 13px;
+    font-weight: 600;
+}
+.am-add-log {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 10px;
+    font-size: 11px;
+    font-family: monospace;
+    line-height: 1.6;
+}
+.am-add-log .log-ok { color: var(--success); }
+.am-add-log .log-err { color: var(--danger); }
+.am-add-log .log-info { color: var(--accent); }
+.am-add-log .log-warn { color: var(--warning); }
+
 /* Group done marking */
 .am-group-filters {
     display: flex;

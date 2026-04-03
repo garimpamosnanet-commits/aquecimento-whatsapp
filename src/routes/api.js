@@ -836,6 +836,21 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
     });
 
+    // Add member to group
+    router.post('/admin-manage/add-member', async (req, res) => {
+        const { chipId, groupId, number } = req.body;
+        if (!chipId || !groupId || !number) return res.status(400).json({ error: 'chipId, groupId and number required' });
+        const chip = db.getChipById(parseInt(chipId));
+        if (!chip) return res.status(404).json({ error: 'Instancia nao encontrada' });
+        try {
+            const jid = number.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+            const result = await adminManager.addToGroup(chip.session_id, groupId, jid);
+            res.json({ ...result, jid });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // Promote member to admin
     router.post('/admin-manage/promote', async (req, res) => {
         const { chipId, groupId, jid } = req.body;

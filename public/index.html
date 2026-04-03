@@ -454,14 +454,59 @@
                     <!-- MODE: Add members -->
                     <div id="am-panel-add" class="am-panel-content" style="display:none">
                         <div class="ga-panel-header">
-                            <span class="ga-panel-title">Adicionar Membros</span>
+                            <span class="ga-panel-title">Adicionar ao Grupo</span>
                         </div>
                         <div class="am-add-section">
-                            <label class="ga-label-sm">Chips de aquecimento</label>
-                            <div id="am-add-chips-list" class="ga-list am-add-list"></div>
-                            <label class="ga-label-sm" style="margin-top:10px">Numeros manuais (um por linha)</label>
-                            <textarea id="am-add-manual" class="ga-textarea" rows="3" placeholder="5511999999999&#10;+5521988887777&#10;(11) 99999-0000"></textarea>
-                            <button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="amStartAdd()">➕ Adicionar ao Grupo</button>
+                            <!-- Step A: Numbers input -->
+                            <div class="am-add-step">
+                                <div class="am-add-step-header">
+                                    <span class="am-add-step-num">1</span>
+                                    <span class="am-add-step-title">Numeros para adicionar</span>
+                                </div>
+                                <textarea id="am-add-manual" class="ga-textarea" rows="4" placeholder="Cole os numeros aqui (um por linha)&#10;&#10;Aceita qualquer formato:&#10;5511999999999&#10;+55 21 98888-7777&#10;(11) 99999-0000"></textarea>
+                                <div class="am-add-hint" id="am-add-count-hint">0 numeros detectados</div>
+                            </div>
+
+                            <!-- Step B: Action mode -->
+                            <div class="am-add-step">
+                                <div class="am-add-step-header">
+                                    <span class="am-add-step-num">2</span>
+                                    <span class="am-add-step-title">O que fazer?</span>
+                                </div>
+                                <div class="am-add-actions">
+                                    <label class="am-add-action-option selected" onclick="amSetAddAction('add_only')">
+                                        <input type="radio" name="am-add-action" value="add_only">
+                                        <div class="am-add-action-icon">👤</div>
+                                        <div class="am-add-action-info">
+                                            <strong>Apenas Adicionar</strong>
+                                            <small>Adiciona ao grupo como membro comum</small>
+                                        </div>
+                                    </label>
+                                    <label class="am-add-action-option" onclick="amSetAddAction('add_promote')">
+                                        <input type="radio" name="am-add-action" value="add_promote">
+                                        <div class="am-add-action-icon">👑</div>
+                                        <div class="am-add-action-info">
+                                            <strong>Adicionar + Promover a Admin</strong>
+                                            <small>Adiciona ao grupo e ja promove como administrador</small>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Start button -->
+                            <button class="btn btn-primary am-add-start-btn" onclick="amStartAdd()">
+                                <span id="am-add-btn-text">➕ Iniciar</span>
+                            </button>
+
+                            <!-- Progress -->
+                            <div id="am-add-progress" class="am-add-progress" style="display:none">
+                                <div class="am-add-progress-header">
+                                    <span id="am-add-progress-text">0/0</span>
+                                    <button class="btn btn-danger btn-xs" onclick="_amAddAbort=true">Parar</button>
+                                </div>
+                                <div class="ga-progress-bar"><div class="ga-progress-fill" id="am-add-progress-fill" style="width:0%"></div></div>
+                                <div id="am-add-log" class="am-add-log"></div>
+                            </div>
                         </div>
                     </div>
                 </div>

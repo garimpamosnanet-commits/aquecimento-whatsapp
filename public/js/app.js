@@ -2611,75 +2611,143 @@ async function amPromoteSelected() {
 
 // ==================== AM ADD MEMBERS ====================
 
-function amLoadAddChips() {
-    fetch('/api/warming-chips').then(r => r.json()).then(chips => {
-        _amAddChips = chips;
-        amRenderAddChips();
-    }).catch(() => {});
+let _amAddAction = 'add_only'; // 'add_only' or 'add_promote'
+let _amAddAbort = false;
+
+function amSetAddAction(action) {
+    _amAddAction = action;
+    document.querySelectorAll('.am-add-action-option').forEach(el => {
+        el.classList.toggle('selected', el.querySelector('input').value === action);
+    });
+    // Update button text
+    const btnText = document.getElementById('am-add-btn-text');
+    if (btnText) btnText.textContent = action === 'add_promote' ? '👑 Adicionar + Promover' : '➕ Adicionar ao Grupo';
 }
 
-function amRenderAddChips() {
-    const list = document.getElementById('am-add-chips-list');
-    if (_amAddChips.length === 0) {
-        list.innerHTML = '<div class="ga-empty">Nenhum chip de aquecimento</div>';
-        return;
+function amUpdateAddCount() {
+    const text = document.getElementById('am-add-manual')?.value || '';
+    const numbers = text.split('\n').map(n => n.replace(/[^0-9+]/g, '').replace(/^\+/, '')).filter(n => n.length >= 10);
+    const hint = document.getElementById('am-add-count-hint');
+    if (hint) {
+        hint.textContent = numbers.length + ' numero' + (numbers.length !== 1 ? 's' : '') + ' detectado' + (numbers.length !== 1 ? 's' : '');
+        hint.style.color = numbers.length > 0 ? 'var(--success)' : 'var(--text-muted)';
     }
-    list.innerHTML = _amAddChips.map(c => {
-        const checked = _amSelectedAddChips.has(c.id) ? 'checked' : '';
-        const statusLabel = c.status === 'connected' ? '🟢' : c.status === 'warming' ? '🔥' : '⚪';
-        return `<div class="ga-item">
-            <input type="checkbox" ${checked} onchange="amToggleAddChip(${c.id})">
-            <div class="ga-item-info">
-                <div class="ga-item-name">${c.name || 'Chip ' + c.id}</div>
-                <div class="ga-item-meta">${statusLabel} ${c.phone || 'Sem numero'}</div>
-            </div>
-        </div>`;
-    }).join('');
 }
 
-function amToggleAddChip(chipId) {
-    if (_amSelectedAddChips.has(chipId)) _amSelectedAddChips.delete(chipId);
-    else _amSelectedAddChips.add(chipId);
-    amRenderAddChips();
+// Attach counter to textarea
+document.addEventListener('DOMContentLoaded', () => {
+    const ta = document.getElementById('am-add-manual');
+    if (ta) ta.addEventListener('input', amUpdateAddCount);
+});
+
+function amLoadAddChips() {
+    // Nothing to load anymore (chips removed from UI)
+    // Just update the textarea counter
+    amUpdateAddCount();
 }
 
-function amStartAdd() {
+async function amStartAdd() {
     const chipId = document.getElementById('am-admin-select').value;
     if (!chipId) return showToast('Selecione uma instancia ADM', 'warning');
-    if (!_amSelectedGroupId) return showToast('Selecione um grupo na esquerda', 'warning');
+    if (!_amSelectedGroupId) return showToast('Selecione um grupo na esquerda primeiro', 'warning');
 
-    // Collect numbers
     const manualText = document.getElementById('am-add-manual')?.value || '';
-    const manualNumbers = manualText.split('\n').map(n => n.replace(/[^0-9+]/g, '').replace(/^\+/, '')).filter(n => n.length >= 10);
-    const chipNumbers = _amAddChips.filter(c => _amSelectedAddChips.has(c.id) && c.phone).map(c => c.phone.replace(/[^0-9]/g, ''));
-    const allNumbers = [...chipNumbers, ...manualNumbers];
+    const numbers = manualText.split('\n').map(n => n.replace(/[^0-9+]/g, '').replace(/^\+/, '')).filter(n => n.length >= 10);
 
-    if (allNumbers.length === 0) return showToast('Nenhum numero selecionado', 'warning');
+    if (numbers.length === 0) return showToast('Cole pelo menos um numero valido', 'warning');
 
     const groupName = _amGroups.find(g => g.id === _amSelectedGroupId)?.subject || '';
-    if (!confirm(`Adicionar ${allNumbers.length} numero(s) ao grupo "${groupName}"?`)) return;
+    const actionText = _amAddAction === 'add_promote' ? 'Adicionar + Promover a Admin' : 'Adicionar como membro';
+    if (!confirm(`${actionText}\n\n${numbers.length} numero(s) no grupo "${groupName}"\n\nContinuar?`)) return;
 
-    const body = {
-        adminChipId: parseInt(chipId),
-        groups: [{ id: _amSelectedGroupId, subject: groupName }],
-        numbers: allNumbers,
-        config: { delayMin: 5, delayMax: 15, groupDelayMin: 30, groupDelayMax: 60, checkExists: true }
-    };
+    // Show progress
+    _amAddAbort = false;
+    const progressEl = document.getElementById('am-add-progress');
+    const progressText = document.getElementById('am-add-progress-text');
+    const progressFill = document.getElementById('am-add-progress-fill');
+    const logEl = document.getElementById('am-add-log');
+    progressEl.style.display = 'block';
+    logEl.innerHTML = '';
+    progressFill.style.width = '0%';
 
-    fetch('/api/group-add/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    }).then(r => r.json()).then(data => {
-        if (data.operationId) {
-            showToast('Adicionando ' + allNumbers.length + ' numero(s)...', 'success');
-            _amSelectedAddChips.clear();
-            document.getElementById('am-add-manual').value = '';
-            amRenderAddChips();
-        } else {
-            showToast(data.error || 'Erro', 'danger');
+    let addOk = 0, addFail = 0, promoteOk = 0, promoteFail = 0;
+
+    for (let i = 0; i < numbers.length; i++) {
+        if (_amAddAbort) {
+            logEl.innerHTML += '<div class="log-warn">⚠️ Operacao cancelada pelo usuario</div>';
+            break;
         }
-    }).catch(err => showToast('Erro: ' + err.message, 'danger'));
+
+        const num = numbers[i];
+        const pct = Math.round(((i + 1) / numbers.length) * 100);
+        progressText.textContent = `${i + 1}/${numbers.length} (${pct}%)`;
+        progressFill.style.width = pct + '%';
+
+        // Step 1: Add to group
+        try {
+            const addRes = await fetch('/api/admin-manage/add-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chipId: parseInt(chipId), groupId: _amSelectedGroupId, number: num })
+            });
+            const addData = await addRes.json();
+
+            if (addData.success) {
+                addOk++;
+                logEl.innerHTML += '<div class="log-ok">✅ ' + num + ' adicionado ao grupo</div>';
+
+                // Step 2: Promote if needed
+                if (_amAddAction === 'add_promote') {
+                    await new Promise(r => setTimeout(r, 2000)); // Wait before promote
+
+                    try {
+                        const promRes = await fetch('/api/admin-manage/promote', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chipId: parseInt(chipId), groupId: _amSelectedGroupId, jid: addData.jid })
+                        });
+                        const promData = await promRes.json();
+
+                        if (promData.success) {
+                            promoteOk++;
+                            logEl.innerHTML += '<div class="log-ok">👑 ' + num + ' promovido a admin</div>';
+                        } else {
+                            promoteFail++;
+                            logEl.innerHTML += '<div class="log-err">❌ ' + num + ' falha ao promover: ' + (promData.error || '?') + '</div>';
+                        }
+                    } catch (e) {
+                        promoteFail++;
+                        logEl.innerHTML += '<div class="log-err">❌ ' + num + ' erro ao promover: ' + e.message + '</div>';
+                    }
+                }
+            } else {
+                addFail++;
+                logEl.innerHTML += '<div class="log-err">❌ ' + num + ' — ' + (addData.error || 'Falha') + '</div>';
+            }
+        } catch (e) {
+            addFail++;
+            logEl.innerHTML += '<div class="log-err">❌ ' + num + ' — Erro: ' + e.message + '</div>';
+        }
+
+        logEl.scrollTop = logEl.scrollHeight;
+
+        // Delay between numbers (3-6s)
+        if (i < numbers.length - 1 && !_amAddAbort) {
+            const delay = 3000 + Math.random() * 3000;
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+
+    // Final summary
+    let summary = `\n✅ Concluido: ${addOk} adicionado(s)`;
+    if (addFail > 0) summary += `, ${addFail} falha(s)`;
+    if (_amAddAction === 'add_promote') {
+        summary += ` | 👑 ${promoteOk} promovido(s)`;
+        if (promoteFail > 0) summary += `, ${promoteFail} falha(s) promote`;
+    }
+    logEl.innerHTML += '<div class="log-info" style="font-weight:bold;margin-top:6px">' + summary + '</div>';
+    progressText.textContent = 'Concluido!';
+    showToast(summary.replace('\n', ''), addOk > 0 ? 'success' : 'danger');
 }
 
 // ==================== AM INVITE LINKS CACHE ====================
