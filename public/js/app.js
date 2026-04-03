@@ -2456,9 +2456,35 @@ function amMarkExistingAsAdm() {
     if (!choice) return;
     const idx = parseInt(choice) - 1;
     if (idx >= 0 && idx < available.length) {
-        setInstanceType(available[idx].id, 'admin');
-        setTimeout(() => loadAmAdminInstances(), 500);
-        showToast('Chip marcado como ADM!', 'success');
+        const chipId = available[idx].id;
+        fetch('/api/chips/' + chipId + '/set-type', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'admin' })
+        }).then(r => r.json()).then(() => {
+            showToast('Chip marcado como ADM!', 'success');
+            // Reload and auto-select
+            fetch('/api/admin-instances').then(r => r.json()).then(admins => {
+                const select = document.getElementById('am-admin-select');
+                const noAdminBox = document.getElementById('am-no-admin');
+                if (!select) return;
+                select.innerHTML = '<option value="">Selecione uma instancia ADM...</option>';
+                if (noAdminBox) noAdminBox.style.display = admins.length === 0 ? 'block' : 'none';
+                for (const adm of admins) {
+                    const label = (adm.name || 'ADM') + (adm.phone ? ' (' + adm.phone + ')' : '');
+                    const status = adm.is_connected ? '🟢' : '🔴';
+                    const opt = document.createElement('option');
+                    opt.value = adm.id;
+                    opt.textContent = status + ' ' + label;
+                    opt.disabled = !adm.is_connected;
+                    select.appendChild(opt);
+                }
+                // Auto-select the chip we just marked
+                select.value = chipId;
+                onAmAdminSelect(); // Trigger load
+            });
+            loadChips(); // Refresh chips tab too
+        }).catch(() => showToast('Erro ao marcar como ADM', 'danger'));
     }
 }
 
