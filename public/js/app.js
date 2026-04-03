@@ -2520,13 +2520,17 @@ function amRenderAdmins() {
         const badge = a.isMe ? '<span class="am-badge am-badge-me">EU (ADM)</span>'
             : a.isSuper ? '<span class="am-badge am-badge-super">CRIADOR</span>'
             : '';
+        const displayName = a.name || '';
+        const displayPhone = a.phone || a.lid || '?';
+        const isLid = a.jid && a.jid.includes('@lid');
+        const lidHint = isLid && !a.name ? '<span class="am-lid-hint">ID interno</span>' : '';
 
         if (isProtected) {
             return `<label class="ga-item am-protected">
                 <input type="checkbox" disabled>
                 <div class="ga-item-info">
-                    <div class="ga-item-name">${a.phone} ${badge}</div>
-                    <div class="ga-item-meta">Protegido — nao pode ser rebaixado</div>
+                    <div class="ga-item-name">${displayName ? displayName + ' ' : ''}${badge}</div>
+                    <div class="ga-item-meta">${displayPhone} · Protegido</div>
                 </div>
             </label>`;
         }
@@ -2534,8 +2538,8 @@ function amRenderAdmins() {
         return `<label class="ga-item ${checked ? 'selected' : ''}">
             <input type="checkbox" ${checked} onchange="amToggleAdmin('${a.jid}')">
             <div class="ga-item-info">
-                <div class="ga-item-name">${a.phone}</div>
-                <div class="ga-item-meta">Admin</div>
+                <div class="ga-item-name">${displayName || displayPhone} ${lidHint}</div>
+                <div class="ga-item-meta">${displayName ? displayPhone + ' · ' : ''}Admin</div>
             </div>
         </label>`;
     }).join('');

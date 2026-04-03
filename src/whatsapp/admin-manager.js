@@ -43,9 +43,36 @@ class AdminManager {
         for (const p of (meta.participants || [])) {
             if (p.admin === 'admin' || p.admin === 'superadmin') {
                 const isMe = this._isMe(p.id, sock);
+                const lid = this._extractPhone(p.id);
+
+                // Try to resolve LID to phone number
+                let phone = lid;
+                let name = p.notify || null;
+
+                // Check Baileys store for contact info
+                try {
+                    if (sock.store && sock.store.contacts) {
+                        const contact = sock.store.contacts[p.id];
+                        if (contact) {
+                            name = contact.notify || contact.name || contact.verifiedName || name;
+                            if (contact.id && contact.id.includes('@s.whatsapp.net')) {
+                                phone = this._extractPhone(contact.id);
+                            }
+                        }
+                    }
+                } catch (e) { /* ignore store errors */ }
+
+                // If it's me, use known phone
+                if (isMe) {
+                    phone = this._extractPhone(sock.user.id);
+                    name = name || 'EU (ADM)';
+                }
+
                 admins.push({
                     jid: p.id,
-                    phone: this._extractPhone(p.id),
+                    lid,
+                    phone,
+                    name,
                     isSuper: p.admin === 'superadmin',
                     isMe
                 });

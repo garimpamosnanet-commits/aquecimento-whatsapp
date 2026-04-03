@@ -2171,3 +2171,14 @@ body::before {
     color: var(--text-muted);
     font-style: italic;
 }
+.am-lid-hint {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 500;
+    background: rgba(0,0,0,0.05);
+    color: var(--text-muted);
+    margin-left: 4px;
+}
