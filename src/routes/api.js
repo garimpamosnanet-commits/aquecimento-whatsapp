@@ -438,20 +438,18 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             const myPhone = sock.user.id?.split('@')[0]?.split(':')[0];
             const myLid = sock.user.lid?.split('@')[0]?.split(':')[0];
 
-            // Sample first 3 groups with participant detail
-            const sample = Object.entries(groups).slice(0, 3).map(([gid, g]) => {
-                const meParticipant = g.participants.find(p => {
-                    const pClean = p.id.split('@')[0].split(':')[0];
-                    return pClean === myPhone || pClean === myLid;
-                });
+            // Deep inspect: check all group metadata fields
+            const sample = Object.entries(groups).slice(0, 5).map(([gid, g]) => {
+                // Check all possible ways to identify "me" in the group
+                const allAdmins = g.participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin');
                 return {
                     id: gid,
                     subject: g.subject,
                     participantCount: g.participants.length,
-                    meFound: !!meParticipant,
-                    meJid: meParticipant?.id,
-                    meAdmin: meParticipant?.admin,
-                    sampleParticipants: g.participants.slice(0, 3).map(p => ({ id: p.id, admin: p.admin }))
+                    admins: allAdmins.map(p => ({ id: p.id, admin: p.admin })),
+                    groupKeys: Object.keys(g).filter(k => k !== 'participants'),
+                    me: g.me || null,
+                    owner: g.owner || null
                 };
             });
             res.json({ totalGroups, myPhone, myLid, userJid: sock.user.id, userLid: sock.user.lid, sample });
