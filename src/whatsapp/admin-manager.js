@@ -4,7 +4,7 @@
 // Triple protection: ADM instance NEVER demoted/removed.
 
 const db = require('../database/db');
-const { USyncQuery, USyncUser } = require('@whiskeysockets/baileys');
+const { getBinaryNodeChild, getBinaryNodeChildren, isJidUser, isLidUser, jidNormalizedUser } = require('@whiskeysockets/baileys');
 
 class AdminManager {
     constructor(sessionManager, io) {
@@ -15,6 +15,7 @@ class AdminManager {
         this._stopped = false;
         this._pauseResolve = null;
         this._lidCache = {}; // LID JID -> phone number cache
+        this._lastDebugAttrs = null; // Store last raw attrs for debug endpoint
     }
 
     // ==================== WHATSAPP FUNCTIONS ====================
@@ -35,189 +36,118 @@ class AdminManager {
         return false;
     }
 
-    // ==================== LID RESOLUTION ====================
-
-    async _resolveLidsToPhones(sock, lidJids) {
-        const phoneMap = {};
-        if (!lidJids || lidJids.length === 0) return phoneMap;
-
-        // Check cache first
-        const uncached = [];
-        for (const lid of lidJids) {
-            if (this._lidCache[lid]) {
-                phoneMap[lid] = this._lidCache[lid];
-            } else {
-                uncached.push(lid);
-            }
-        }
-
-        if (uncached.length === 0) return phoneMap;
-
-        console.log(`[AdminManager] Resolving ${uncached.length} LIDs via USyncQuery...`);
-
-        try {
-            // Batch in groups of 20 to avoid overload
-            for (let i = 0; i < uncached.length; i += 20) {
-                const batch = uncached.slice(i, i + 20);
-
-                const query = new USyncQuery()
-                    .withContactProtocol()
-                    .withLIDProtocol();
-
-                for (const lidJid of batch) {
-                    query.withUser(new USyncUser().withId(lidJid));
-                }
-
-                const result = await sock.executeUSyncQuery(query);
-
-                if (result && result.list) {
-                    console.log(`[AdminManager] USyncQuery batch result (${batch.length} users):`,
-                        JSON.stringify(result.list.map(r => ({ id: r.id, lid: r.lid, contact: r.contact })), null, 2));
-
-                    for (let j = 0; j < result.list.length; j++) {
-                        const item = result.list[j];
-                        const originalLid = batch[j]; // same order as query
-
-                        // Case 1: Server returned phone JID in the id field
-                        if (item.id && item.id.includes('@s.whatsapp.net')) {
-                            const phone = this._extractPhone(item.id);
-                            phoneMap[originalLid] = phone;
-                            this._lidCache[originalLid] = phone;
-                            console.log(`[AdminManager] Resolved: ${this._extractPhone(originalLid)} -> ${phone}`);
-                        }
-                        // Case 2: Server returned LID in id, check if there's a phone elsewhere
-                        else if (item.id && item.id.includes('@lid')) {
-                            // Check sideList for phone mapping
-                            if (result.sideList) {
-                                for (const side of result.sideList) {
-                                    if (side.id && side.id.includes('@s.whatsapp.net')) {
-                                        const phone = this._extractPhone(side.id);
-                                        phoneMap[originalLid] = phone;
-                                        this._lidCache[originalLid] = phone;
-                                        console.log(`[AdminManager] Resolved via sideList: ${this._extractPhone(originalLid)} -> ${phone}`);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Small delay between batches
-                if (i + 20 < uncached.length) {
-                    await this._delay(500);
-                }
-            }
-        } catch (e) {
-            console.error('[AdminManager] USyncQuery error:', e.message);
-        }
-
-        // Fallback: try onWhatsApp for unresolved LIDs using device protocol
-        const stillUnresolved = uncached.filter(lid => !phoneMap[lid]);
-        if (stillUnresolved.length > 0) {
-            console.log(`[AdminManager] ${stillUnresolved.length} LIDs still unresolved, trying device protocol...`);
-            try {
-                const query2 = new USyncQuery()
-                    .withContext('interactive')
-                    .withDeviceProtocol()
-                    .withLIDProtocol();
-
-                for (const lidJid of stillUnresolved) {
-                    query2.withUser(new USyncUser().withId(lidJid));
-                }
-
-                const result2 = await sock.executeUSyncQuery(query2);
-                if (result2 && result2.list) {
-                    console.log(`[AdminManager] Device protocol result:`,
-                        JSON.stringify(result2.list.map(r => ({ id: r.id, lid: r.lid, devices: r.devices })), null, 2));
-
-                    for (let j = 0; j < result2.list.length; j++) {
-                        const item = result2.list[j];
-                        const originalLid = stillUnresolved[j];
-
-                        if (item.id && item.id.includes('@s.whatsapp.net')) {
-                            const phone = this._extractPhone(item.id);
-                            phoneMap[originalLid] = phone;
-                            this._lidCache[originalLid] = phone;
-                            console.log(`[AdminManager] Resolved via device: ${this._extractPhone(originalLid)} -> ${phone}`);
-                        }
-                    }
-                }
-            } catch (e2) {
-                console.error('[AdminManager] Device protocol error:', e2.message);
-            }
-        }
-
-        const resolved = Object.keys(phoneMap).length;
-        const total = lidJids.length;
-        console.log(`[AdminManager] Resolution complete: ${resolved}/${total} LIDs resolved to phone numbers`);
-
-        return phoneMap;
-    }
-
-    // ==================== GET GROUP ADMINS ====================
+    // ==================== GET GROUP ADMINS (RAW QUERY) ====================
 
     async getGroupAdmins(adminSessionId, groupId) {
         const sock = this.sessionManager.getSocket(adminSessionId);
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
-        const meta = await sock.groupMetadata(groupId);
+        // RAW group query to get ALL binary attributes (not Baileys' parsed version)
+        const rawResult = await sock.query({
+            tag: 'iq',
+            attrs: { type: 'get', xmlns: 'w:g2', to: groupId },
+            content: [{ tag: 'query', attrs: { request: 'interactive' } }]
+        });
 
-        // Phase 1: Collect admin data and identify LIDs that need resolution
-        const adminData = [];
-        const lidsToResolve = [];
+        const groupNode = getBinaryNodeChild(rawResult, 'group');
+        const participants = getBinaryNodeChildren(groupNode, 'participant');
 
-        for (const p of (meta.participants || [])) {
-            if (p.admin === 'admin' || p.admin === 'superadmin') {
-                const isMe = this._isMe(p.id, sock);
-
-                // p.jid = phone JID (from attrs.phone_number if available)
-                // p.lid = LID JID
-                // p.id  = raw JID (usually LID in newer WhatsApp)
-                const phoneFromMeta = p.jid ? this._extractPhone(p.jid) : '';
-                const lid = p.lid ? this._extractPhone(p.lid) : this._extractPhone(p.id);
-                const hasRealPhone = phoneFromMeta && phoneFromMeta.length >= 10 && phoneFromMeta !== lid;
-
-                // If no real phone and it's a LID, mark for resolution
-                if (!hasRealPhone && !isMe && p.id.includes('@lid')) {
-                    lidsToResolve.push(p.id);
-                }
-
-                adminData.push({ p, isMe, phoneFromMeta, lid, hasRealPhone });
+        // Debug: log ALL attributes of first admin participant
+        const debugAttrs = [];
+        for (const p of participants) {
+            if (p.attrs.type === 'admin' || p.attrs.type === 'superadmin') {
+                debugAttrs.push({
+                    ALL_ATTRS: { ...p.attrs },
+                    CONTENT: Array.isArray(p.content) ? p.content.map(c => ({
+                        tag: c.tag, attrs: c.attrs,
+                        content: typeof c.content === 'string' ? c.content : (Buffer.isBuffer(c.content) ? c.content.toString('hex') : typeof c.content)
+                    })) : null
+                });
+                if (debugAttrs.length >= 3) break;
             }
         }
+        this._lastDebugAttrs = debugAttrs;
+        console.log('[AdminManager] RAW participant attrs sample:', JSON.stringify(debugAttrs, null, 2));
 
-        // Phase 2: Resolve LIDs to phone numbers via WhatsApp servers
-        let phoneMap = {};
-        if (lidsToResolve.length > 0) {
-            phoneMap = await this._resolveLidsToPhones(sock, lidsToResolve);
-        }
-
-        // Phase 3: Build final admin list
+        // Build admin list — try EVERY possible phone attribute
         const admins = [];
-        for (const { p, isMe, phoneFromMeta, lid, hasRealPhone } of adminData) {
-            let phone;
-            let name = null;
+        for (const p of participants) {
+            const attrs = p.attrs || {};
+            if (attrs.type !== 'admin' && attrs.type !== 'superadmin') continue;
 
+            const isMe = this._isMe(attrs.jid, sock);
+            const lid = isLidUser(attrs.jid) ? this._extractPhone(attrs.jid) : (attrs.lid ? this._extractPhone(attrs.lid) : '');
+
+            // Try EVERY possible attribute that might contain a phone number
+            let phone = '';
+            const phoneCandidate = attrs.phone_number || attrs.pn || attrs.phone || attrs.number || attrs.participant_pn || null;
+
+            if (phoneCandidate) {
+                // Might be raw number or JID format
+                const normalized = jidNormalizedUser(phoneCandidate);
+                phone = normalized ? this._extractPhone(normalized) : phoneCandidate.replace(/[^0-9]/g, '');
+                console.log(`[AdminManager] Phone found in attrs: ${phone} (from candidate: ${phoneCandidate})`);
+            } else if (isJidUser(attrs.jid)) {
+                // JID is already a phone number
+                phone = this._extractPhone(attrs.jid);
+            }
+
+            // Also check content children for phone info
+            if (!phone && Array.isArray(p.content)) {
+                for (const child of p.content) {
+                    if (child.tag === 'pn' || child.tag === 'phone' || child.tag === 'contact') {
+                        const val = child.attrs?.val || child.attrs?.value || (typeof child.content === 'string' ? child.content : '');
+                        if (val && val.length >= 10) {
+                            phone = val.replace(/[^0-9]/g, '');
+                            console.log(`[AdminManager] Phone found in child node <${child.tag}>: ${phone}`);
+                        }
+                    }
+                }
+            }
+
+            // Also scan ALL attrs for any value that looks like a phone number (10+ digits)
+            if (!phone) {
+                for (const [key, val] of Object.entries(attrs)) {
+                    if (key === 'jid' || key === 'lid' || key === 'type') continue;
+                    const strVal = String(val);
+                    const digits = strVal.replace(/[^0-9]/g, '');
+                    if (digits.length >= 10 && digits.length <= 15) {
+                        phone = digits;
+                        console.log(`[AdminManager] Phone found via scan in attrs.${key}: ${phone}`);
+                        break;
+                    }
+                }
+            }
+
+            // Cache if resolved
+            if (phone && phone !== lid) {
+                this._lidCache[attrs.jid] = phone;
+            } else if (this._lidCache[attrs.jid]) {
+                phone = this._lidCache[attrs.jid];
+            }
+
+            let name = null;
             if (isMe) {
                 phone = this._extractPhone(sock.user.id);
                 name = 'EU (ADM)';
-            } else if (hasRealPhone) {
-                phone = phoneFromMeta;
-            } else {
-                phone = phoneMap[p.id] || lid;
             }
 
             admins.push({
-                jid: p.id,
+                jid: attrs.jid,
                 lid,
-                phone,
+                phone: phone || lid,
                 name,
-                isSuper: p.admin === 'superadmin',
+                isSuper: attrs.type === 'superadmin',
                 isMe
             });
         }
 
         return admins;
+    }
+
+    // Debug: get last raw attrs (accessible via API)
+    getLastDebugAttrs() {
+        return this._lastDebugAttrs;
     }
 
     async demoteFromAdmin(adminSessionId, groupId, jid) {

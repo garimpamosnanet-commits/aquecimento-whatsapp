@@ -414,53 +414,9 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
     });
 
-    // Debug: raw group participant attributes (to find phone_number field name)
-    router.get('/debug/raw-participants/:chipId/:groupId', async (req, res) => {
-        const chipId = parseInt(req.params.chipId);
-        const groupId = decodeURIComponent(req.params.groupId);
-        const chip = db.getChipById(chipId);
-        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
-        const sock = sessionManager.getSocket(chip.session_id);
-        if (!sock || !sock.user) return res.status(400).json({ error: 'Nao conectado' });
-
-        try {
-            const { getBinaryNodeChild, getBinaryNodeChildren } = require('@whiskeysockets/baileys');
-
-            // Raw group query - same as groupMetadata internally
-            const result = await sock.query({
-                tag: 'iq',
-                attrs: { type: 'get', xmlns: 'w:g2', to: groupId },
-                content: [{ tag: 'query', attrs: { request: 'interactive' } }]
-            });
-
-            const groupNode = getBinaryNodeChild(result, 'group');
-            const participants = getBinaryNodeChildren(groupNode, 'participant');
-
-            // Extract ALL attributes from first 10 admin participants
-            const adminParticipants = participants
-                .filter(p => p.attrs.type === 'admin' || p.attrs.type === 'superadmin')
-                .slice(0, 10)
-                .map(p => ({
-                    ALL_ATTRS: { ...p.attrs },
-                    HAS_CONTENT: !!p.content,
-                    CONTENT_TAGS: Array.isArray(p.content)
-                        ? p.content.map(c => ({ tag: c.tag, attrs: c.attrs, content_type: typeof c.content }))
-                        : null
-                }));
-
-            // Also get group-level attrs
-            const groupAttrs = groupNode ? { ...groupNode.attrs } : null;
-
-            res.json({
-                myId: sock.user.id,
-                myLid: sock.user.lid,
-                groupAttrs,
-                totalParticipants: participants.length,
-                adminSample: adminParticipants
-            });
-        } catch (err) {
-            res.status(500).json({ error: err.message, stack: err.stack });
-        }
+    // Debug: show raw participant attrs from last getGroupAdmins call
+    router.get('/debug/raw-attrs', (req, res) => {
+        res.json(adminManager.getLastDebugAttrs() || { message: 'No data yet. Click a group in Gerenciar Admins first.' });
     });
 
     // List warming chips (for selection in group-add)
