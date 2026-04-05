@@ -601,6 +601,12 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true });
     });
 
+    // Force reset stuck operation
+    router.post('/group-add/force-reset', (req, res) => {
+        groupManager.forceReset();
+        res.json({ success: true, message: 'Operacao resetada' });
+    });
+
     // List operations history
     router.get('/group-add/operations', (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
@@ -737,21 +743,33 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const type = req.params.type;
         const dir = path.join(__dirname, '..', '..', 'media', type);
         if (!fs.existsSync(dir)) return res.json([]);
-        const files = fs.readdirSync(dir).map(f => {
-            const stat = fs.statSync(path.join(dir, f));
-            return { name: f, size: stat.size, created: stat.birthtime };
-        });
-        res.json(files);
+        try {
+            const files = fs.readdirSync(dir).map(f => {
+                try {
+                    const stat = fs.statSync(path.join(dir, f));
+                    return { name: f, size: stat.size, created: stat.birthtime };
+                } catch (e) {
+                    return { name: f, size: 0, created: null };
+                }
+            });
+            res.json(files);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     router.delete('/media/:type/:filename', (req, res) => {
         const { type, filename } = req.params;
         const filepath = path.join(__dirname, '..', '..', 'media', type, filename);
-        if (fs.existsSync(filepath)) {
-            fs.unlinkSync(filepath);
-            return res.json({ success: true });
+        try {
+            if (fs.existsSync(filepath)) {
+                fs.unlinkSync(filepath);
+                return res.json({ success: true });
+            }
+            res.status(404).json({ error: 'Arquivo nao encontrado' });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
         }
-        res.status(404).json({ error: 'Arquivo nao encontrado' });
     });
 
     // ==================== CUSTOM MESSAGES ====================

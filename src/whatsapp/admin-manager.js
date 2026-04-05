@@ -288,6 +288,11 @@ class AdminManager {
         this._currentOperation = null;
         this._paused = false;
         this._stopped = false;
+        this._retryCount = {};
+        // Resolve any hanging pause promise to prevent memory leak
+        if (this._pauseResolve) {
+            this._pauseResolve();
+        }
         this._pauseResolve = null;
     }
 
@@ -298,6 +303,7 @@ class AdminManager {
         this._currentOperation = operationId;
         this._paused = false;
         this._stopped = false;
+        this._retryCount = {};
 
         try {
 
@@ -463,11 +469,14 @@ class AdminManager {
                         }
 
                     } catch (e) {
-                        // Rate limit detection
-                        if (e.message?.includes('rate') || e.message?.includes('429') || e.message?.includes('too many')) {
+                        // Rate limit detection (max 3 retries per item)
+                        const retryKey = `${groupId}_${item.jid}`;
+                        if (!this._retryCount) this._retryCount = {};
+                        if ((e.message?.includes('rate') || e.message?.includes('429') || e.message?.includes('too many')) && (this._retryCount[retryKey] || 0) < 3) {
+                            this._retryCount[retryKey] = (this._retryCount[retryKey] || 0) + 1;
                             this.io.emit('admin_manage_log', {
                                 operationId, type: 'warning',
-                                message: 'Rate limit detectado — pausando por 5 minutos',
+                                message: `Rate limit detectado (tentativa ${this._retryCount[retryKey]}/3) — pausando por 5 minutos`,
                                 timestamp: new Date().toISOString()
                             });
                             await this._delay(300000);

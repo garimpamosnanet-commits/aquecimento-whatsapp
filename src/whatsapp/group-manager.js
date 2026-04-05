@@ -246,6 +246,18 @@ class GroupManager {
 
     // ==================== MAIN ORCHESTRATOR ====================
 
+    forceReset() {
+        console.log(`[GroupManager] Force reset: _currentOperation was ${this._currentOperation}`);
+        this._currentOperation = null;
+        this._paused = false;
+        this._stopped = false;
+        this._retryCount = {};
+        if (this._pauseResolve) {
+            this._pauseResolve();
+        }
+        this._pauseResolve = null;
+    }
+
     async executeBulkGroupAdd(operationId) {
         const operation = db.getAddOperation(operationId);
         if (!operation) throw new Error('Operacao nao encontrada');
@@ -253,6 +265,9 @@ class GroupManager {
         this._currentOperation = operationId;
         this._paused = false;
         this._stopped = false;
+        this._retryCount = {};
+
+        try {
 
         const config = JSON.parse(operation.config || '{}');
         const items = db.getOperationItems(operationId);
@@ -368,11 +383,14 @@ class GroupManager {
                         else if (result.adminPromoted === -1) adminFailedCount++;
 
                     } catch (e) {
-                        // Rate limit detection
-                        if (e.message?.includes('rate') || e.message?.includes('429') || e.message?.includes('too many')) {
+                        // Rate limit detection (max 3 retries per item)
+                        const retryKey = `${groupId}_${item.phone_number}`;
+                        if (!this._retryCount) this._retryCount = {};
+                        if ((e.message?.includes('rate') || e.message?.includes('429') || e.message?.includes('too many')) && (this._retryCount[retryKey] || 0) < 3) {
+                            this._retryCount[retryKey] = (this._retryCount[retryKey] || 0) + 1;
                             this.io.emit('group_add_log', {
                                 operationId, type: 'warning',
-                                message: 'Rate limit detectado — pausando por 5 minutos',
+                                message: `Rate limit detectado (tentativa ${this._retryCount[retryKey]}/3) — pausando por 5 minutos`,
                                 timestamp: new Date().toISOString()
                             });
                             await this._delay(300000); // 5 min
@@ -456,7 +474,12 @@ class GroupManager {
             this.io.emit('group_add_status', { operationId, status: 'failed', message: 'Erro: ' + e.message });
         }
 
-        this._currentOperation = null;
+        } catch (outerErr) {
+            console.error('[GroupManager] Erro antes da execucao:', outerErr);
+            this.io.emit('group_add_status', { operationId, status: 'failed', message: 'Erro: ' + outerErr.message });
+        } finally {
+            this._currentOperation = null;
+        }
     }
 
     // ==================== CONTROL ====================
