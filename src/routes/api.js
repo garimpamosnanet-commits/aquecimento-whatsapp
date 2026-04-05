@@ -942,6 +942,12 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true });
     });
 
+    // Force reset stuck operation
+    router.post('/admin-manage/force-reset', (req, res) => {
+        adminManager.forceReset();
+        res.json({ success: true, message: 'Operacao resetada' });
+    });
+
     // Operations history
     router.get('/admin-manage/operations', (req, res) => {
         const limit = parseInt(req.query.limit) || 20;

@@ -283,6 +283,14 @@ class AdminManager {
 
     // ==================== MAIN ORCHESTRATOR ====================
 
+    forceReset() {
+        console.log(`[AdminManager] Force reset: _currentOperation was ${this._currentOperation}`);
+        this._currentOperation = null;
+        this._paused = false;
+        this._stopped = false;
+        this._pauseResolve = null;
+    }
+
     async executeAdminManage(operationId) {
         const operation = db.getAdminManageOperation(operationId);
         if (!operation) throw new Error('Operacao nao encontrada');
@@ -290,6 +298,8 @@ class AdminManager {
         this._currentOperation = operationId;
         this._paused = false;
         this._stopped = false;
+
+        try {
 
         const config = JSON.parse(operation.config || '{}');
         const items = db.getAdminManageItems(operationId);
@@ -531,7 +541,12 @@ class AdminManager {
             this.io.emit('admin_manage_status', { operationId, status: 'failed', message: 'Erro: ' + e.message });
         }
 
-        this._currentOperation = null;
+        } catch (outerErr) {
+            console.error('[AdminManager] Erro antes da execucao:', outerErr);
+            this.io.emit('admin_manage_status', { operationId, status: 'failed', message: 'Erro: ' + outerErr.message });
+        } finally {
+            this._currentOperation = null;
+        }
     }
 
     // ==================== CONTROL ====================
