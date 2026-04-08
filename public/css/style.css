@@ -2757,6 +2757,12 @@ body::before {
     color: #b91c1c;
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
+.lista-status-ready {
+    background: rgba(16, 185, 129, 0.12);
+    color: #047857;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    font-weight: 700;
+}
 .temp-badge {
     display: inline-block;
     padding: 3px 10px;

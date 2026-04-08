@@ -1013,13 +1013,15 @@ function renderListTab() {
         return;
     }
 
-    const statusLabel = (s) => {
+    const statusLabel = (chip) => {
+        if ((chip.status === 'connected' || chip.status === 'warming') && chip.phase >= 4) return 'Aquecido';
         const map = { 'connected': 'Conectado', 'warming': 'Aquecendo', 'disconnected': 'Desconectado', 'qr_pending': 'Aguardando QR', 'rehabilitation': 'Reabilitacao', 'banned': 'Banido', 'discarded': 'Descartado' };
-        return map[s] || s;
+        return map[chip.status] || chip.status;
     };
-    const statusCls = (s) => {
+    const statusCls = (chip) => {
+        if ((chip.status === 'connected' || chip.status === 'warming') && chip.phase >= 4) return 'lista-status-ready';
         const map = { 'connected': 'lista-status-connected', 'warming': 'lista-status-warming', 'disconnected': 'lista-status-off', 'qr_pending': 'lista-status-warn', 'rehabilitation': 'lista-status-rehab', 'banned': 'lista-status-banned', 'discarded': 'lista-status-off' };
-        return map[s] || '';
+        return map[chip.status] || '';
     };
 
     // Group by connection date
@@ -1057,7 +1059,7 @@ function renderListTab() {
             rows += `<tr>
                 <td class="lista-name lista-editable" onclick="listaEditName(this, ${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')">${name} <span class="lista-edit-icon">✏️</span></td>
                 <td class="lista-phone">${phone}</td>
-                <td><span class="lista-status ${statusCls(chip.status)}">${statusLabel(chip.status)}</span></td>
+                <td><span class="lista-status ${statusCls(chip)}">${statusLabel(chip)}</span></td>
                 <td>${pasta !== '—' ? '<span class="lista-folder-badge">📁 ' + pasta + '</span>' : '—'}</td>
                 <td>${dateKey}</td>
                 <td><span class="temp-badge temp-${temp.cls}">${temp.fires} ${temp.label}</span></td>
