@@ -180,7 +180,11 @@ class SessionManager {
             if (connection === 'open') {
                 debugLog(`[SessionManager] ${sessionId} conectado!`);
                 this.reconnectAttempts.delete(sessionId);
-                db.updateChipStatus(chip.id, 'connected');
+                // Preserve warming/rehabilitation status on reconnect
+                const currentChip = db.getChipById(chip.id);
+                if (!currentChip || (currentChip.status !== 'warming' && currentChip.status !== 'rehabilitation')) {
+                    db.updateChipStatus(chip.id, 'connected');
+                }
 
                 // Get phone number from socket
                 const phoneNumber = socket.user?.id?.split(':')[0] || socket.user?.id?.split('@')[0];
