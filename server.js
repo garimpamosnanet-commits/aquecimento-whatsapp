@@ -1,4 +1,4 @@
-const BUILD_VERSION = '1.1.0-20260408';
+const BUILD_VERSION = '1.2.0-20260408';
 console.log(`\n========================================`);
 console.log(`  KS Digital Aquecimento v${BUILD_VERSION}`);
 console.log(`  Started at: ${new Date().toISOString()}`);
