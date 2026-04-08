@@ -1043,17 +1043,22 @@ function renderListTab() {
     }
 
     let rows = '';
+    const folderMap = {};
+    for (const f of folders) folderMap[f.id] = f.name;
+
     for (const dateKey of sortedKeys) {
         const groupChips = groups[dateKey];
-        rows += `<tr class="lista-group-header"><td colspan="5">📅 ${dateKey} <span class="lista-group-count">(${groupChips.length} chips)</span></td></tr>`;
+        rows += `<tr class="lista-group-header"><td colspan="6">📅 ${dateKey} <span class="lista-group-count">(${groupChips.length} chips)</span></td></tr>`;
         for (const chip of groupChips) {
             const temp = getTemperature(chip);
             const phone = chip.phone || '—';
             const name = chip.name || '—';
+            const pasta = chip.folder_id ? (folderMap[chip.folder_id] || '—') : '—';
             rows += `<tr>
                 <td class="lista-name lista-editable" onclick="listaEditName(this, ${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')">${name} <span class="lista-edit-icon">✏️</span></td>
                 <td class="lista-phone">${phone}</td>
                 <td><span class="lista-status ${statusCls(chip.status)}">${statusLabel(chip.status)}</span></td>
+                <td>${pasta !== '—' ? '<span class="lista-folder-badge">📁 ' + pasta + '</span>' : '—'}</td>
                 <td>${dateKey}</td>
                 <td><span class="temp-badge temp-${temp.cls}">${temp.fires} ${temp.label}</span></td>
             </tr>`;
@@ -1069,6 +1074,7 @@ function renderListTab() {
                     <th>Nome</th>
                     <th>Numero</th>
                     <th>Status</th>
+                    <th>Pasta</th>
                     <th>Data de Conexao</th>
                     <th>Temperatura</th>
                 </tr>
