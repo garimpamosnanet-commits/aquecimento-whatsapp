@@ -227,7 +227,7 @@ function updateChipStatus(id, status) {
     const chip = data.chips.find(c => c.id === id);
     if (!chip) return null;
     chip.status = status;
-    if (status === 'connected') chip.connected_at = now();
+    if (status === 'connected' && !chip.connected_at) chip.connected_at = now();
     saveDb(data);
     return chip;
 }
