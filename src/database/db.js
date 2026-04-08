@@ -115,8 +115,8 @@ function getDb() {
         console.log(`[DB] Migrated: added expires_at to ${data.proxies.length} proxies`);
     }
 
-    // Apply recommended safe warming config (one-time)
-    if (data.warming_config && !data._warmingConfigOptimized) {
+    // Apply recommended safe warming config (force v2)
+    if (data.warming_config && !data._warmingConfigV2) {
         const safeConfig = {
             1: { daily_limit: 15, min_delay_seconds: 120, max_delay_seconds: 360, active_hour_start: 9, active_hour_end: 20, enabled_actions: 'private_chat,location', description: 'Fase 1 (Dia 1-3): Inicio suave - textos e localizacao' },
             2: { daily_limit: 40, min_delay_seconds: 60, max_delay_seconds: 240, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,location', description: 'Fase 2 (Dia 4-7): Medio - audio e localizacao' },
@@ -128,16 +128,17 @@ function getDb() {
             const cfg = data.warming_config.find(c => c.phase === parseInt(phase));
             if (cfg) Object.assign(cfg, safeConfig[phase]);
         }
-        data._warmingConfigOptimized = true;
+        data._warmingConfigV2 = true;
         saveDb(data);
         console.log('[DB] Warming config otimizado para modelo seguro');
     }
 
     // Force-enable notifications to CHIPS - KS Digital group (somente grupo)
-    if (data.settings && (!data.settings.notifications.enabled || data.settings.notifications.phone)) {
+    if (data.settings && !data._notifGroupOnlyV2) {
         data.settings.notifications.enabled = true;
         data.settings.notifications.phone = '';
         data.settings.notifications.events = ['disconnect', 'ban', 'phase_change', 'error', 'ready', 'daily_report'];
+        data._notifGroupOnlyV2 = true;
         saveDb(data);
         console.log('[DB] Notificacoes ativadas (somente grupo)');
     }
