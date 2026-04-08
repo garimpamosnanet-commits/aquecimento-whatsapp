@@ -1008,15 +1008,7 @@ function renderListTab() {
     const container = document.getElementById('lista-table-container');
     if (!container) return;
 
-    const sorted = [...chips].sort((a, b) => {
-        const statusOrder = { 'connected': 0, 'warming': 0, 'rehabilitation': 1, 'qr_pending': 2, 'disconnected': 3 };
-        const sa = statusOrder[a.status] ?? 9;
-        const sb = statusOrder[b.status] ?? 9;
-        if (sa !== sb) return sa - sb;
-        return (a.name || '').localeCompare(b.name || '');
-    });
-
-    if (sorted.length === 0) {
+    if (chips.length === 0) {
         container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h3>Nenhum numero cadastrado</h3></div>`;
         return;
     }
@@ -1030,22 +1022,47 @@ function renderListTab() {
         return map[s] || '';
     };
 
-    let rows = sorted.map(chip => {
-        const temp = getTemperature(chip);
-        const connDate = chip.connected_at ? new Date(chip.connected_at).toLocaleDateString('pt-BR') : '—';
-        const phone = chip.phone || '—';
-        const name = chip.name || '—';
-        return `<tr>
-            <td class="lista-name">${name}</td>
-            <td class="lista-phone">${phone}</td>
-            <td><span class="lista-status ${statusCls(chip.status)}">${statusLabel(chip.status)}</span></td>
-            <td>${connDate}</td>
-            <td><span class="temp-badge temp-${temp.cls}">${temp.fires} ${temp.label}</span></td>
-        </tr>`;
-    }).join('');
+    // Group by connection date
+    const groups = {};
+    for (const chip of chips) {
+        const dateKey = chip.connected_at ? new Date(chip.connected_at).toLocaleDateString('pt-BR') : 'Sem data';
+        if (!groups[dateKey]) groups[dateKey] = [];
+        groups[dateKey].push(chip);
+    }
+    // Sort groups: most recent date first, "Sem data" last
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+        if (a === 'Sem data') return 1;
+        if (b === 'Sem data') return -1;
+        const [da, ma, ya] = a.split('/').map(Number);
+        const [db, mb, yb] = b.split('/').map(Number);
+        return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da);
+    });
+    // Sort chips within each group by name
+    for (const key of sortedKeys) {
+        groups[key].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
 
+    let rows = '';
+    for (const dateKey of sortedKeys) {
+        const groupChips = groups[dateKey];
+        rows += `<tr class="lista-group-header"><td colspan="5">📅 ${dateKey} <span class="lista-group-count">(${groupChips.length} chips)</span></td></tr>`;
+        for (const chip of groupChips) {
+            const temp = getTemperature(chip);
+            const phone = chip.phone || '—';
+            const name = chip.name || '—';
+            rows += `<tr>
+                <td class="lista-name lista-editable" onclick="listaEditName(this, ${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')">${name} <span class="lista-edit-icon">✏️</span></td>
+                <td class="lista-phone">${phone}</td>
+                <td><span class="lista-status ${statusCls(chip.status)}">${statusLabel(chip.status)}</span></td>
+                <td>${dateKey}</td>
+                <td><span class="temp-badge temp-${temp.cls}">${temp.fires} ${temp.label}</span></td>
+            </tr>`;
+        }
+    }
+
+    const connected = chips.filter(c => c.status === 'connected' || c.status === 'warming').length;
     container.innerHTML = `
-        <div class="lista-summary">Total: <strong>${sorted.length}</strong> numeros | Conectados: <strong>${sorted.filter(c => c.status === 'connected' || c.status === 'warming').length}</strong></div>
+        <div class="lista-summary">Total: <strong>${chips.length}</strong> numeros | Conectados: <strong>${connected}</strong></div>
         <table class="lista-table">
             <thead>
                 <tr>
@@ -1058,6 +1075,40 @@ function renderListTab() {
             </thead>
             <tbody>${rows}</tbody>
         </table>`;
+}
+
+function listaEditName(td, chipId, currentName) {
+    if (td.querySelector('input')) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'lista-edit-input';
+    td.innerHTML = '';
+    td.appendChild(input);
+    input.focus();
+    input.select();
+
+    const save = () => {
+        const newName = input.value.trim();
+        if (newName && newName !== currentName) {
+            fetch(`/api/chips/${chipId}/name`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName })
+            }).then(r => r.json()).then(() => {
+                const chip = chips.find(c => c.id === chipId);
+                if (chip) chip.name = newName;
+                renderListTab();
+            });
+        } else {
+            renderListTab();
+        }
+    };
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { input.value = currentName; input.blur(); }
+    });
 }
 
 // ==================== TEST MESSAGE ====================
