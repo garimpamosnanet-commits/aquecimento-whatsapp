@@ -68,15 +68,22 @@ class WarmingEngine {
         const config = db.getWarmingConfig(chip.phase);
         if (!config) return;
 
-        // Check if within active hours
+        // Check if within active hours (BRT)
         if (!MessageFactory.isActiveHour(config.active_hour_start, config.active_hour_end)) {
-            // Schedule for next active hour
+            // Schedule for next active hour — calculate delay in BRT
             const now = new Date();
-            const nextActive = new Date();
-            nextActive.setHours(config.active_hour_start, 0, 0, 0);
-            if (nextActive <= now) nextActive.setDate(nextActive.getDate() + 1);
-            const delay = nextActive - now;
-            console.log(`[WarmingEngine] Chip ${chipId} fora do horario ativo. Proximo: ${nextActive.toLocaleTimeString()}`);
+            const brtNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+            const brtHour = brtNow.getHours();
+            let hoursUntilActive;
+            if (brtHour >= config.active_hour_end) {
+                // Past end time — schedule for tomorrow's start
+                hoursUntilActive = (24 - brtHour) + config.active_hour_start;
+            } else {
+                // Before start time
+                hoursUntilActive = config.active_hour_start - brtHour;
+            }
+            const delay = hoursUntilActive * 60 * 60 * 1000;
+            console.log(`[WarmingEngine] Chip ${chipId} fora do horario ativo (${brtHour}h BRT). Proximo: ${config.active_hour_start}h BRT (${hoursUntilActive}h)`);
             this.activeTimers.set(chipId, setTimeout(() => this.scheduleNextAction(chipId), delay));
             return;
         }
@@ -84,12 +91,13 @@ class WarmingEngine {
         // Check daily limit
         const todayCount = db.getTodayMessageCount(chipId);
         if (todayCount >= config.daily_limit) {
-            // Schedule for tomorrow
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            tomorrow.setHours(config.active_hour_start, 0, 0, 0);
-            const delay = tomorrow - new Date();
-            console.log(`[WarmingEngine] Chip ${chipId} atingiu limite diario (${todayCount}/${config.daily_limit}). Amanha.`);
+            // Schedule for tomorrow's active start — calculate in BRT
+            const now = new Date();
+            const brtNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+            const brtHour = brtNow.getHours();
+            const hoursUntilTomorrow = (24 - brtHour) + config.active_hour_start;
+            const delay = hoursUntilTomorrow * 60 * 60 * 1000;
+            console.log(`[WarmingEngine] Chip ${chipId} atingiu limite diario (${todayCount}/${config.daily_limit}). Amanha ${config.active_hour_start}h BRT.`);
             this.activeTimers.set(chipId, setTimeout(() => this.scheduleNextAction(chipId), delay));
             return;
         }

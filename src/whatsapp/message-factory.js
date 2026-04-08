@@ -246,10 +246,17 @@ class MessageFactory {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
-    // Check if current hour is within active hours
-    static isActiveHour(startHour, endHour) {
+    // Get current hour in BRT (UTC-3) — independent of server timezone
+    static getBRTHour() {
         const now = new Date();
-        const hour = now.getHours();
+        // Convert to BRT: create date string in America/Sao_Paulo timezone
+        const brt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+        return brt.getHours();
+    }
+
+    // Check if current hour (BRT) is within active hours
+    static isActiveHour(startHour, endHour) {
+        const hour = MessageFactory.getBRTHour();
         return hour >= startHour && hour < endHour;
     }
 

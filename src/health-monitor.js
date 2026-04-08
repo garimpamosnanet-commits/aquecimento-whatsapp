@@ -143,7 +143,8 @@ class HealthMonitor {
             const config = db.getWarmingConfig(chip.phase);
             if (config) {
                 const now = new Date();
-                const hoursPassed = now.getHours() - (config.active_hour_start || 8);
+                const brtNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+                const hoursPassed = brtNow.getHours() - (config.active_hour_start || 8);
                 if (hoursPassed > 0) {
                     const totalActiveHours = (config.active_hour_end || 22) - (config.active_hour_start || 8);
                     const expectedByNow = Math.round((config.daily_limit || 50) * (hoursPassed / totalActiveHours));
@@ -321,8 +322,8 @@ class HealthMonitor {
 
             // Alert: chip with 0 messages today but status is warming
             if (chip.status === 'warming' && (todayCountMap[chip.id] || 0) === 0) {
-                const hourNow = new Date().getHours();
-                if (hourNow >= 10) { // Only alert after 10am
+                const hourNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getHours();
+                if (hourNow >= 10) { // Only alert after 10am BRT
                     alerts.push({
                         level: 'warning',
                         message: chipLabel + ' aquecendo mas com 0 msgs hoje',

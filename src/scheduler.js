@@ -20,9 +20,11 @@ class Scheduler {
         const sched = settings.schedule;
         if (!sched || !sched.enabled) return;
 
+        // Use BRT (UTC-3) regardless of server timezone
         const now = new Date();
-        const h = now.getHours();
-        const m = now.getMinutes();
+        const brt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+        const h = brt.getHours();
+        const m = brt.getMinutes();
         const currentMin = h * 60 + m;
         const startMin = sched.start_hour * 60 + (sched.start_min || 0);
         const stopMin = sched.stop_hour * 60 + (sched.stop_min || 0);
