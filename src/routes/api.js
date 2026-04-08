@@ -55,6 +55,19 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
     });
 
+    // Update connected_at date
+    router.put('/chips/:id/connected_at', (req, res) => {
+        const chip = db.getChipById(parseInt(req.params.id));
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        const { connected_at } = req.body;
+        if (!connected_at) return res.status(400).json({ error: 'connected_at obrigatorio' });
+        const data = db._loadDb();
+        const c = data.chips.find(x => x.id === chip.id);
+        if (c) { c.connected_at = connected_at; db._saveDb(data); }
+        sessionManager.emitChipUpdate(chip.id);
+        res.json({ success: true });
+    });
+
     // Rename chip
     router.put('/chips/:id/name', (req, res) => {
         const chip = db.getChipById(parseInt(req.params.id));

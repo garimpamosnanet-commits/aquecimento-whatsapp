@@ -839,5 +839,6 @@ module.exports = {
     getAdminManageOperations, addAdminManageItems, getAdminManageItems,
     updateAdminManageItem, getFailedAdminManageItems,
     getGroupDoneMarks, setGroupDoneMark,
-    getGroupInviteLinks, setGroupInviteLink, setGroupInviteLinksBulk
+    getGroupInviteLinks, setGroupInviteLink, setGroupInviteLinksBulk,
+    _loadDb: loadDb, _saveDb: saveDb
 };
