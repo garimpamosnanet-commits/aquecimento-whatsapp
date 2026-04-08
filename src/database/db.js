@@ -115,6 +115,24 @@ function getDb() {
         console.log(`[DB] Migrated: added expires_at to ${data.proxies.length} proxies`);
     }
 
+    // Apply recommended safe warming config (one-time)
+    if (data.warming_config && !data._warmingConfigOptimized) {
+        const safeConfig = {
+            1: { daily_limit: 15, min_delay_seconds: 120, max_delay_seconds: 360, active_hour_start: 9, active_hour_end: 20, enabled_actions: 'private_chat,location', description: 'Fase 1 (Dia 1-3): Inicio suave - textos e localizacao' },
+            2: { daily_limit: 40, min_delay_seconds: 60, max_delay_seconds: 240, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,location', description: 'Fase 2 (Dia 4-7): Medio - audio e localizacao' },
+            3: { daily_limit: 80, min_delay_seconds: 45, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,sticker', description: 'Fase 3 (Dia 8-14): Crescimento - grupos e stickers' },
+            4: { daily_limit: 130, min_delay_seconds: 40, max_delay_seconds: 150, active_hour_start: 7, active_hour_end: 23, enabled_actions: 'private_chat,audio,group_chat,sticker,image', description: 'Fase 4 (Dia 15-21): Teto seguro - todos os tipos' },
+            5: { daily_limit: 20, min_delay_seconds: 240, max_delay_seconds: 600, active_hour_start: 9, active_hour_end: 19, enabled_actions: 'private_chat,location', description: 'Reabilitacao - recuperacao controlada' }
+        };
+        for (const phase of Object.keys(safeConfig)) {
+            const cfg = data.warming_config.find(c => c.phase === parseInt(phase));
+            if (cfg) Object.assign(cfg, safeConfig[phase]);
+        }
+        data._warmingConfigOptimized = true;
+        saveDb(data);
+        console.log('[DB] Warming config otimizado para modelo seguro');
+    }
+
     // Force-enable notifications to CHIPS - KS Digital group
     if (data.settings && !data.settings.notifications.enabled) {
         data.settings.notifications.enabled = true;
