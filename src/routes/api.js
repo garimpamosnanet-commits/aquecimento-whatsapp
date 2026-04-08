@@ -293,6 +293,18 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true });
     });
 
+    // Assign proxy to a specific chip (without reconnecting)
+    router.post('/proxies/assign/:chipId', (req, res) => {
+        const chipId = parseInt(req.params.chipId);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        const existing = db.getProxyForChip(chipId);
+        if (existing) return res.json({ success: true, message: 'Chip ja tem proxy', proxy: existing });
+        const proxy = db.assignProxyToChip(chipId);
+        if (!proxy) return res.status(400).json({ error: 'Sem proxy disponivel' });
+        res.json({ success: true, proxy });
+    });
+
     // Delete all proxies
     router.delete('/proxies', (req, res) => {
         db.deleteAllProxies();
