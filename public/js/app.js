@@ -1050,13 +1050,14 @@ function renderListTab() {
 
     for (const dateKey of sortedKeys) {
         const groupChips = groups[dateKey];
-        rows += `<tr class="lista-group-header"><td colspan="6">📅 ${dateKey} <span class="lista-group-count">(${groupChips.length} chips)</span></td></tr>`;
+        const groupId = dateKey.replace(/\//g, '-');
+        rows += `<tr class="lista-group-header" onclick="listaToggleGroup('${groupId}')"><td colspan="6"><span class="lista-group-toggle" id="lista-toggle-${groupId}">▼</span> 📅 ${dateKey} <span class="lista-group-count">(${groupChips.length} chips)</span></td></tr>`;
         for (const chip of groupChips) {
             const temp = getTemperature(chip);
             const phone = chip.phone || '—';
             const name = chip.name || '—';
             const pasta = chip.folder_id ? (folderMap[chip.folder_id] || '—') : '—';
-            rows += `<tr>
+            rows += `<tr class="lista-group-row lista-group-${groupId}">
                 <td class="lista-name lista-editable" onclick="listaEditName(this, ${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')">${name} <span class="lista-edit-icon">✏️</span></td>
                 <td class="lista-phone">${phone}</td>
                 <td><span class="lista-status ${statusCls(chip)}">${statusLabel(chip)}</span></td>
@@ -1070,6 +1071,10 @@ function renderListTab() {
     const connected = chips.filter(c => c.status === 'connected' || c.status === 'warming').length;
     container.innerHTML = `
         <div class="lista-summary">Total: <strong>${chips.length}</strong> numeros | Conectados: <strong>${connected}</strong></div>
+        <div class="lista-search-wrap">
+            <span class="lista-search-icon">🔍</span>
+            <input type="text" class="lista-search" id="lista-search" placeholder="Buscar por nome, numero, status..." oninput="listaFilter(this.value)">
+        </div>
         <table class="lista-table">
             <thead>
                 <tr>
@@ -1083,6 +1088,28 @@ function renderListTab() {
             </thead>
             <tbody>${rows}</tbody>
         </table>`;
+}
+
+function listaToggleGroup(groupId) {
+    const rows = document.querySelectorAll(`.lista-group-${groupId}`);
+    const toggle = document.getElementById(`lista-toggle-${groupId}`);
+    const isVisible = rows.length > 0 && rows[0].style.display !== 'none';
+    rows.forEach(r => r.style.display = isVisible ? 'none' : '');
+    if (toggle) toggle.classList.toggle('collapsed', isVisible);
+}
+
+function listaFilter(query) {
+    const q = query.toLowerCase().trim();
+    const rows = document.querySelectorAll('.lista-table tbody tr');
+    rows.forEach(row => {
+        if (row.classList.contains('lista-group-header')) {
+            row.style.display = q ? 'none' : '';
+            return;
+        }
+        if (!q) { row.style.display = ''; return; }
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(q) ? '' : 'none';
+    });
 }
 
 function listaEditName(td, chipId, currentName) {
