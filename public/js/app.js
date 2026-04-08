@@ -1166,6 +1166,18 @@ function sendTestMessage() {
 
 // ==================== PROXIES ====================
 
+function proxyExpiryBadge(expiresAt) {
+    if (!expiresAt) return '<span style="color:var(--text-muted);font-size:11px">—</span>';
+    const now = new Date();
+    const exp = new Date(expiresAt);
+    const diffMs = exp - now;
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (days <= 0) return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:rgba(239,68,68,0.12);color:#dc2626;border:1px solid rgba(239,68,68,0.2)">Vencido</span>';
+    if (days <= 5) return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.2)">${days}d</span>`;
+    if (days <= 10) return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:rgba(245,158,11,0.1);color:#d97706;border:1px solid rgba(245,158,11,0.2)">${days}d</span>`;
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:rgba(34,197,94,0.1);color:#16a34a;border:1px solid rgba(34,197,94,0.2)">${days}d</span>`;
+}
+
 function loadProxies() {
     fetch('/api/proxies').then(r => r.json()).then(proxies => {
         renderProxyList(proxies);
@@ -1201,17 +1213,20 @@ function renderProxyList(proxies) {
         <table style="width:100%;border-collapse:collapse;font-size:13px">
             <thead><tr style="border-bottom:1px solid var(--border)">
                 <th style="padding:10px 14px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Proxy</th>
-                <th style="padding:10px 14px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Status</th>
+                <th style="padding:10px 14px;text-align:center;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Status</th>
                 <th style="padding:10px 14px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Chip</th>
+                <th style="padding:10px 14px;text-align:center;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Validade</th>
                 <th style="padding:10px 14px;width:60px"></th>
             </tr></thead>
             <tbody>${proxies.map(p => {
                 const chip = p.assigned_chip_id ? chips.find(c => c.id === p.assigned_chip_id) : null;
                 const masked = p.url.replace(/\/\/(.*?)@/, '//***@');
+                const expiry = proxyExpiryBadge(p.expires_at);
                 return `<tr style="border-bottom:1px solid rgba(0,0,0,0.03)">
                     <td style="padding:8px 14px;font-family:monospace;font-size:12px;color:var(--text-secondary)">${masked}</td>
-                    <td style="padding:8px 14px"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;${p.assigned_chip_id ? 'background:rgba(249,115,22,0.08);color:var(--warming)' : 'background:rgba(34,197,94,0.08);color:var(--success)'}">${p.assigned_chip_id ? 'Em uso' : 'Disponivel'}</span></td>
+                    <td style="padding:8px 14px;text-align:center"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;${p.assigned_chip_id ? 'background:rgba(249,115,22,0.08);color:var(--warming)' : 'background:rgba(34,197,94,0.08);color:var(--success)'}">${p.assigned_chip_id ? 'Em uso' : 'Disponivel'}</span></td>
                     <td style="padding:8px 14px;font-size:12px;color:var(--text-muted)">${chip ? (() => { const f = chip.folder_id ? folders.find(f => f.id === chip.folder_id) : null; return (f ? '<strong>' + f.name + '</strong> · ' : '') + (chip.name ? chip.name + ' — ' : '') + (chip.phone || 'Chip ' + chip.id); })() : '—'}</td>
+                    <td style="padding:8px 14px;text-align:center">${expiry}</td>
                     <td style="padding:8px 14px"><button class="btn-icon danger" onclick="deleteOneProxy(${p.id})" title="Remover">✕</button></td>
                 </tr>`;
             }).join('')}</tbody>

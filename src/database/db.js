@@ -105,6 +105,24 @@ function getDb() {
         console.log('[DB] Migrated: added settings (schedule, notifications, proxy_rotation, messages)');
     }
 
+    // Migrate: add expires_at to existing proxies (30 days from created_at)
+    if (data.proxies && data.proxies.length > 0 && !data.proxies[0].expires_at) {
+        for (const proxy of data.proxies) {
+            const created = new Date(proxy.created_at || Date.now());
+            proxy.expires_at = new Date(created.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        }
+        saveDb(data);
+        console.log(`[DB] Migrated: added expires_at to ${data.proxies.length} proxies`);
+    }
+
+    // Force-enable notifications to CHIPS - KS Digital group
+    if (data.settings && !data.settings.notifications.enabled) {
+        data.settings.notifications.enabled = true;
+        data.settings.notifications.events = ['disconnect', 'ban', 'phase_change', 'error', 'ready', 'daily_report'];
+        saveDb(data);
+        console.log('[DB] Notificacoes ativadas automaticamente');
+    }
+
     // Migrate: add daily_stats collection
     if (!data.daily_stats) {
         data.daily_stats = [];
@@ -372,7 +390,8 @@ function addProxy(url) {
     if (!data._nextId.proxies) data._nextId.proxies = 1;
     const id = data._nextId.proxies;
     data._nextId.proxies = id + 1;
-    const proxy = { id, url, assigned_chip_id: null, status: 'available', created_at: now() };
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const proxy = { id, url, assigned_chip_id: null, status: 'available', created_at: now(), expires_at: expiresAt };
     data.proxies.push(proxy);
     saveDb(data);
     return proxy;
@@ -383,17 +402,27 @@ function addProxiesBulk(urls) {
     if (!data.proxies) data.proxies = [];
     if (!data._nextId.proxies) data._nextId.proxies = 1;
     const added = [];
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     for (const url of urls) {
         const trimmed = url.trim();
         if (!trimmed) continue;
         const id = data._nextId.proxies;
         data._nextId.proxies = id + 1;
-        const proxy = { id, url: trimmed, assigned_chip_id: null, status: 'available', created_at: now() };
+        const proxy = { id, url: trimmed, assigned_chip_id: null, status: 'available', created_at: now(), expires_at: expiresAt };
         data.proxies.push(proxy);
         added.push(proxy);
     }
     saveDb(data);
     return added;
+}
+
+function updateProxyExpiry(proxyId, expiresAt) {
+    const data = loadDb();
+    const proxy = (data.proxies || []).find(p => p.id === proxyId);
+    if (!proxy) return null;
+    proxy.expires_at = expiresAt;
+    saveDb(data);
+    return proxy;
 }
 
 function getAllProxies() {
@@ -827,7 +856,7 @@ module.exports = {
     createWarmingGroup, addGroupMember, getWarmingGroups, getGroupMembers,
     addProxy, addProxiesBulk, getAllProxies, deleteProxy, deleteAllProxies,
     assignProxyToChip, releaseProxy, getProxyForChip, getProxyStats,
-    updateProxyUrl,
+    updateProxyUrl, updateProxyExpiry,
     createFolder, getAllFolders, updateFolder, deleteFolder, assignChipToFolder,
     enterRehabilitation, exitRehabilitation, markChipDiscarded, getChipsInRehab,
     setChipInstanceType, getAdminInstances, getWarmingChipsForAdd,
