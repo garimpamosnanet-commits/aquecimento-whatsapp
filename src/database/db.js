@@ -133,6 +133,24 @@ function getDb() {
         console.log('[DB] Warming config otimizado para modelo seguro');
     }
 
+    // V3: Ultra-safe warming config — after 4 accounts restricted (2026-04-09)
+    if (data.warming_config && !data._warmingConfigV3) {
+        const ultraSafe = {
+            1: { daily_limit: 10, min_delay_seconds: 180, max_delay_seconds: 480, active_hour_start: 9, active_hour_end: 20, enabled_actions: 'private_chat,location', description: 'Fase 1 (Dia 1-5): Ultra suave - poucos textos' },
+            2: { daily_limit: 25, min_delay_seconds: 120, max_delay_seconds: 360, active_hour_start: 9, active_hour_end: 21, enabled_actions: 'private_chat,audio,location', description: 'Fase 2 (Dia 6-12): Suave - audio e localizacao' },
+            3: { daily_limit: 50, min_delay_seconds: 90, max_delay_seconds: 240, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,location,sticker', description: 'Fase 3 (Dia 13-20): Moderado - grupos e stickers' },
+            4: { daily_limit: 80, min_delay_seconds: 60, max_delay_seconds: 180, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,sticker,image,reaction', description: 'Fase 4 (Dia 21+): Teto seguro - todos os tipos' },
+            5: { daily_limit: 10, min_delay_seconds: 300, max_delay_seconds: 720, active_hour_start: 10, active_hour_end: 18, enabled_actions: 'private_chat,location', description: 'Reabilitacao - ultra controlada' }
+        };
+        for (const phase of Object.keys(ultraSafe)) {
+            const cfg = data.warming_config.find(c => c.phase === parseInt(phase));
+            if (cfg) Object.assign(cfg, ultraSafe[phase]);
+        }
+        data._warmingConfigV3 = true;
+        saveDb(data);
+        console.log('[DB] Warming config V3: ultra-safe aplicado (4 contas restritas)');
+    }
+
     // Force-enable notifications to CHIPS - KS Digital group (somente grupo)
     if (data.settings && !data._notifGroupOnlyV2) {
         data.settings.notifications.enabled = true;
