@@ -2530,29 +2530,49 @@ function deleteMedia(type, filename) {
 let _customMessages = [];
 
 function loadCustomMessages() {
-    fetch('/api/messages').then(r => r.json()).then(msgs => { _customMessages = msgs || []; renderCustomMessages(); });
+    fetch('/api/messages').then(r => r.json()).then(msgs => {
+        _customMessages = msgs || [];
+        renderMessagesTextarea();
+    });
 }
 
-function renderCustomMessages() {
-    const list = document.getElementById('custom-messages-list');
-    if (_customMessages.length === 0) { list.innerHTML = '<p class="settings-hint">Nenhuma mensagem customizada. As mensagens padrao serao usadas.</p>'; return; }
-    list.innerHTML = _customMessages.map((msg, i) => `
-        <div class="media-item"><span class="media-name" style="flex:1">${truncate(msg, 60)}</span><button class="btn-icon danger" onclick="removeCustomMessage(${i})">✕</button></div>
-    `).join('');
+function renderMessagesTextarea() {
+    const ta = document.getElementById('messages-textarea');
+    const badge = document.getElementById('msg-count-badge');
+    if (ta) ta.value = _customMessages.join('\n');
+    if (badge) badge.textContent = _customMessages.length > 0 ? `(${_customMessages.length} mensagens salvas)` : '(nenhuma mensagem)';
 }
 
-function addCustomMessage() {
-    const msg = prompt('Digite a mensagem:');
-    if (!msg || !msg.trim()) return;
-    _customMessages.push(msg.trim());
+function saveMessagesFromTextarea() {
+    const ta = document.getElementById('messages-textarea');
+    if (!ta) return;
+    const lines = ta.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    _customMessages = lines;
     fetch('/api/messages', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ messages: _customMessages }) })
-        .then(() => { renderCustomMessages(); showToast('Mensagem adicionada', 'success'); });
+        .then(() => {
+            renderMessagesTextarea();
+            showToast(`${_customMessages.length} mensagens salvas!`, 'success');
+            const status = document.getElementById('msg-save-status');
+            if (status) { status.textContent = '✅ Salvo!'; setTimeout(() => status.textContent = '', 3000); }
+        });
 }
 
+function clearMessagesTextarea() {
+    if (!confirm('Limpar todas as mensagens?')) return;
+    _customMessages = [];
+    fetch('/api/messages', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ messages: [] }) })
+        .then(() => {
+            renderMessagesTextarea();
+            showToast('Mensagens removidas', 'success');
+        });
+}
+
+// Keep old functions for compatibility
+function addCustomMessage() { saveMessagesFromTextarea(); }
 function removeCustomMessage(i) {
     _customMessages.splice(i, 1);
     fetch('/api/messages', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ messages: _customMessages }) })
-        .then(() => { renderCustomMessages(); showToast('Removida', 'success'); });
+        .then(() => { renderMessagesTextarea(); showToast('Removida', 'success'); });
 }
 
 // ==================== CHIP HISTORY MODAL ====================

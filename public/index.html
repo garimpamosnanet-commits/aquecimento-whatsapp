@@ -268,10 +268,15 @@
             <div id="config-sub-messages" class="config-sub">
                 <div class="section-header">
                     <h2>Banco de Mensagens</h2>
-                    <button class="btn btn-primary btn-sm" onclick="addCustomMessage()">+ Adicionar</button>
+                    <span id="msg-count-badge" class="settings-hint" style="margin-left:12px;font-size:13px"></span>
                 </div>
-                <p class="settings-hint">Adicione mensagens customizadas que serao usadas no aquecimento. Uma por linha.</p>
-                <div id="custom-messages-list"></div>
+                <p class="settings-hint" style="margin-bottom:10px">Cole suas mensagens abaixo (uma por linha). Elas serao usadas no aquecimento.</p>
+                <textarea id="messages-textarea" rows="10" placeholder="Oi, tudo bem?&#10;Bom dia! Como vai?&#10;E ai, beleza?&#10;&#10;Cole aqui quantas mensagens quiser, uma por linha..." style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;background:var(--card-bg);color:var(--text-primary);line-height:1.6"></textarea>
+                <div style="display:flex;gap:10px;margin-top:10px;align-items:center">
+                    <button class="btn btn-primary btn-sm" onclick="saveMessagesFromTextarea()">💾 Salvar Mensagens</button>
+                    <button class="btn btn-outline btn-sm" onclick="clearMessagesTextarea()">🗑 Limpar Tudo</button>
+                    <span id="msg-save-status" style="font-size:13px;color:var(--text-secondary)"></span>
+                </div>
             </div>
         </div>
 
