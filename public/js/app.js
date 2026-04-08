@@ -446,7 +446,7 @@ function renameFolder(id, currentName) {
 
 function deleteFolderConfirm(id) {
     const folder = folders.find(f => f.id === id);
-    openConfirmModal('Excluir Pasta', `Excluir "${folder?.name}"? Os chips serao movidos para "Sem pasta".`, 'Excluir', () => {
+    openConfirmModal('Excluir Pasta', `Excluir a pasta "${folder?.name}"?\n\nOs ${chips.filter(c => c.folder_id === id).length} chips continuam conectados e vao para "Sem pasta". Nenhuma conexao sera perdida.`, 'Excluir Pasta', () => {
         fetch(`/api/folders/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
             if (data.success) {
                 folders = folders.filter(f => f.id !== id);
