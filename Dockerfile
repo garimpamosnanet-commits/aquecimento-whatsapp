@@ -1,5 +1,13 @@
 FROM node:20-alpine
 
+# Set timezone to Brazil (BRT = UTC-3)
+RUN apk add --no-cache tzdata && \
+    cp /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime && \
+    echo "America/Sao_Paulo" > /etc/timezone && \
+    apk del tzdata
+
+ENV TZ=America/Sao_Paulo
+
 WORKDIR /app
 
 COPY package*.json ./

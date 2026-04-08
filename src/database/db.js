@@ -151,6 +151,24 @@ function getDb() {
         console.log('[DB] Warming config V3: ultra-safe aplicado (4 contas restritas)');
     }
 
+    // V4: Fix hours 8-22 ALL phases + reduce volumes after 3 restrictions + 1 ban (2026-04-08)
+    if (data.warming_config && !data._warmingConfigV4) {
+        const v4Config = {
+            1: { daily_limit: 8, min_delay_seconds: 240, max_delay_seconds: 600, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,location', description: 'Fase 1 (Dia 1-5): Ultra suave - 8 msgs max' },
+            2: { daily_limit: 18, min_delay_seconds: 150, max_delay_seconds: 420, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,location', description: 'Fase 2 (Dia 6-12): Suave - audio e localizacao' },
+            3: { daily_limit: 35, min_delay_seconds: 120, max_delay_seconds: 300, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,location,sticker', description: 'Fase 3 (Dia 13-20): Moderado - grupos e stickers' },
+            4: { daily_limit: 55, min_delay_seconds: 90, max_delay_seconds: 240, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,audio,group_chat,sticker,image,reaction', description: 'Fase 4 (Dia 21+): Teto seguro' },
+            5: { daily_limit: 5, min_delay_seconds: 360, max_delay_seconds: 900, active_hour_start: 8, active_hour_end: 22, enabled_actions: 'private_chat,location', description: 'Reabilitacao - ultra controlada' }
+        };
+        for (const phase of Object.keys(v4Config)) {
+            const cfg = data.warming_config.find(c => c.phase === parseInt(phase));
+            if (cfg) Object.assign(cfg, v4Config[phase]);
+        }
+        data._warmingConfigV4 = true;
+        saveDb(data);
+        console.log('[DB] Warming config V4: horario 8-22 + volumes reduzidos (3 restricoes + 1 ban)');
+    }
+
     // Force-enable notifications to CHIPS - KS Digital group (somente grupo)
     if (data.settings && !data._notifGroupOnlyV2) {
         data.settings.notifications.enabled = true;
