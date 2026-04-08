@@ -295,7 +295,7 @@ function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
     const count = folderChips.length;
     const label = isUnassigned
         ? `Conexoes Sem Pasta (${count} chip${count !== 1 ? 's' : ''})`
-        : `${folderName} (${count}/12)`;
+        : `${folderName} (${count}/${count})`;
     const dropId = isUnassigned ? 'drop-none' : `drop-folder-${folderId}`;
     const dataFolder = isUnassigned ? 'null' : folderId;
     const folderKey = isUnassigned ? 'none' : folderId;
