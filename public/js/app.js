@@ -261,7 +261,7 @@ function renderChipCard(chip) {
                 <span class="meta-icon">💬</span>
                 ${formatNumber(chip.messages_sent)} msgs
             </span>
-            ${chip.connected_at ? `<span class="chip-meta-item"><span class="meta-icon">📅</span> ${formatDate(chip.connected_at)}</span>` : ''}
+            ${chip.connected_at ? `<span class="chip-meta-item connected-date"><span class="dot-green"></span> ${formatDate(chip.connected_at)}</span>` : ''}
         </div>
 
         <div class="chip-actions">

@@ -781,6 +781,25 @@ body::before {
     line-height: 1;
 }
 
+.chip-meta-item.connected-date {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 11px;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.chip-meta-item.connected-date .dot-green {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22C55E;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
 .badge {
     display: inline-flex;
     align-items: center;
