@@ -1014,11 +1014,11 @@ function renderListTab() {
     }
 
     const statusLabel = (s) => {
-        const map = { 'connected': 'Conectado', 'warming': 'Aquecendo', 'disconnected': 'Desconectado', 'qr_pending': 'Aguardando QR', 'rehabilitation': 'Reabilitacao' };
+        const map = { 'connected': 'Conectado', 'warming': 'Aquecendo', 'disconnected': 'Desconectado', 'qr_pending': 'Aguardando QR', 'rehabilitation': 'Reabilitacao', 'banned': 'Banido', 'discarded': 'Descartado' };
         return map[s] || s;
     };
     const statusCls = (s) => {
-        const map = { 'connected': 'lista-status-on', 'warming': 'lista-status-on', 'disconnected': 'lista-status-off', 'qr_pending': 'lista-status-warn', 'rehabilitation': 'lista-status-warn' };
+        const map = { 'connected': 'lista-status-connected', 'warming': 'lista-status-warming', 'disconnected': 'lista-status-off', 'qr_pending': 'lista-status-warn', 'rehabilitation': 'lista-status-rehab', 'banned': 'lista-status-banned', 'discarded': 'lista-status-off' };
         return map[s] || '';
     };
 
