@@ -409,6 +409,7 @@ body::before {
     padding: 3px;
     border: 1px solid var(--border);
     width: fit-content;
+    overflow-x: auto;
 }
 
 .tab {
@@ -420,6 +421,7 @@ body::before {
     border-radius: 8px;
     transition: var(--transition);
     user-select: none;
+    white-space: nowrap;
 }
 
 .tab:hover { color: var(--text-secondary); }
@@ -2658,4 +2660,104 @@ body::before {
 }
 .am-links-textarea:focus {
     border-color: var(--accent);
+}
+
+/* ==================== LISTA TAB ==================== */
+.lista-summary {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+.lista-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+.lista-table thead {
+    background: var(--bg-secondary);
+}
+.lista-table th {
+    text-align: left;
+    padding: 10px 16px;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+}
+.lista-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+}
+.lista-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.lista-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+.lista-name {
+    font-weight: 600;
+}
+.lista-phone {
+    font-family: 'Inter', monospace;
+    letter-spacing: 0.3px;
+}
+.lista-status {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.lista-status-on {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+.lista-status-off {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.lista-status-warn {
+    background: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+.temp-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.temp-cold {
+    background: rgba(59, 130, 246, 0.1);
+    color: #2563eb;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+.temp-warming {
+    background: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+.temp-hot {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.temp-ready {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+    border: 1px solid rgba(34, 197, 94, 0.2);
 }

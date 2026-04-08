@@ -990,7 +990,7 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
     const tabs = document.querySelectorAll('.tab');
-    const tabMap = { 'chips': 0, 'activity': 1, 'config': 2, 'rehab': 3, 'proxies': 4, 'groupadd': 5, 'adminmanage': 6 };
+    const tabMap = { 'chips': 0, 'lista': 1, 'activity': 2, 'config': 3, 'rehab': 4, 'proxies': 5, 'groupadd': 6, 'adminmanage': 7 };
     tabs[tabMap[tabName]].classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
 
@@ -1000,6 +1000,64 @@ function switchTab(tabName) {
     if (tabName === 'proxies') loadProxies();
     if (tabName === 'groupadd') loadGroupAddTab();
     if (tabName === 'adminmanage') loadAdminManageTab();
+    if (tabName === 'lista') renderListTab();
+}
+
+// ==================== LISTA TAB ====================
+function renderListTab() {
+    const container = document.getElementById('lista-table-container');
+    if (!container) return;
+
+    const sorted = [...chips].sort((a, b) => {
+        const statusOrder = { 'connected': 0, 'warming': 0, 'rehabilitation': 1, 'qr_pending': 2, 'disconnected': 3 };
+        const sa = statusOrder[a.status] ?? 9;
+        const sb = statusOrder[b.status] ?? 9;
+        if (sa !== sb) return sa - sb;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+
+    if (sorted.length === 0) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h3>Nenhum numero cadastrado</h3></div>`;
+        return;
+    }
+
+    const statusLabel = (s) => {
+        const map = { 'connected': 'Conectado', 'warming': 'Aquecendo', 'disconnected': 'Desconectado', 'qr_pending': 'Aguardando QR', 'rehabilitation': 'Reabilitacao' };
+        return map[s] || s;
+    };
+    const statusCls = (s) => {
+        const map = { 'connected': 'lista-status-on', 'warming': 'lista-status-on', 'disconnected': 'lista-status-off', 'qr_pending': 'lista-status-warn', 'rehabilitation': 'lista-status-warn' };
+        return map[s] || '';
+    };
+
+    let rows = sorted.map(chip => {
+        const temp = getTemperature(chip);
+        const connDate = chip.connected_at ? new Date(chip.connected_at).toLocaleDateString('pt-BR') : '—';
+        const phone = chip.phone || '—';
+        const name = chip.name || '—';
+        return `<tr>
+            <td class="lista-name">${name}</td>
+            <td class="lista-phone">${phone}</td>
+            <td><span class="lista-status ${statusCls(chip.status)}">${statusLabel(chip.status)}</span></td>
+            <td>${connDate}</td>
+            <td><span class="temp-badge temp-${temp.cls}">${temp.fires} ${temp.label}</span></td>
+        </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="lista-summary">Total: <strong>${sorted.length}</strong> numeros | Conectados: <strong>${sorted.filter(c => c.status === 'connected' || c.status === 'warming').length}</strong></div>
+        <table class="lista-table">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Numero</th>
+                    <th>Status</th>
+                    <th>Data de Conexao</th>
+                    <th>Temperatura</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>`;
 }
 
 // ==================== TEST MESSAGE ====================
