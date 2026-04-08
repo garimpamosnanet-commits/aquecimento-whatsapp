@@ -43,6 +43,7 @@ class SessionManager {
         this.notifier = notifier;
         this.sessions = new Map(); // sessionId -> { socket, chip }
         this.reconnectTimers = new Map();
+        this.reconnectAttempts = new Map(); // sessionId -> attempt count
     }
 
     getDebugLogs() {
@@ -178,6 +179,7 @@ class SessionManager {
 
             if (connection === 'open') {
                 debugLog(`[SessionManager] ${sessionId} conectado!`);
+                this.reconnectAttempts.delete(sessionId);
                 db.updateChipStatus(chip.id, 'connected');
 
                 // Get phone number from socket
@@ -246,11 +248,32 @@ class SessionManager {
                     const timer = setTimeout(() => this.connect(sessionId), 3000);
                     this.reconnectTimers.set(sessionId, timer);
                 } else if (statusCode !== reason.connectionClosed) {
-                    // Already authenticated chip — try to reconnect after delay
-                    const delay = Math.min(5000 + Math.random() * 5000, 30000);
-                    debugLog(`[SessionManager] Reconectando ${sessionId} em ${Math.round(delay / 1000)}s...`);
-                    const timer = setTimeout(() => this.connect(sessionId), delay);
-                    this.reconnectTimers.set(sessionId, timer);
+                    const errorMsg = lastDisconnect?.error?.message || '';
+                    const isProxyError = errorMsg.includes('proxy rejected') || errorMsg.includes('Socks5') || errorMsg.includes('SOCKS');
+                    const attempts = (this.reconnectAttempts.get(sessionId) || 0) + 1;
+                    this.reconnectAttempts.set(sessionId, attempts);
+
+                    if (isProxyError && attempts >= 3) {
+                        // Proxy is dead — disconnect and stop retrying
+                        debugLog(`[SessionManager] ${sessionId} proxy falhou ${attempts}x seguidas. Parando reconexao. Remova/troque o proxy.`);
+                        db.updateChipStatus(chip.id, 'disconnected');
+                        this.sessions.delete(sessionId);
+                        this.reconnectAttempts.delete(sessionId);
+                        this.io.emit('proxy_error', { sessionId, chipId: chip.id, message: 'Proxy rejeitou conexao. Troque o proxy.' });
+                    } else if (attempts >= 15) {
+                        // Too many attempts — give up
+                        debugLog(`[SessionManager] ${sessionId} falhou ${attempts}x. Desistindo.`);
+                        db.updateChipStatus(chip.id, 'disconnected');
+                        this.sessions.delete(sessionId);
+                        this.reconnectAttempts.delete(sessionId);
+                    } else {
+                        // Exponential backoff: 5s, 10s, 20s, 40s... max 5min
+                        const baseDelay = 5000 * Math.pow(2, Math.min(attempts - 1, 6));
+                        const delay = Math.min(baseDelay + Math.random() * 3000, 300000);
+                        debugLog(`[SessionManager] Reconectando ${sessionId} em ${Math.round(delay / 1000)}s (tentativa ${attempts})...`);
+                        const timer = setTimeout(() => this.connect(sessionId), delay);
+                        this.reconnectTimers.set(sessionId, timer);
+                    }
                 }
 
                 this.emitChipUpdate(chip.id);
