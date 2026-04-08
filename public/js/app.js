@@ -294,7 +294,7 @@ function renderChipCard(chip) {
 function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
     const count = folderChips.length;
     const label = isUnassigned
-        ? `Sem pasta (${count} chip${count !== 1 ? 's' : ''})`
+        ? `Conexoes Sem Pasta (${count} chip${count !== 1 ? 's' : ''})`
         : `${folderName} (${count}/12)`;
     const dropId = isUnassigned ? 'drop-none' : `drop-folder-${folderId}`;
     const dataFolder = isUnassigned ? 'null' : folderId;
