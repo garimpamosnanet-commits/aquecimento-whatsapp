@@ -304,7 +304,7 @@ function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
     <div class="folder-section" id="${dropId}">
         <div class="folder-header" onclick="toggleFolder('${dropId}')">
             <div class="folder-header-left">
-                <span class="folder-toggle" id="toggle-${dropId}">▼</span>
+                <span class="folder-toggle" id="toggle-${dropId}">▶</span>
                 <span class="folder-title">${isUnassigned ? '📂' : '📁'} ${label}</span>
                 ${getFolderSummaryHtml(folderKey)}
             </div>
@@ -314,7 +314,7 @@ function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
                 <button class="btn-icon danger" onclick="deleteFolderConfirm(${folderId})" title="Excluir pasta">🗑️</button>
             </div>` : ''}
         </div>
-        <div class="folder-drop-zone chips-grid" data-folder="${dataFolder}"
+        <div class="folder-drop-zone chips-grid" data-folder="${dataFolder}" style="display:none"
              ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
             ${folderChips.length > 0 ? folderChips.map(c => renderChipCard(c)).join('') : `
             <div class="empty-folder-hint">Arraste chips para esta pasta</div>`}

@@ -44,6 +44,7 @@ class SessionManager {
         this.sessions = new Map(); // sessionId -> { socket, chip }
         this.reconnectTimers = new Map();
         this.reconnectAttempts = new Map(); // sessionId -> attempt count
+        this._initializing = false; // suppress 'connected' events during startup
     }
 
     getDebugLogs() {
@@ -51,6 +52,7 @@ class SessionManager {
     }
 
     async initialize() {
+        this._initializing = true;
         // Reconnect all previously connected chips
         const chips = db.getAllChips();
         for (const chip of chips) {
@@ -64,6 +66,8 @@ class SessionManager {
                 }
             }
         }
+        this._initializing = false;
+        console.log('[SessionManager] Inicializacao completa — eventos connected ativados');
     }
 
     async createSession(name = '') {
@@ -213,7 +217,9 @@ class SessionManager {
                     debugLog(`[SessionManager] Sem foto de perfil para ${sessionId}`);
                 }
 
-                this.io.emit('connected', { sessionId, chipId: chip.id, phone: phoneNumber });
+                if (!this._initializing) {
+                    this.io.emit('connected', { sessionId, chipId: chip.id, phone: phoneNumber });
+                }
                 this.emitChipUpdate(chip.id);
                 this.emitStats();
             }
