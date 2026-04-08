@@ -133,12 +133,13 @@ function getDb() {
         console.log('[DB] Warming config otimizado para modelo seguro');
     }
 
-    // Force-enable notifications to CHIPS - KS Digital group
-    if (data.settings && !data.settings.notifications.enabled) {
+    // Force-enable notifications to CHIPS - KS Digital group (somente grupo)
+    if (data.settings && (!data.settings.notifications.enabled || data.settings.notifications.phone)) {
         data.settings.notifications.enabled = true;
+        data.settings.notifications.phone = '';
         data.settings.notifications.events = ['disconnect', 'ban', 'phase_change', 'error', 'ready', 'daily_report'];
         saveDb(data);
-        console.log('[DB] Notificacoes ativadas automaticamente');
+        console.log('[DB] Notificacoes ativadas (somente grupo)');
     }
 
     // Migrate: add daily_stats collection
