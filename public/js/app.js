@@ -5,6 +5,8 @@ let chips = [];
 let folders = [];
 let currentQRSessionId = null;
 let _pendingAdmConnect = false; // Auto-mark as ADM after QR connect
+let _initialLoad = true; // Suppress toasts during initial load
+setTimeout(() => { _initialLoad = false; }, 8000); // 8s grace period for reconnections
 
 // ==================== ANIMATED COUNTER ====================
 function animateValue(el, start, end, duration) {
@@ -151,12 +153,13 @@ socket.on('connected', ({ sessionId, chipId, phone }) => {
         _pendingAdmConnect = false;
         setInstanceType(chipId, 'admin');
         showToast(`ADM ${phone || ''} conectado e marcado!`, 'success');
-        // Refresh both tabs
         setTimeout(() => { loadAdminInstances(); loadAmAdminInstances(); }, 1000);
-    } else {
+    } else if (!_initialLoad) {
         showToast(`Chip ${phone || 'novo'} conectado!`, 'success');
     }
-    addFeedItem(phone || 'Novo chip', 'Conectado com sucesso', null, 'connect');
+    if (!_initialLoad) {
+        addFeedItem(phone || 'Novo chip', 'Conectado com sucesso', null, 'connect');
+    }
 });
 
 socket.on('logged_out', ({ sessionId, chipId }) => {
