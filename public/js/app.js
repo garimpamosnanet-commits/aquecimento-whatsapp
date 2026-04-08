@@ -1213,10 +1213,10 @@ function renderProxyList(proxies) {
     list.innerHTML = `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
             <thead><tr style="border-bottom:1px solid var(--border)">
-                <th style="padding:10px 14px;text-align:center;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Validade</th>
-                <th style="padding:10px 14px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Proxy</th>
-                <th style="padding:10px 14px;text-align:center;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Status</th>
-                <th style="padding:10px 14px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Chip</th>
+                <th style="padding:10px 14px;text-align:center;color:var(--text-primary);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Validade</th>
+                <th style="padding:10px 14px;text-align:left;color:var(--text-primary);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Proxy</th>
+                <th style="padding:10px 14px;text-align:center;color:var(--text-primary);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Status</th>
+                <th style="padding:10px 14px;text-align:left;color:var(--text-primary);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Chip</th>
                 <th style="padding:10px 14px;width:60px"></th>
             </tr></thead>
             <tbody>${proxies.map(p => {
