@@ -207,6 +207,18 @@ module.exports = function(io, sessionManager, warmingEngine, groupManager, admin
             if (groupManager) groupManager.stop();
         });
 
+        // Resume paused_daily or stopped operation
+        socket.on('resume_group_add_operation', async (data) => {
+            const { operationId } = data;
+            if (groupManager.isRunning()) {
+                socket.emit('group_add_status', { status: 'error', message: 'Ja existe operacao em andamento' });
+                return;
+            }
+            groupManager.resumeOperation(operationId).catch(err => {
+                socket.emit('group_add_status', { operationId, status: 'failed', message: err.message });
+            });
+        });
+
         // ==================== ADMIN MANAGE ====================
 
         socket.on('pause_admin_manage', () => {

@@ -1802,6 +1802,9 @@ let _gaRunning = false;
 let _gaPaused = false;
 let _gaCurrentOpId = null;
 let _gaLogItems = [];
+let _gaMode = 'invite_link';
+let _gaPreset = 'normal';
+let _gaPresets = {};
 
 function loadGroupAddTab() {
     loadAdminInstances();
@@ -1866,10 +1869,12 @@ function onAdminInstanceSelect() {
     const chipId = document.getElementById('ga-admin-select').value;
     const infoEl = document.getElementById('ga-admin-info');
     const panels = document.getElementById('ga-panels');
+    const modeSection = document.getElementById('ga-mode-section');
 
     if (!chipId) {
         infoEl.style.display = 'none';
         panels.style.display = 'none';
+        if (modeSection) modeSection.style.display = 'none';
         hideSummary();
         return;
     }
@@ -1877,6 +1882,7 @@ function onAdminInstanceSelect() {
     infoEl.style.display = 'block';
     infoEl.innerHTML = '<div class="ga-loading">Buscando grupos...</div>';
     panels.style.display = 'none';
+    if (modeSection) modeSection.style.display = 'none';
 
     fetch('/api/admin-instances/' + chipId + '/groups')
         .then(r => r.json())
@@ -1889,6 +1895,8 @@ function onAdminInstanceSelect() {
             _gaSelectedGroups.clear();
             infoEl.innerHTML = '<span class="ga-success-text">🟢 Conectado — ' + data.length + ' grupos encontrados onde e admin</span>';
             panels.style.display = 'grid';
+            if (modeSection) modeSection.style.display = 'block';
+            gaLoadPresets();
             renderGAGroups();
             renderGAChips();
         })
@@ -1998,6 +2006,74 @@ function gaDeselectAllChips() {
     renderGAChips();
 }
 
+// ==================== MODE & PRESETS ====================
+
+function gaSetMode(mode) {
+    _gaMode = mode;
+    document.querySelectorAll('.ga-mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    const desc = document.getElementById('ga-mode-desc');
+    if (mode === 'invite_link') {
+        desc.textContent = 'Cada chip entra sozinho no grupo via link de convite. Muito mais natural e seguro.';
+    } else {
+        desc.textContent = 'O admin adiciona os chips diretamente. Mais rapido, porem menos seguro.';
+    }
+    updateGASummary();
+}
+
+function gaLoadPresets() {
+    fetch('/api/group-add/presets').then(r => r.json()).then(presets => {
+        _gaPresets = presets;
+        renderGAPresets();
+        gaSetPreset('normal');
+    }).catch(() => {
+        // Fallback presets
+        _gaPresets = {
+            rapido: { label: 'Rapido', description: 'Para testes', delayMin: 10, delayMax: 30, groupDelayMin: 60, groupDelayMax: 120, promoteDelayMin: 5, promoteDelayMax: 15, dailyLimitPerChip: 0, color: '#ef4444' },
+            normal: { label: 'Normal', description: 'Equilibrado', delayMin: 30, delayMax: 90, groupDelayMin: 120, groupDelayMax: 300, promoteDelayMin: 30, promoteDelayMax: 120, dailyLimitPerChip: 10, color: '#f59e0b' },
+            seguro: { label: 'Seguro', description: 'Recomendado', delayMin: 60, delayMax: 180, groupDelayMin: 300, groupDelayMax: 600, promoteDelayMin: 120, promoteDelayMax: 600, dailyLimitPerChip: 5, color: '#22c55e' },
+            ultra_seguro: { label: 'Ultra Seguro', description: 'Maximo cuidado', delayMin: 180, delayMax: 600, groupDelayMin: 600, groupDelayMax: 1200, promoteDelayMin: 300, promoteDelayMax: 900, dailyLimitPerChip: 3, color: '#3b82f6' }
+        };
+        renderGAPresets();
+        gaSetPreset('normal');
+    });
+}
+
+function renderGAPresets() {
+    const grid = document.getElementById('ga-presets-grid');
+    if (!grid) return;
+    grid.innerHTML = Object.entries(_gaPresets).map(([key, p]) => {
+        const limitText = p.dailyLimitPerChip > 0 ? p.dailyLimitPerChip + ' grupos/dia' : 'Sem limite';
+        return `<div class="ga-preset-card" data-preset="${key}" onclick="gaSetPreset('${key}')">
+            <div class="preset-name"><span class="preset-dot" style="background:${p.color}"></span>${p.label}</div>
+            <div class="preset-desc">${p.description}</div>
+            <div class="preset-details">
+                Chips: ${p.delayMin}-${p.delayMax}s<br>
+                Grupos: ${Math.round(p.groupDelayMin/60)}-${Math.round(p.groupDelayMax/60)}min<br>
+                Promo: ${p.promoteDelayMin < 60 ? p.promoteDelayMin + 's' : Math.round(p.promoteDelayMin/60) + 'min'}-${p.promoteDelayMax < 60 ? p.promoteDelayMax + 's' : Math.round(p.promoteDelayMax/60) + 'min'}<br>
+                ${limitText}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function gaSetPreset(preset) {
+    _gaPreset = preset;
+    document.querySelectorAll('.ga-preset-card').forEach(card => {
+        card.classList.toggle('active', card.dataset.preset === preset);
+    });
+    const p = _gaPresets[preset];
+    if (!p) return;
+    // Fill custom config fields
+    const fields = { 'ga-delay-min': p.delayMin, 'ga-delay-max': p.delayMax, 'ga-group-delay-min': p.groupDelayMin, 'ga-group-delay-max': p.groupDelayMax, 'ga-promote-delay-min': p.promoteDelayMin, 'ga-promote-delay-max': p.promoteDelayMax, 'ga-daily-limit': p.dailyLimitPerChip };
+    for (const [id, val] of Object.entries(fields)) {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+    }
+    updateGASummary();
+}
+
 // ==================== SUMMARY ====================
 
 function updateGASummary() {
@@ -2016,7 +2092,35 @@ function updateGASummary() {
 
     const adminSelect = document.getElementById('ga-admin-select');
     const adminText = adminSelect.options[adminSelect.selectedIndex]?.textContent || '?';
-    const estMinutes = Math.ceil(totalAdds * 12 / 60); // ~12s avg per add
+
+    // Time estimate based on preset
+    const delayMin = parseInt(document.getElementById('ga-delay-min')?.value) || 30;
+    const delayMax = parseInt(document.getElementById('ga-delay-max')?.value) || 90;
+    const groupDelayMin = parseInt(document.getElementById('ga-group-delay-min')?.value) || 120;
+    const groupDelayMax = parseInt(document.getElementById('ga-group-delay-max')?.value) || 300;
+    const promoteDelayMin = parseInt(document.getElementById('ga-promote-delay-min')?.value) || 30;
+    const promoteDelayMax = parseInt(document.getElementById('ga-promote-delay-max')?.value) || 120;
+    const dailyLimit = parseInt(document.getElementById('ga-daily-limit')?.value) || 0;
+
+    const avgChipDelay = (delayMin + delayMax) / 2;
+    const avgGroupDelay = (groupDelayMin + groupDelayMax) / 2;
+    const avgPromoteDelay = (promoteDelayMin + promoteDelayMax) / 2;
+    const perChipTime = avgChipDelay + avgPromoteDelay;
+    const perGroupTime = (totalNumbers * perChipTime) + avgGroupDelay;
+    const totalSeconds = groupCount * perGroupTime;
+    const totalMinutes = Math.ceil(totalSeconds / 60);
+    const totalHours = (totalMinutes / 60).toFixed(1);
+
+    let estText = '';
+    if (dailyLimit > 0 && groupCount > dailyLimit) {
+        const days = Math.ceil(groupCount / dailyLimit);
+        estText = `~${days} dias (${dailyLimit} grupos/chip/dia) · ~${totalHours}h de operacao ativa`;
+    } else {
+        estText = totalMinutes > 120 ? `~${totalHours} horas` : `~${totalMinutes} minutos`;
+    }
+
+    const modeLabel = _gaMode === 'invite_link' ? '🔗 Via Link de Convite' : '👤 Admin Adiciona';
+    const presetLabel = _gaPresets[_gaPreset]?.label || _gaPreset;
 
     summaryEl.style.display = 'block';
     summaryEl.innerHTML = `
@@ -2024,11 +2128,13 @@ function updateGASummary() {
             <div class="ga-summary-title">Resumo da Operacao</div>
             <div class="ga-summary-grid">
                 <div class="ga-summary-row"><span>Instancia ADM:</span><strong>${adminText}</strong></div>
+                <div class="ga-summary-row"><span>Modo:</span><strong>${modeLabel}</strong></div>
+                <div class="ga-summary-row"><span>Preset:</span><strong>${presetLabel}</strong></div>
                 <div class="ga-summary-row"><span>Grupos alvo:</span><strong>${groupCount} grupos</strong></div>
                 <div class="ga-summary-row"><span>Numeros:</span><strong>${chipCount} chips${manualCount > 0 ? ' + ' + manualCount + ' manuais' : ''} = ${totalNumbers}</strong></div>
                 <div class="ga-summary-row"><span>Total adicoes:</span><strong>${totalAdds} (${totalNumbers} x ${groupCount})</strong></div>
                 <div class="ga-summary-row"><span>Promover a admin:</span><strong>Sim (todos)</strong></div>
-                <div class="ga-summary-row"><span>Estimativa:</span><strong>~${estMinutes} minutos</strong></div>
+                <div class="ga-summary-row"><span>Estimativa:</span><strong>${estText}</strong></div>
             </div>
             <button class="btn btn-success" onclick="gaStartOperation()" id="ga-btn-start" style="margin-top:16px;width:100%">
                 Iniciar Adicao
@@ -2065,8 +2171,15 @@ function gaStartOperation() {
 
     const selectedGroups = _gaGroups.filter(g => _gaSelectedGroups.has(g.id));
     const config = {
-        delayMin: 5, delayMax: 15,
-        groupDelayMin: 30, groupDelayMax: 60,
+        mode: _gaMode,
+        preset: _gaPreset,
+        delayMin: parseInt(document.getElementById('ga-delay-min')?.value) || 30,
+        delayMax: parseInt(document.getElementById('ga-delay-max')?.value) || 90,
+        groupDelayMin: parseInt(document.getElementById('ga-group-delay-min')?.value) || 120,
+        groupDelayMax: parseInt(document.getElementById('ga-group-delay-max')?.value) || 300,
+        promoteDelayMin: parseInt(document.getElementById('ga-promote-delay-min')?.value) || 30,
+        promoteDelayMax: parseInt(document.getElementById('ga-promote-delay-max')?.value) || 120,
+        dailyLimitPerChip: parseInt(document.getElementById('ga-daily-limit')?.value) || 0,
         checkExists: true
     };
 
@@ -2170,7 +2283,7 @@ socket.on('group_add_log', (data) => {
 });
 
 socket.on('group_add_status', (data) => {
-    if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed') {
+    if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed' || data.status === 'paused_daily') {
         _gaRunning = false;
         _gaPaused = false;
     }
@@ -2180,11 +2293,40 @@ socket.on('group_add_complete', (summary) => {
     _gaRunning = false;
     document.getElementById('ga-execution').style.display = 'none';
     showGAReport(summary);
-    showToast('Operacao concluida! ' + summary.success + ' adicionados', 'success');
 
-    // Reset start button
+    if (summary.status === 'paused_daily') {
+        showToast('Limite diario atingido — ' + (summary.pending || 0) + ' restantes para amanha', 'warning');
+    } else {
+        showToast('Operacao concluida! ' + summary.success + ' adicionados', 'success');
+    }
+
     const btn = document.getElementById('ga-btn-start');
     if (btn) { btn.disabled = false; btn.textContent = 'Iniciar Adicao'; }
+});
+
+socket.on('invite_codes_progress', (data) => {
+    const logEl = document.getElementById('ga-log');
+    if (!logEl) return;
+    if (data.status === 'running') {
+        const existing = document.getElementById('ga-invite-progress');
+        const text = '🔗 Buscando links de convite: ' + data.done + '/' + data.total;
+        if (existing) { existing.querySelector('.ga-log-msg').textContent = text; }
+        else {
+            const item = document.createElement('div');
+            item.className = 'ga-log-item ga-log-info';
+            item.id = 'ga-invite-progress';
+            item.innerHTML = '<span class="ga-log-icon">🔗</span><span class="ga-log-msg">' + text + '</span>';
+            logEl.appendChild(item);
+        }
+    }
+});
+
+socket.on('group_add_paused_daily', (data) => {
+    showToast('Limite diario atingido — ' + data.pendingCount + ' adicoes restantes', 'warning');
+});
+
+socket.on('group_add_daily_limit', (data) => {
+    // Already logged via group_add_log, no extra action needed
 });
 
 // ==================== REPORT ====================
@@ -2197,9 +2339,17 @@ function showGAReport(summary) {
     const durationSec = summary.duration % 60;
     const durationText = durationMin > 0 ? durationMin + 'min ' + durationSec + 's' : durationSec + 's';
 
+    const statusHeaders = {
+        'completed': '✅ Operacao Concluida',
+        'stopped': '⏹ Operacao Parada',
+        'paused_daily': '⏸ Pausado — Limite Diario',
+        'failed': '❌ Operacao Falhou'
+    };
+    const headerText = statusHeaders[summary.status] || '📋 Resultado';
+
     el.innerHTML = `
         <div class="ga-report-card">
-            <div class="ga-report-header">${summary.status === 'completed' ? '✅ Operacao Concluida' : summary.status === 'stopped' ? '⏹ Operacao Parada' : '❌ Operacao Falhou'}</div>
+            <div class="ga-report-header">${headerText}</div>
             <div class="ga-report-grid">
                 <div class="ga-report-stat">
                     <div class="ga-report-value">${summary.total}</div>
@@ -2227,9 +2377,11 @@ function showGAReport(summary) {
                 </div>
             </div>
             <div class="ga-report-duration">Duracao: ${durationText}</div>
+            ${summary.pending > 0 ? '<div class="ga-report-pending">⏳ ' + summary.pending + ' adicoes restantes (retomar amanha)</div>' : ''}
             <div class="ga-report-actions">
                 <button class="btn btn-outline btn-sm" onclick="gaExportCSV(${summary.operationId})">Exportar CSV</button>
                 ${summary.fail > 0 ? '<button class="btn btn-warning btn-sm" onclick="gaRetry(' + summary.operationId + ')">Reexecutar falhas (' + summary.fail + ')</button>' : ''}
+                ${summary.status === 'paused_daily' || summary.pending > 0 ? '<button class="btn btn-success btn-sm" onclick="gaResumeOperation(' + summary.operationId + ')">▶ Retomar Operacao</button>' : ''}
                 <button class="btn btn-primary btn-sm" onclick="gaNewOperation()">Nova Operacao</button>
             </div>
         </div>`;
@@ -2253,6 +2405,26 @@ function gaRetry(opId) {
                 showToast('Reexecutando ' + data.retrying + ' itens', 'success');
             } else {
                 showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}
+
+function gaResumeOperation(opId) {
+    openConfirmModal('Retomar Operacao', 'Retomar adicao dos itens pendentes? (limites diarios serao resetados)', 'Retomar', () => {
+        fetch('/api/group-add/resume-operation/' + opId, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                _gaCurrentOpId = data.operationId;
+                _gaRunning = true;
+                _gaPaused = false;
+                _gaLogItems = [];
+                document.getElementById('ga-report').style.display = 'none';
+                showExecutionUI(data.pendingItems);
+                showToast('Retomando operacao — ' + data.pendingItems + ' itens pendentes', 'success');
+            } else {
+                showToast(data.error || 'Erro ao retomar', 'danger');
             }
         });
     });

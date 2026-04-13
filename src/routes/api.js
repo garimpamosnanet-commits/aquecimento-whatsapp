@@ -589,10 +589,12 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const items = [];
         for (const group of groups) {
             for (const phone of phoneList) {
+                const chip = phone.chip_id ? db.getChipById(phone.chip_id) : null;
                 items.push({
                     phone_number: phone.phone_number,
                     source: phone.source,
                     chip_id: phone.chip_id,
+                    chip_session_id: chip?.session_id || null,
                     group_id: group.id,
                     group_name: group.subject || group.name || group.id
                 });
@@ -709,6 +711,73 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const { numbers } = req.body;
         const normalized = groupManager.normalizePhoneNumbers(numbers || '');
         res.json({ valid: normalized, count: normalized.length });
+    });
+
+    // Get safety presets
+    router.get('/group-add/presets', (req, res) => {
+        const GroupManager = require('../whatsapp/group-manager');
+        res.json(GroupManager.PRESETS);
+    });
+
+    // Resume paused_daily or stopped operation
+    router.post('/group-add/resume-operation/:id', async (req, res) => {
+        if (groupManager.isRunning()) {
+            return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
+        }
+        const opId = parseInt(req.params.id);
+        const op = db.getAddOperation(opId);
+        if (!op) return res.status(404).json({ error: 'Operacao nao encontrada' });
+        if (op.status !== 'paused_daily' && op.status !== 'stopped') {
+            return res.status(400).json({ error: `Operacao com status "${op.status}" nao pode ser retomada` });
+        }
+        const pending = db.getPendingItems(opId);
+        if (pending.length === 0) {
+            return res.status(400).json({ error: 'Nenhum item pendente nesta operacao' });
+        }
+
+        groupManager.resumeOperation(opId).catch(err => {
+            console.error('[GroupAdd Resume] Erro:', err);
+        });
+
+        res.json({ success: true, operationId: opId, pendingItems: pending.length });
+    });
+
+    // Get daily counts for today
+    router.get('/group-add/daily-counts', (req, res) => {
+        const today = new Date().toISOString().split('T')[0];
+        res.json(db.getAllDailyCounts(today));
+    });
+
+    // ==================== CLIENT TAGS ====================
+
+    router.put('/chips/:id/client-tag', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const { clientTag } = req.body;
+        const chip = db.setChipClientTag(chipId, clientTag || null);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        res.json({ success: true, chip });
+    });
+
+    // Bulk set client tag (multiple chips at once)
+    router.put('/chips/bulk-client-tag', (req, res) => {
+        const { chipIds, clientTag } = req.body;
+        if (!chipIds || !Array.isArray(chipIds)) return res.status(400).json({ error: 'chipIds obrigatorio' });
+        const updated = [];
+        for (const id of chipIds) {
+            const chip = db.setChipClientTag(id, clientTag || null);
+            if (chip) updated.push(chip);
+        }
+        res.json({ success: true, updated: updated.length });
+    });
+
+    // List all unique client tags
+    router.get('/client-tags', (req, res) => {
+        res.json(db.getAllClientTags());
+    });
+
+    // Get chips filtered by client tag
+    router.get('/chips-by-tag/:tag', (req, res) => {
+        res.json(db.getChipsByClientTag(req.params.tag));
     });
 
     // ==================== SETTINGS ====================

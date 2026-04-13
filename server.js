@@ -154,8 +154,18 @@ server.listen(PORT, async () => {
     console.log('');
 
     // Initialize database
-    require('./src/database/db').getDb();
+    const db = require('./src/database/db');
+    db.getDb();
     console.log('[DB] Banco de dados inicializado');
+
+    // Recovery: mark any 'running' group-add operations as 'stopped' (server restarted)
+    const ops = db.getAddOperations(100);
+    for (const op of ops) {
+        if (op.status === 'running') {
+            db.updateAddOperation(op.id, { status: 'stopped' });
+            console.log(`[Recovery] Operacao group-add #${op.id} marcada como stopped (servidor reiniciou)`);
+        }
+    }
 
     // Reconnect existing sessions
     await sessionManager.initialize();

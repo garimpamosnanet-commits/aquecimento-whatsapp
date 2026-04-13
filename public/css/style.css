@@ -1655,6 +1655,127 @@ body::before {
     min-width: 180px;
 }
 
+/* Mode toggle */
+.ga-mode-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.ga-mode-btn {
+    flex: 1;
+    padding: 10px 16px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.ga-mode-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+.ga-mode-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+}
+.ga-mode-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+/* Presets grid */
+.ga-presets-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.ga-preset-card {
+    padding: 14px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+.ga-preset-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.ga-preset-card.active { border-color: var(--accent); background: var(--accent-light); }
+.ga-preset-card .preset-name {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+.ga-preset-card .preset-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    line-height: 1.3;
+}
+.ga-preset-card .preset-details {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+.ga-preset-card .preset-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+}
+
+/* Custom config */
+.ga-custom-config {
+    margin-bottom: 12px;
+}
+.ga-custom-config summary {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 6px 0;
+}
+.ga-config-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 12px;
+    margin-top: 8px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+.ga-config-row label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+.ga-config-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.ga-config-range .input-sm {
+    width: 70px;
+}
+
+/* Time estimate */
+.ga-time-estimate {
+    padding: 10px 14px;
+    background: rgba(59, 130, 246, 0.06);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 12px;
+}
+
 /* Panels (2 columns) */
 .ga-panels {
     display: grid;

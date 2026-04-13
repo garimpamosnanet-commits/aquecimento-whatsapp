@@ -210,6 +210,13 @@ function getDb() {
         console.log('[DB] Migrated: added group_invite_links');
     }
 
+    // Migrate: add group_add_daily_counts for safe mode
+    if (!data.group_add_daily_counts) {
+        data.group_add_daily_counts = {};  // { phone: { "2026-04-13": 3 } }
+        saveDb(data);
+        console.log('[DB] Migrated: added group_add_daily_counts');
+    }
+
     return data;
 }
 
@@ -732,6 +739,7 @@ function addOperationItems(operationId, items) {
             phone_number: item.phone_number,
             source: item.source || 'chip',
             chip_id: item.chip_id || null,
+            chip_session_id: item.chip_session_id || null,
             group_id: item.group_id,
             group_name: item.group_name || null,
             status: 'pending',
@@ -902,6 +910,70 @@ function setGroupInviteLinksBulk(linksMap) {
     return data.group_invite_links;
 }
 
+// ==================== CLIENT TAG ====================
+
+function setChipClientTag(chipId, clientTag) {
+    const data = loadDb();
+    const chip = data.chips.find(c => c.id === chipId);
+    if (!chip) return null;
+    chip.client_tag = clientTag || null;
+    saveDb(data);
+    return chip;
+}
+
+function getChipsByClientTag(clientTag) {
+    const data = loadDb();
+    return data.chips.filter(c => c.client_tag === clientTag);
+}
+
+function getChipsByFolder(folderId) {
+    const data = loadDb();
+    return data.chips.filter(c => c.folder_id === folderId);
+}
+
+function getAllClientTags() {
+    const data = loadDb();
+    const tags = new Set();
+    for (const chip of data.chips) {
+        if (chip.client_tag) tags.add(chip.client_tag);
+    }
+    return Array.from(tags).sort();
+}
+
+// ==================== GROUP ADD DAILY COUNTS ====================
+
+function getChipDailyCount(phone, date) {
+    const data = loadDb();
+    if (!data.group_add_daily_counts) return 0;
+    return data.group_add_daily_counts[phone]?.[date] || 0;
+}
+
+function incrementChipDailyCount(phone, date) {
+    const data = loadDb();
+    if (!data.group_add_daily_counts) data.group_add_daily_counts = {};
+    if (!data.group_add_daily_counts[phone]) data.group_add_daily_counts[phone] = {};
+    data.group_add_daily_counts[phone][date] = (data.group_add_daily_counts[phone][date] || 0) + 1;
+    saveDb(data);
+    return data.group_add_daily_counts[phone][date];
+}
+
+function getAllDailyCounts(date) {
+    const data = loadDb();
+    if (!data.group_add_daily_counts) return {};
+    const result = {};
+    for (const [phone, dates] of Object.entries(data.group_add_daily_counts)) {
+        if (dates[date]) result[phone] = dates[date];
+    }
+    return result;
+}
+
+function getPendingItems(operationId) {
+    const data = loadDb();
+    return (data.group_add_items || []).filter(i =>
+        i.operation_id === operationId && (i.status === 'pending' || i.status === 'daily_skipped')
+    );
+}
+
 module.exports = {
     getDb,
     createChip, getChipById, getChipBySession, getAllChips,
@@ -925,5 +997,7 @@ module.exports = {
     updateAdminManageItem, getFailedAdminManageItems,
     getGroupDoneMarks, setGroupDoneMark,
     getGroupInviteLinks, setGroupInviteLink, setGroupInviteLinksBulk,
+    setChipClientTag, getChipsByClientTag, getChipsByFolder, getAllClientTags,
+    getChipDailyCount, incrementChipDailyCount, getAllDailyCounts, getPendingItems,
     _loadDb: loadDb, _saveDb: saveDb
 };
