@@ -956,7 +956,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
             res.json({
                 success: true,
-                totalGroups: groups.length,
+                totalGroups: admGroupList.length,
                 totalChips: results.length,
                 chips: results,
                 groups: groupNames
