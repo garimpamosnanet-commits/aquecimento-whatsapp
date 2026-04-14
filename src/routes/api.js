@@ -891,22 +891,36 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
                 if (!chip || !chip.phone) continue;
 
                 const chipPhone = chip.phone;
-                // Brazilian phone matching: strip 55, handle 9th digit
-                const normalize = (p) => {
-                    let n = p.startsWith('55') && p.length >= 12 ? p.slice(2) : p;
-                    if (n.length === 11 && n[2] === '9') n = n.slice(0, 2) + n.slice(3);
-                    return n;
-                };
-                const chipNorm = normalize(chipPhone);
+                // Match phone numbers handling BR 9th digit + LID format
+                function phoneMatch(a, b) {
+                    if (!a || !b) return false;
+                    if (a === b) return true;
+                    // Skip LID-format numbers (not phone-based)
+                    if (a.length > 15 || b.length > 15) return false;
+                    // Strip country code 55
+                    const strip = (p) => p.startsWith('55') && p.length >= 12 ? p.slice(2) : p;
+                    const na = strip(a), nb = strip(b);
+                    if (na === nb) return true;
+                    // Handle 9th digit: one 11 digits, other 10 digits
+                    if (na.length === 11 && nb.length === 10) return (na.slice(0,2) + na.slice(3)) === nb;
+                    if (nb.length === 11 && na.length === 10) return (nb.slice(0,2) + nb.slice(3)) === na;
+                    // Also try: both have 55 prefix but different lengths
+                    if (a.length === 13 && b.length === 12) return (a.slice(0,4) + a.slice(5)) === b;
+                    if (b.length === 13 && a.length === 12) return (b.slice(0,4) + b.slice(5)) === a;
+                    return false;
+                }
 
                 const chipGroups = [];
                 const missingGroups = [];
 
+                // Debug: log first group's participants to see format
+                if (groups.length > 0 && chipIds.indexOf(chipId) === 0) {
+                    const sample = groups[0].participants.slice(0, 3).map(p => p.phone);
+                    console.log(`[Scan] Chip phone: ${chipPhone} | Sample participants: ${sample.join(', ')}`);
+                }
+
                 for (const g of groups) {
-                    const found = g.participants.find(p => {
-                        const pNorm = normalize(p.phone);
-                        return pNorm === chipNorm;
-                    });
+                    const found = g.participants.find(p => phoneMatch(p.phone, chipPhone));
 
                     if (found) {
                         chipGroups.push({
