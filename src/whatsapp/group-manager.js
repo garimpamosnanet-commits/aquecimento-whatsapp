@@ -301,6 +301,36 @@ class GroupManager {
                 callbacks.onLog({ type: 'error', message: `Chip ${phone} desconectado — nao pode entrar via link` });
                 return { status: 'failed', error: 'Chip desconectado' };
             }
+
+            // Check if chip is already in this group (using chip's own socket)
+            try {
+                const chipSock = this.sessionManager.getSocket(options.chipSessionId);
+                if (chipSock?.user) {
+                    const myGroups = await chipSock.groupFetchAllParticipating();
+                    if (myGroups[groupId]) {
+                        if (!shouldPromote) {
+                            callbacks.onLog({ type: 'skip', message: `${phone} ja esta no grupo "${groupName}" — pulando` });
+                            return { status: 'skipped', adminPromoted: 0 };
+                        } else {
+                            callbacks.onLog({ type: 'info', message: `${phone} ja esta no grupo "${groupName}" — promovendo a admin` });
+                            const pDelay = this._random(promoteDelayMin, promoteDelayMax);
+                            if (pDelay > 5000) await this._delayWithCountdown(pDelay, 'Promovendo a admin');
+                            else await this._delay(pDelay);
+                            const pr = await this.promoteToAdmin(adminSessionId, groupId, jid);
+                            if (pr.success) {
+                                callbacks.onLog({ type: 'admin', message: `${phone} promovido a ADMIN no grupo "${groupName}"` });
+                                return { status: 'skipped', adminPromoted: 1 };
+                            } else {
+                                callbacks.onLog({ type: 'admin_fail', message: `${phone} ja no grupo "${groupName}" — falha ao promover: ${pr.error}` });
+                                return { status: 'skipped', adminPromoted: -1, adminError: pr.error };
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // If check fails, proceed with join attempt
+            }
+
             callbacks.onLog({ type: 'info', message: `${phone} entrando no grupo "${groupName}" via link de convite...` });
             addResult = await this.joinViaInviteLink(options.chipSessionId, options.inviteCode, groupName);
         } else {
