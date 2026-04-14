@@ -2046,7 +2046,7 @@ function renderAqList() {
             const statusCls = isConn ? 'connected' : 'disconnected';
             const created = chip.created_at ? new Date(chip.created_at).toLocaleDateString('pt-BR') : '';
 
-            const connectBtn = !isConn ? `<button class="btn btn-primary btn-xs" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}')" title="Conectar via QR">📱 Conectar</button>` : '';
+            const connectBtn = !isConn ? `<button class="btn btn-primary btn-xs" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}', 'qr')" title="Conectar via QR">📷 QR</button><button class="btn btn-outline btn-xs" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}', 'phone')" title="Conectar via numero">📱 Numero</button>` : '';
             const groupsBtn = isConn ? `<button class="btn btn-outline btn-xs" onclick="showChipGroups(${chip.id}, '${chip.phone || ''}')" title="Ver grupos">👥 Grupos</button>` : '';
             html += `<div class="aq-chip-row" data-phone="${chip.phone || ''}">
                 <div class="aq-chip-phone"><span class="aq-dot ${dotCls}"></span>${chip.phone || '—'}${chip.name && chip.name !== chip.phone ? ' <span style="font-weight:400;font-size:12px;color:var(--text-muted);font-family:Inter,sans-serif">(' + chip.name + ')</span>' : ''}</div>
@@ -2118,8 +2118,7 @@ function showChipGroups(chipId, phone) {
         });
 }
 
-function connectAquecido(chipId, phone) {
-    // Open QR modal and skip the name step — chip already has a name
+function connectAquecido(chipId, phone, mode) {
     const chip = _aqAllWarmed.find(c => c.id === chipId);
     const last4 = (phone || '').slice(-4);
     const name = chip?.client_tag ? `${chip.client_tag} - ${last4}` : last4;
@@ -2130,10 +2129,23 @@ function connectAquecido(chipId, phone) {
     document.getElementById('qr-step-phone').style.display = 'none';
     document.getElementById('chip-name-input').value = name;
     currentQRSessionId = null;
-    _connectMode = 'qr';
 
-    // Go straight to creating session + showing QR
-    confirmChipName('qr');
+    if (mode === 'phone') {
+        // Connect via phone number (pairing code)
+        _connectMode = 'phone';
+        confirmChipName('phone');
+        // Auto-fill the phone number
+        setTimeout(() => {
+            const phoneInput = document.getElementById('phone-number-input');
+            if (phoneInput && phone) {
+                phoneInput.value = phone;
+            }
+        }, 500);
+    } else {
+        // Connect via QR code
+        _connectMode = 'qr';
+        confirmChipName('qr');
+    }
 }
 
 function deleteAquecido(chipId) {
