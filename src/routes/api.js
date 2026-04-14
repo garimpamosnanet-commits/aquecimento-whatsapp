@@ -547,7 +547,24 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
     // Start group add operation
     router.post('/group-add/start', async (req, res) => {
         if (groupManager.isRunning()) {
-            return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
+            // Check if operation is stale (running > 10 min without progress)
+            const ops = db.getAddOperations(1);
+            const current = ops.find(o => o.status === 'running');
+            if (current) {
+                const startedAt = new Date(current.started_at || current.created_at).getTime();
+                const staleMinutes = (Date.now() - startedAt) / 60000;
+                if (staleMinutes > 10) {
+                    console.log(`[GroupAdd] Operacao #${current.id} travada ha ${Math.round(staleMinutes)}min — auto-reset`);
+                    groupManager.forceReset();
+                    db.updateAddOperation(current.id, { status: 'failed' });
+                    // Continue — allow new operation
+                } else {
+                    return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
+                }
+            } else {
+                // isRunning but no running op in DB — ghost state, reset
+                groupManager.forceReset();
+            }
         }
         const { adminChipId, chipIds, manualNumbers, groups, config } = req.body;
         if (!adminChipId || !groups || groups.length === 0) {

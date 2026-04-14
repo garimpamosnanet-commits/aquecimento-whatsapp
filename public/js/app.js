@@ -3026,6 +3026,17 @@ function gaStartOperation() {
             _gaLogItems = [];
             showExecutionUI(data.totalItems);
             showToast('Operacao iniciada!', 'success');
+        } else if (data.error && data.error.includes('andamento')) {
+            // Operation stuck — offer force reset
+            document.getElementById('ga-btn-start').disabled = false;
+            document.getElementById('ga-btn-start').textContent = 'Iniciar Adicao';
+            openConfirmModal('Operacao Travada', 'Existe uma operacao travada no servidor. Deseja forcar o reset e tentar novamente?', 'Forcar Reset', () => {
+                fetch('/api/group-add/force-reset', { method: 'POST' })
+                .then(r => r.json())
+                .then(() => {
+                    showToast('Reset feito! Clique em Iniciar novamente.', 'success');
+                });
+            });
         } else {
             showToast(data.error || 'Erro ao iniciar', 'danger');
             document.getElementById('ga-btn-start').disabled = false;
