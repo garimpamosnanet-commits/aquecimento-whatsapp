@@ -813,16 +813,31 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             return res.status(400).json({ error: 'Nenhum numero fornecido' });
         }
 
+        // Auto-create folder for client if it doesn't exist
+        let folderId = null;
+        if (clientTag) {
+            const folders = db.getAllFolders();
+            const existing = folders.find(f => f.name.toLowerCase() === clientTag.toLowerCase());
+            if (existing) {
+                folderId = existing.id;
+            } else {
+                const newFolder = db.createFolder(clientTag);
+                folderId = newFolder.id;
+                console.log(`[Register] Pasta criada automaticamente: "${clientTag}" (id: ${folderId})`);
+            }
+        }
+
         const registered = [];
         for (const phone of numbers) {
             // Check if phone already exists
-            const existing = db.getAllChips().find(c => c.phone === phone);
-            if (existing) {
+            const existingChip = db.getAllChips().find(c => c.phone === phone);
+            if (existingChip) {
                 // Just update tags if already exists
-                if (clientTag) db.setChipClientTag(existing.id, clientTag);
-                if (fornecedor) db.updateChipField(existing.id, 'fornecedor', fornecedor);
-                db.updateChipField(existing.id, 'origin', 'external_warmed');
-                registered.push({ phone, status: 'updated', chipId: existing.id });
+                if (clientTag) db.setChipClientTag(existingChip.id, clientTag);
+                if (fornecedor) db.updateChipField(existingChip.id, 'fornecedor', fornecedor);
+                db.updateChipField(existingChip.id, 'origin', 'external_warmed');
+                if (folderId) db.assignChipToFolder(existingChip.id, folderId);
+                registered.push({ phone, status: 'updated', chipId: existingChip.id });
                 continue;
             }
 
@@ -834,11 +849,12 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             db.updateChipField(chip.id, 'phase', 4); // Already warmed
             if (clientTag) db.setChipClientTag(chip.id, clientTag);
             if (fornecedor) db.updateChipField(chip.id, 'fornecedor', fornecedor);
+            if (folderId) db.assignChipToFolder(chip.id, folderId);
             registered.push({ phone, status: 'created', chipId: chip.id });
         }
 
         sessionManager.emitStats();
-        res.json({ success: true, registered, total: registered.length });
+        res.json({ success: true, registered, total: registered.length, folderId, folderName: clientTag });
     });
 
     // ==================== SETTINGS ====================

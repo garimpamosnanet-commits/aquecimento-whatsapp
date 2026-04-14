@@ -2026,6 +2026,7 @@ function renderAqList() {
             const statusCls = isConn ? 'connected' : 'disconnected';
             const created = chip.created_at ? new Date(chip.created_at).toLocaleDateString('pt-BR') : '';
 
+            const connectBtn = !isConn ? `<button class="btn btn-primary btn-xs" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}')" title="Conectar via QR">📱 Conectar</button>` : '';
             html += `<div class="aq-chip-row" data-phone="${chip.phone || ''}">
                 <div class="aq-chip-phone"><span class="aq-dot ${dotCls}"></span>${chip.phone || '—'}</div>
                 <div class="aq-chip-meta">
@@ -2034,6 +2035,7 @@ function renderAqList() {
                 </div>
                 <span class="aq-chip-status ${statusCls}">${statusText}</span>
                 <div class="aq-chip-actions">
+                    ${connectBtn}
                     <button class="btn btn-ghost btn-xs" onclick="deleteAquecido(${chip.id})" title="Remover">🗑</button>
                 </div>
             </div>`;
@@ -2046,6 +2048,13 @@ function renderAqList() {
 }
 
 function filterAquecidosList() { renderAqList(); }
+
+function connectAquecido(chipId, phone) {
+    // Open the QR modal — the chip will be connected as a new session
+    // After connection, the phone number will match and we can link them
+    showToast('Abra o WhatsApp no chip ' + phone + ' e escaneie o QR Code', 'info');
+    openQRModal();
+}
 
 function deleteAquecido(chipId) {
     if (!confirm('Remover este chip aquecido?')) return;

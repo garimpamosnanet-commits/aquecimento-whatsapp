@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KS Digital — Command Center</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260413a">
+    <link rel="stylesheet" href="/css/style.css?v=20260413b">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -647,51 +647,8 @@
         <div id="tab-lista" class="tab-content">
             <div class="section-header">
                 <h2>Lista de Chips</h2>
-                <div style="display:flex;gap:8px">
-                    <button class="btn btn-primary btn-sm" onclick="toggleCadastroAquecidos()">+ Cadastrar Chips Aquecidos</button>
-                    <button class="btn btn-outline btn-sm" onclick="renderListTab()">↻ Atualizar</button>
-                </div>
+                <button class="btn btn-outline btn-sm" onclick="renderListTab()">↻ Atualizar</button>
             </div>
-
-            <!-- CADASTRO DE CHIPS AQUECIDOS -->
-            <div id="cadastro-aquecidos" class="cadastro-aquecidos" style="display:none">
-                <div class="cadastro-card">
-                    <div class="cadastro-header">
-                        <h3>📱 Cadastrar Chips Aquecidos (do Fornecedor)</h3>
-                        <button class="btn btn-ghost btn-sm" onclick="toggleCadastroAquecidos()">✕</button>
-                    </div>
-                    <div class="cadastro-body">
-                        <div class="cadastro-row">
-                            <div class="cadastro-field">
-                                <label>Cliente</label>
-                                <div class="cadastro-client-row">
-                                    <select id="cad-client-tag" class="ga-select">
-                                        <option value="">Selecione o cliente...</option>
-                                    </select>
-                                    <input type="text" id="cad-client-new" class="input-sm" placeholder="Ou digite novo..." style="width:160px">
-                                </div>
-                            </div>
-                            <div class="cadastro-field">
-                                <label>Fornecedor (opcional)</label>
-                                <input type="text" id="cad-fornecedor" class="input-sm" placeholder="Nome do fornecedor">
-                            </div>
-                        </div>
-                        <div class="cadastro-field">
-                            <label>Numeros (um por linha)</label>
-                            <textarea id="cad-numbers" rows="8" class="cadastro-textarea" placeholder="62 98223 9695&#10;62 98219 6031&#10;62 98223 6773&#10;&#10;Cole os numeros do papel aqui..."></textarea>
-                            <div class="cadastro-hint">
-                                <span id="cad-count">0 numeros detectados</span>
-                                <span>Aceita qualquer formato: com DDD, com +55, com espacos ou tracos</span>
-                            </div>
-                        </div>
-                        <div class="cadastro-actions">
-                            <button class="btn btn-success" onclick="cadastrarChipsAquecidos()">📱 Cadastrar Chips</button>
-                            <span id="cad-status" class="cadastro-status"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <div id="lista-table-container"></div>
         </div>
 
@@ -898,6 +855,6 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js?v=20260413a"></script>
+<script src="/js/app.js?v=20260413b"></script>
 </body>
 </html>
