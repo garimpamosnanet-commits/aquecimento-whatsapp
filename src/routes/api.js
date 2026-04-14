@@ -850,7 +850,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
     // SCAN: Cross-reference chips vs groups (which chips are in which groups)
     router.post('/chips/scan-groups', async (req, res) => {
-        const { chipIds, adminChipId } = req.body;
+        const { chipIds, adminChipId, groupFilter } = req.body;
         if (!chipIds || !Array.isArray(chipIds) || chipIds.length === 0) {
             return res.status(400).json({ error: 'chipIds obrigatorio' });
         }
@@ -867,9 +867,12 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             // 1. Get all groups from ADM
             const admSock = sessionManager.getSocket(adminChip.session_id);
             const allGroups = await admSock.groupFetchAllParticipating();
+            const filterLower = (groupFilter || '').toLowerCase();
             const groups = [];
             for (const [gid, g] of Object.entries(allGroups)) {
                 if (g.isCommunity) continue;
+                // Apply group name filter
+                if (filterLower && !(g.subject || '').toLowerCase().includes(filterLower)) continue;
                 groups.push({
                     id: gid,
                     subject: g.subject || 'Sem nome',
