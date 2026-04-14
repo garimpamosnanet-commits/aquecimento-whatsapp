@@ -69,7 +69,13 @@ socket.on('chip_update', (chip) => {
     if (idx >= 0) {
         chips[idx] = chip;
     } else {
-        chips.unshift(chip);
+        // Check if a chip with the same phone already exists (avoid duplicates)
+        const phoneIdx = chip.phone ? chips.findIndex(c => c.phone === chip.phone) : -1;
+        if (phoneIdx >= 0) {
+            chips[phoneIdx] = chip;
+        } else {
+            chips.unshift(chip);
+        }
     }
     renderChips();
 });
@@ -355,6 +361,7 @@ function renderChips() {
     }
 
     grid.innerHTML = html;
+    restoreOpenFolders();
 }
 
 // ==================== FOLDER CRUD ====================
@@ -540,6 +547,8 @@ document.addEventListener('dragend', () => {
     }
 });
 
+const _openFolders = new Set();
+
 function toggleFolder(dropId) {
     const zone = document.querySelector(`#${dropId} .folder-drop-zone`);
     const toggle = document.getElementById('toggle-' + dropId);
@@ -547,9 +556,22 @@ function toggleFolder(dropId) {
     if (zone.style.display === 'none') {
         zone.style.display = '';
         if (toggle) toggle.textContent = '▼';
+        _openFolders.add(dropId);
     } else {
         zone.style.display = 'none';
         if (toggle) toggle.textContent = '▶';
+        _openFolders.delete(dropId);
+    }
+}
+
+function restoreOpenFolders() {
+    for (const dropId of _openFolders) {
+        const zone = document.querySelector(`#${dropId} .folder-drop-zone`);
+        const toggle = document.getElementById('toggle-' + dropId);
+        if (zone) {
+            zone.style.display = '';
+            if (toggle) toggle.textContent = '▼';
+        }
     }
 }
 
@@ -1948,24 +1970,21 @@ function loadChipsAquecidos() {
     fetch('/api/chips/cleanup-orphans', { method: 'POST' }).catch(() => {});
 
     fetch('/api/chips').then(r => r.json()).then(allChips => {
-        // Get external_warmed chips
-        let warmed = allChips.filter(c => c.origin === 'external_warmed');
+        // Get all chips with client_tag or origin=external_warmed
+        const warmedRegistered = allChips.filter(c => c.origin === 'external_warmed' || c.client_tag);
 
-        // Also include connected chips that have client_tag but no origin
-        // (chips that were merged but origin wasn't set)
-        const warmedPhones = new Set(warmed.map(c => c.phone));
-        for (const c of allChips) {
-            if (c.client_tag && !warmedPhones.has(c.phone) && c.origin !== 'external_warmed') {
-                // Skip — only show external_warmed
-            }
-        }
-
-        // Deduplicate by phone: if same phone exists as connected + disconnected, keep connected
+        // Deduplicate by phone: prefer connected chip over disconnected
         const byPhone = {};
-        for (const c of warmed) {
+        for (const c of warmedRegistered) {
             if (!c.phone) continue;
-            if (!byPhone[c.phone] || (c.status === 'connected' || c.status === 'warming')) {
+            const existing = byPhone[c.phone];
+            if (!existing) {
                 byPhone[c.phone] = c;
+            } else {
+                // Prefer connected/warming over disconnected
+                const cConn = c.status === 'connected' || c.status === 'warming';
+                const eConn = existing.status === 'connected' || existing.status === 'warming';
+                if (cConn && !eConn) byPhone[c.phone] = c;
             }
         }
         _aqAllWarmed = Object.values(byPhone);
