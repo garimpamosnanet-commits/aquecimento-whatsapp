@@ -2657,6 +2657,35 @@ socket.on('group_add_daily_limit', (data) => {
     // Already logged via group_add_log, no extra action needed
 });
 
+socket.on('group_add_countdown', (data) => {
+    const logEl = document.getElementById('ga-log');
+    if (!logEl) return;
+
+    const id = 'ga-cd-' + data.logId;
+    let el = document.getElementById(id);
+
+    if (data.done) {
+        if (el) el.remove();
+        return;
+    }
+
+    const mins = Math.floor(data.remaining / 60);
+    const secs = data.remaining % 60;
+    const timeStr = mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
+    const pct = Math.round(((data.total - data.remaining) / data.total) * 100);
+    const text = `⏳ ${data.label} em ${timeStr}`;
+
+    if (!el) {
+        el = document.createElement('div');
+        el.className = 'ga-log-item ga-log-countdown';
+        el.id = id;
+        logEl.appendChild(el);
+    }
+
+    el.innerHTML = `<span class="ga-log-icon">⏳</span><span class="ga-log-msg">${text}</span><span class="ga-cd-bar"><span class="ga-cd-fill" style="width:${pct}%"></span></span><span class="ga-log-time">${timeStr}</span>`;
+    logEl.scrollTop = logEl.scrollHeight;
+});
+
 // ==================== REPORT ====================
 
 function showGAReport(summary) {

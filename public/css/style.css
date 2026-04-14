@@ -1655,6 +1655,21 @@ body::before {
     min-width: 180px;
 }
 
+/* Group Add — Countdown */
+.ga-log-countdown {
+    background: rgba(59,130,246,0.04) !important;
+    border-left: 3px solid var(--accent) !important;
+}
+.ga-cd-bar {
+    width: 80px; height: 4px; border-radius: 2px;
+    background: rgba(59,130,246,0.15); overflow: hidden;
+    flex-shrink: 0;
+}
+.ga-cd-fill {
+    display: block; height: 100%; border-radius: 2px;
+    background: var(--accent); transition: width 1s linear;
+}
+
 /* Group Add — Done badge */
 .ga-done-badge {
     display: inline-block;

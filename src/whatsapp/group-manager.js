@@ -328,9 +328,10 @@ class GroupManager {
         // STEP 3 — Delay before promote (configurable)
         const promoteDelay = this._random(promoteDelayMin, promoteDelayMax);
         if (promoteDelay > 5000) {
-            callbacks.onLog({ type: 'system', message: `Aguardando ${Math.round(promoteDelay / 1000)}s antes de promover...` });
+            await this._delayWithCountdown(promoteDelay, 'Promovendo a admin');
+        } else {
+            await this._delay(promoteDelay);
         }
-        await this._delay(promoteDelay);
 
         // STEP 4 — Promote to admin
         const promoteResult = await this.promoteToAdmin(adminSessionId, groupId, jid);
@@ -642,14 +643,11 @@ class GroupManager {
                             (config.delayMin || 5) * 1000,
                             (config.delayMax || 15) * 1000
                         );
-                        if (delay > 10000) {
-                            this.io.emit('group_add_log', {
-                                operationId, type: 'system',
-                                message: `Aguardando ${Math.round(delay / 1000)}s antes do proximo chip...`,
-                                timestamp: new Date().toISOString()
-                            });
+                        if (delay > 5000) {
+                            await this._delayWithCountdown(delay, 'Proximo chip');
+                        } else {
+                            await this._delay(delay);
                         }
-                        await this._delay(delay);
                     }
                 }
 
@@ -659,12 +657,7 @@ class GroupManager {
                         (config.groupDelayMin || 30) * 1000,
                         (config.groupDelayMax || 60) * 1000
                     );
-                    this.io.emit('group_add_log', {
-                        operationId, type: 'system',
-                        message: `Aguardando ${Math.round(groupDelay / 1000)}s antes do proximo grupo...`,
-                        timestamp: new Date().toISOString()
-                    });
-                    await this._delay(groupDelay);
+                    await this._delayWithCountdown(groupDelay, 'Proximo grupo');
                 }
             }
 
@@ -805,6 +798,34 @@ class GroupManager {
 
     _delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    _delayWithCountdown(ms, label) {
+        return new Promise(resolve => {
+            const total = Math.round(ms / 1000);
+            let remaining = total;
+            const logId = `countdown_${Date.now()}`;
+
+            // Emit initial
+            this.io.emit('group_add_countdown', {
+                operationId: this._currentOperation, logId, remaining, total, label
+            });
+
+            const interval = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    this.io.emit('group_add_countdown', {
+                        operationId: this._currentOperation, logId, remaining: 0, total, label, done: true
+                    });
+                    resolve();
+                } else {
+                    this.io.emit('group_add_countdown', {
+                        operationId: this._currentOperation, logId, remaining, total, label
+                    });
+                }
+            }, 1000);
+        });
     }
 
     _random(min, max) {
