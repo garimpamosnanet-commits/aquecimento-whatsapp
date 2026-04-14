@@ -805,6 +805,8 @@ function loadFeedHistory() {
         .catch(() => {}); // silently fail if API not ready
 }
 
+let _feedRenderPending = false;
+
 function addFeedItem(chipLabel, detail, message, iconType) {
     const now = new Date();
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -812,26 +814,60 @@ function addFeedItem(chipLabel, detail, message, iconType) {
 
     feedItems.unshift({ chipLabel, detail, message, iconType, icon, time });
     if (feedItems.length > MAX_FEED) feedItems.pop();
-    renderFeed();
+
+    // Throttle: batch renders to max 1 per 500ms to avoid DOM thrashing
+    if (!_feedRenderPending) {
+        _feedRenderPending = true;
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                renderFeedIncremental();
+                _feedRenderPending = false;
+            }, 500);
+        });
+    }
 }
 
-function renderFeed() {
+function renderFeedIncremental() {
     const feed = document.getElementById('live-feed');
-    if (feedItems.length === 0) return;
+    if (!feed || feedItems.length === 0) return;
 
+    // Only update if items changed — prepend new items instead of full re-render
+    const existingCount = feed.children.length;
+    const newCount = feedItems.length;
+
+    // If too out of sync or first render, do full render
+    if (existingCount === 0 || Math.abs(newCount - existingCount) > 5) {
+        renderFeedFull();
+        return;
+    }
+
+    // Prepend only the newest item
+    const item = feedItems[0];
+    const colorClass = item.iconType === 'error' ? 'feed-error' : item.iconType === 'connect' || item.iconType === 'system' ? 'feed-info' : 'feed-success';
+    const div = document.createElement('div');
+    div.className = 'feed-item ' + colorClass;
+    div.style.animation = 'feedFadeIn 0.4s ease';
+    div.innerHTML = `<div class="feed-icon ${item.iconType || 'system'}">${item.icon}</div><div class="feed-content"><div class="feed-chip">${item.chipLabel}</div><div class="feed-detail">${item.detail}${item.message ? ' — ' + truncate(item.message, 40) : ''}</div></div><div class="feed-time">${item.time}</div>`;
+
+    feed.insertBefore(div, feed.firstChild);
+
+    // Trim excess
+    while (feed.children.length > MAX_FEED) {
+        feed.removeChild(feed.lastChild);
+    }
+}
+
+function renderFeedFull() {
+    const feed = document.getElementById('live-feed');
+    if (!feed || feedItems.length === 0) return;
     feed.innerHTML = feedItems.map((item, i) => {
         const colorClass = item.iconType === 'error' ? 'feed-error' : item.iconType === 'connect' || item.iconType === 'system' ? 'feed-info' : 'feed-success';
-        return `
-        <div class="feed-item ${colorClass}" ${i === 0 ? 'style="animation:feedFadeIn 0.4s ease"' : ''}>
-            <div class="feed-icon ${item.iconType || 'system'}">${item.icon}</div>
-            <div class="feed-content">
-                <div class="feed-chip">${item.chipLabel}</div>
-                <div class="feed-detail">${item.detail}${item.message ? ' — ' + truncate(item.message, 40) : ''}</div>
-            </div>
-            <div class="feed-time">${item.time}</div>
-        </div>`;
+        return `<div class="feed-item ${colorClass}" ${i === 0 ? 'style="animation:feedFadeIn 0.4s ease"' : ''}><div class="feed-icon ${item.iconType || 'system'}">${item.icon}</div><div class="feed-content"><div class="feed-chip">${item.chipLabel}</div><div class="feed-detail">${item.detail}${item.message ? ' — ' + truncate(item.message, 40) : ''}</div></div><div class="feed-time">${item.time}</div></div>`;
     }).join('');
 }
+
+// Alias for initial load
+function renderFeed() { renderFeedFull(); }
 
 function getFeedIcon(type) {
     const icons = {
@@ -1464,8 +1500,10 @@ function updateAlertsBar(alerts) {
     const bar = document.getElementById('alerts-bar');
     if (!bar) return;
 
-    // Filter dismissed alerts
-    const active = (alerts || []).filter(a => !_dismissedAlerts.has(alertKey(a)));
+    // Only show critical alerts — skip warnings (they're noisy)
+    const active = (alerts || [])
+        .filter(a => a.level === 'critical')
+        .filter(a => !_dismissedAlerts.has(alertKey(a)));
 
     if (active.length === 0) {
         bar.style.display = 'none';
@@ -1474,17 +1512,22 @@ function updateAlertsBar(alerts) {
 
     bar.style.display = 'flex';
 
-    // Show max 5
-    const visible = active.slice(0, 5);
+    // Show max 3 + dismiss all button
+    const visible = active.slice(0, 3);
     bar.innerHTML = visible.map(a => {
-        const cls = a.level === 'critical' ? 'alert-critical' : 'alert-warning';
-        const icon = a.level === 'critical' ? '🚨' : '⚠️';
         const key = alertKey(a).replace(/'/g, "\\'");
-        return `<div class="alert-item ${cls}">
-            <span class="alert-text">${icon} ${a.message}</span>
+        return `<div class="alert-item alert-critical">
+            <span class="alert-text">🚨 ${a.message}</span>
             <button class="alert-dismiss" onclick="dismissAlert('${key}')" title="Fechar">✕</button>
         </div>`;
-    }).join('');
+    }).join('') + (active.length > 1 ? '<button class="btn btn-ghost btn-xs" onclick="dismissAllAlerts()" style="white-space:nowrap">Fechar todos</button>' : '');
+}
+
+function dismissAllAlerts() {
+    if (_healthData && _healthData.alerts) {
+        for (const a of _healthData.alerts) _dismissedAlerts.add(alertKey(a));
+        updateAlertsBar(_healthData.alerts);
+    }
 }
 
 function alertKey(alert) {
