@@ -1988,7 +1988,6 @@ function runChipScan() {
     if (!adminChipId) return showToast('Selecione o ADM primeiro', 'warning');
 
     const groupFilter = (document.getElementById('aq-scan-filter')?.value || '').trim();
-    if (!groupFilter) return showToast('Digite o nome dos grupos pra filtrar (ex: Entre e Compre)', 'warning');
 
     // Filter by selected client
     const clientFilter = document.getElementById('aquecidos-filter-client')?.value || '';

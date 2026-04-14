@@ -939,6 +939,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
                 let chipGroupIds = new Set();
                 let chipAdminGroups = new Set();
+                let chipGroupNames = new Map();
                 let scanError = null;
 
                 // Try up to 2 attempts
@@ -950,11 +951,14 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
                         chipGroupIds = new Set();
                         chipAdminGroups = new Set();
+                        chipGroupNames = new Map();
 
                         for (const [gid, g] of Object.entries(chipGroups)) {
-                            // Only process target groups (skip irrelevant ones)
-                            if (!admGroupIds.has(gid)) continue;
+                            if (g.isCommunity) continue;
+                            // Apply name filter if provided
+                            if (filterLower && !(g.subject || '').toLowerCase().includes(filterLower)) continue;
                             chipGroupIds.add(gid);
+                            chipGroupNames.set(gid, g.subject || 'Grupo');
 
                             const me = (g.participants || []).find(p => {
                                 const pid = p.id.split(':')[0];
@@ -982,11 +986,16 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
                 const inGroups = [];
                 const missingGroups = [];
 
+                // Build chip's group list with names from chipGroupNames
+                for (const gid of chipGroupIds) {
+                    const isAdmin = chipAdminGroups.has(gid);
+                    const subject = chipGroupNames.get(gid) || admGroupList.find(g => g.id === gid)?.subject || 'Grupo';
+                    inGroups.push({ groupId: gid, subject, isAdmin, status: isAdmin ? 'admin' : 'member' });
+                }
+
+                // Missing = ADM groups (filtered) that chip is NOT in
                 for (const g of admGroupList) {
-                    if (chipGroupIds.has(g.id)) {
-                        const isAdmin = chipAdminGroups.has(g.id);
-                        inGroups.push({ groupId: g.id, subject: g.subject, isAdmin, status: isAdmin ? 'admin' : 'member' });
-                    } else {
+                    if (!chipGroupIds.has(g.id)) {
                         missingGroups.push({ groupId: g.id, subject: g.subject, size: g.size });
                     }
                 }
