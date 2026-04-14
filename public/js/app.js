@@ -1997,7 +1997,11 @@ function runChipScan() {
     const status = document.getElementById('aq-scan-status');
     btn.disabled = true;
     btn.textContent = '⏳ Escaneando...';
-    status.textContent = `Verificando ${connectedChips.length} chips nos grupos "${groupFilter}"...`;
+    let scanSeconds = 0;
+    const scanTimer = setInterval(() => {
+        scanSeconds++;
+        status.textContent = `Escaneando ${connectedChips.length} chips... ${scanSeconds}s`;
+    }, 1000);
 
     fetch('/api/chips/scan-groups', {
         method: 'POST',
@@ -2010,20 +2014,23 @@ function runChipScan() {
     })
     .then(r => r.json())
     .then(data => {
+        clearInterval(scanTimer);
         btn.disabled = false;
-        btn.textContent = '🔍 Varredura de Grupos';
-        status.textContent = '';
+        btn.textContent = '🔍 Varredura';
+        status.textContent = `Concluido em ${scanSeconds}s`;
 
         if (data.error) {
             showToast('Erro: ' + data.error, 'danger');
+            status.textContent = 'Erro: ' + data.error;
             return;
         }
         renderScanResults(data);
     })
     .catch(err => {
+        clearInterval(scanTimer);
         btn.disabled = false;
-        btn.textContent = '🔍 Varredura de Grupos';
-        status.textContent = '';
+        btn.textContent = '🔍 Varredura';
+        status.textContent = 'Erro: ' + err.message;
         showToast('Erro: ' + err.message, 'danger');
     });
 }
@@ -2053,10 +2060,11 @@ function renderScanResults(data) {
 
     for (const chip of data.chips) {
         const pct = data.totalGroups > 0 ? Math.round((chip.inGroups / data.totalGroups) * 100) : 0;
-        const barColor = pct === 100 ? '#22c55e' : pct > 50 ? '#f59e0b' : '#ef4444';
+        const barColor = chip.error ? '#9ca3af' : pct === 100 ? '#22c55e' : pct > 50 ? '#f59e0b' : '#ef4444';
+        const errorTag = chip.error ? ` <span style="color:#ef4444;font-size:11px">⚠️ ${chip.error}</span>` : '';
         html += `
             <div class="scan-chip-row">
-                <div class="scan-chip-name">${chip.name}</div>
+                <div class="scan-chip-name">${chip.name}${errorTag}</div>
                 <div class="scan-chip-bar-wrap">
                     <div class="scan-chip-bar" style="width:${pct}%;background:${barColor}"></div>
                 </div>

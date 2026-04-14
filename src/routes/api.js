@@ -892,11 +892,31 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             }
 
             console.log(`[Scan] ADM groups (filtered "${groupFilter}"): ${admGroupList.length}`);
+            const admGroupIds = new Set(admGroupList.map(g => g.id));
 
-            // 2. For each chip, use ITS OWN socket to check which groups it's in
+            // Helper: fetch chip groups with timeout + retry
+            async function fetchChipGroups(chip, attempt) {
+                const sock = chip.session_id ? sessionManager.getSocket(chip.session_id) : null;
+                if (!sock?.user) throw new Error('Desconectado');
+
+                return new Promise(async (resolve, reject) => {
+                    const timer = setTimeout(() => reject(new Error('Timeout 20s')), 20000);
+                    try {
+                        const groups = await sock.groupFetchAllParticipating();
+                        clearTimeout(timer);
+                        resolve({ groups, sock });
+                    } catch (e) {
+                        clearTimeout(timer);
+                        reject(e);
+                    }
+                });
+            }
+
+            // 2. Scan each chip sequentially with retry
             const results = [];
 
-            for (const chipId of chipIds) {
+            for (let ci = 0; ci < chipIds.length; ci++) {
+                const chipId = chipIds[ci];
                 const chip = db.getChipById(chipId);
                 if (!chip || !chip.phone) continue;
 
@@ -904,30 +924,42 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
                 let chipAdminGroups = new Set();
                 let scanError = null;
 
-                try {
-                    const chipSock = chip.session_id ? sessionManager.getSocket(chip.session_id) : null;
-                    if (chipSock?.user) {
-                        const chipGroups = await chipSock.groupFetchAllParticipating();
-                        const myId = chipSock.user.id.split(':')[0];
-                        const myLid = chipSock.user.lid ? chipSock.user.lid.split(':')[0] : null;
+                // Try up to 2 attempts
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                    try {
+                        const { groups: chipGroups, sock } = await fetchChipGroups(chip, attempt);
+                        const myId = sock.user.id.split(':')[0];
+                        const myLid = sock.user.lid ? sock.user.lid.split(':')[0] : null;
+
+                        chipGroupIds = new Set();
+                        chipAdminGroups = new Set();
 
                         for (const [gid, g] of Object.entries(chipGroups)) {
+                            // Only process target groups (skip irrelevant ones)
+                            if (!admGroupIds.has(gid)) continue;
                             chipGroupIds.add(gid);
+
                             const me = (g.participants || []).find(p => {
                                 const pid = p.id.split(':')[0];
-                                return pid === myId || pid === myLid || p.id.split('@')[0] === myId;
+                                const pClean = p.id.split('@')[0];
+                                return pid === myId || pid === myLid || pClean === myId || pClean === myLid;
                             });
                             if (me?.admin === 'admin' || me?.admin === 'superadmin') {
                                 chipAdminGroups.add(gid);
                             }
                         }
-                        console.log(`[Scan] ${chip.name}: em ${chipGroupIds.size} grupos total`);
-                    } else {
-                        scanError = 'Chip desconectado';
+
+                        scanError = null;
+                        console.log(`[Scan] ${chip.name}: ${chipGroupIds.size}/${admGroupList.length} grupos (${chipAdminGroups.size} admin) [tentativa ${attempt}]`);
+                        break; // Success, no retry needed
+
+                    } catch (e) {
+                        scanError = e.message;
+                        console.log(`[Scan] ${chip.name} tentativa ${attempt} falhou: ${e.message}`);
+                        if (attempt < 2) {
+                            await new Promise(r => setTimeout(r, 3000)); // Wait 3s before retry
+                        }
                     }
-                } catch (e) {
-                    console.log(`[Scan] Erro chip ${chip.phone}: ${e.message}`);
-                    scanError = e.message;
                 }
 
                 const inGroups = [];
@@ -950,11 +982,9 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
                     groups: inGroups, missingGroups, error: scanError
                 });
 
-                console.log(`[Scan] ${chip.name}: ${inGroups.length}/${admGroupList.length} (${inGroups.filter(g=>g.isAdmin).length} admin)${scanError ? ' ERR: '+scanError : ''}`);
-
-                // Small delay between chips to avoid overloading
-                if (chipIds.indexOf(chipId) < chipIds.length - 1) {
-                    await new Promise(r => setTimeout(r, 1000));
+                // 2s delay between chips
+                if (ci < chipIds.length - 1) {
+                    await new Promise(r => setTimeout(r, 2000));
                 }
             }
 
