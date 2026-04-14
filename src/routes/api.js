@@ -1046,11 +1046,12 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true });
     });
 
-    // Tag chip (usage purpose)
+    // Tag chip (usage purpose) + fornecedor
     router.post('/chips/:id/tag', (req, res) => {
         const chipId = parseInt(req.params.id);
-        const { tag } = req.body;
-        db.updateChipField(chipId, 'tag', tag || '');
+        const { tag, fornecedor } = req.body;
+        if (tag !== undefined) db.updateChipField(chipId, 'tag', tag || '');
+        if (fornecedor !== undefined) db.updateChipField(chipId, 'fornecedor', fornecedor || '');
         res.json({ success: true });
     });
 
