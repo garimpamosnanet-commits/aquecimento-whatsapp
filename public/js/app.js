@@ -2074,6 +2074,7 @@ function renderScanResults(data) {
                     <span style="color:#ef4444">❌ ${chip.missing}</span>
                     <span style="color:var(--text-muted)">${pct}%</span>
                 </div>
+                ${chip.missing > 0 && !chip.error ? `<button class="btn btn-success btn-xs" onclick="addMissingForChip(${chip.chipId})" title="Adicionar nos grupos faltantes">➕ Adicionar ${chip.missing}</button>` : ''}
                 <button class="btn btn-ghost btn-xs" onclick="toggleScanDetail('scan-detail-${chip.chipId}')">Detalhes</button>
             </div>
             <div class="scan-detail" id="scan-detail-${chip.chipId}" style="display:none">
@@ -2107,6 +2108,32 @@ function renderScanResults(data) {
     window._lastScanData = data;
 }
 
+function addMissingForChip(chipId) {
+    const data = window._lastScanData;
+    if (!data) return showToast('Faca a varredura primeiro', 'warning');
+
+    const chip = data.chips.find(c => c.chipId === chipId);
+    if (!chip || chip.missingGroups.length === 0) return showToast('Nenhum grupo faltante!', 'success');
+
+    const missingGroupIds = new Set(chip.missingGroups.map(g => g.groupId));
+
+    // Store pending selection
+    window._pendingMissingGroups = missingGroupIds;
+    window._pendingMissingChips = new Set([chipId]);
+    window._pendingMissingScanData = data;
+
+    // Switch to add tab
+    switchTab('groupadd');
+
+    const admSelect = document.getElementById('ga-admin-select');
+    const scanAdmId = document.getElementById('aq-scan-adm')?.value;
+    if (admSelect && scanAdmId) {
+        admSelect.value = scanAdmId;
+        onAdminInstanceSelect();
+        showToast(`Carregando ${chip.missing} grupos faltantes de ${chip.name}...`, 'info');
+    }
+}
+
 function toggleScanDetail(id) {
     const el = document.getElementById(id);
     if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
@@ -2138,42 +2165,15 @@ function goToAddMissing() {
     const scanAdmId = document.getElementById('aq-scan-adm')?.value;
     if (admSelect && scanAdmId) {
         admSelect.value = scanAdmId;
+
+        // Store what needs to be pre-selected
+        window._pendingMissingGroups = missingGroupIds;
+        window._pendingMissingChips = missingChipIds;
+        window._pendingMissingScanData = data;
+
         // Trigger load groups
         onAdminInstanceSelect();
-
-        // Wait for groups to load, then pre-select
-        setTimeout(() => {
-            // Pre-select missing groups
-            _gaSelectedGroups.clear();
-            for (const gid of missingGroupIds) _gaSelectedGroups.add(gid);
-            renderGAGroups();
-
-            // Pre-select chips that have missing groups
-            _gaSelectedChips.clear();
-            for (const cid of missingChipIds) _gaSelectedChips.add(cid);
-
-            // Set folder filter to show only relevant chips
-            const chip = data.chips.find(c => missingChipIds.has(c.chipId));
-            if (chip) {
-                const fullChip = chips.find(c => c.id === chip.chipId);
-                if (fullChip?.folder_id) {
-                    const folderFilter = document.getElementById('ga-chips-folder-filter');
-                    if (folderFilter) folderFilter.value = fullChip.folder_id;
-                }
-            }
-            renderGAChips();
-
-            // Set mode and preset
-            gaSetMode('invite_link');
-            gaSetPreset('normal');
-
-            // Uncheck promote (just enter as member first)
-            const promoteCheck = document.getElementById('ga-promote-admin');
-            if (promoteCheck) promoteCheck.checked = false;
-
-            updateGASummary();
-            showToast(`${missingGroupIds.size} grupos e ${missingChipIds.size} chips pre-selecionados!`, 'success');
-        }, 3000);
+        showToast('Carregando grupos do ADM... aguarde', 'info');
     }
 }
 
@@ -2512,6 +2512,41 @@ function onAdminInstanceSelect() {
             panels.style.display = 'grid';
             if (modeSection) modeSection.style.display = 'block';
             gaLoadPresets();
+
+            // Apply pending pre-selection from scan (if any)
+            if (window._pendingMissingGroups) {
+                _gaSelectedGroups = new Set();
+                for (const gid of window._pendingMissingGroups) _gaSelectedGroups.add(gid);
+
+                _gaSelectedChips = new Set();
+                for (const cid of window._pendingMissingChips) _gaSelectedChips.add(cid);
+
+                // Set folder filter
+                const scanData = window._pendingMissingScanData;
+                if (scanData?.chips) {
+                    const firstChip = scanData.chips.find(c => window._pendingMissingChips.has(c.chipId));
+                    if (firstChip) {
+                        const fullChip = chips.find(c => c.id === firstChip.chipId);
+                        if (fullChip?.folder_id) {
+                            const folderFilter = document.getElementById('ga-chips-folder-filter');
+                            if (folderFilter) folderFilter.value = fullChip.folder_id;
+                        }
+                    }
+                }
+
+                gaSetMode('invite_link');
+                gaSetPreset('normal');
+                const promoteCheck = document.getElementById('ga-promote-admin');
+                if (promoteCheck) promoteCheck.checked = false;
+
+                showToast(`${window._pendingMissingGroups.size} grupos e ${window._pendingMissingChips.size} chips pre-selecionados!`, 'success');
+
+                // Clean up
+                delete window._pendingMissingGroups;
+                delete window._pendingMissingChips;
+                delete window._pendingMissingScanData;
+            }
+
             // Load group-add history
             fetch('/api/group-add/group-history').then(r => r.json()).then(h => {
                 _gaGroupHistory = h;
