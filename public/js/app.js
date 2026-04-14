@@ -2113,9 +2113,68 @@ function toggleScanDetail(id) {
 }
 
 function goToAddMissing() {
-    // Switch to "Adicionar aos Grupos" tab with pre-selected groups/chips from scan
-    showToast('Vá para "Adicionar aos Grupos", selecione o ADM e os grupos/chips faltantes', 'info');
+    const data = window._lastScanData;
+    if (!data || !data.chips) return showToast('Faca a varredura primeiro', 'warning');
+
+    // Collect unique missing groups and chips that have missing groups
+    const missingGroupIds = new Set();
+    const missingChipIds = new Set();
+    for (const chip of data.chips) {
+        if (chip.missingGroups && chip.missingGroups.length > 0) {
+            missingChipIds.add(chip.chipId);
+            for (const mg of chip.missingGroups) {
+                missingGroupIds.add(mg.groupId);
+            }
+        }
+    }
+
+    if (missingGroupIds.size === 0) return showToast('Nenhum grupo faltante!', 'success');
+
+    // Switch to Adicionar aos Grupos tab
     switchTab('groupadd');
+
+    // Pre-select ADM (same as scan)
+    const admSelect = document.getElementById('ga-admin-select');
+    const scanAdmId = document.getElementById('aq-scan-adm')?.value;
+    if (admSelect && scanAdmId) {
+        admSelect.value = scanAdmId;
+        // Trigger load groups
+        onAdminInstanceSelect();
+
+        // Wait for groups to load, then pre-select
+        setTimeout(() => {
+            // Pre-select missing groups
+            _gaSelectedGroups.clear();
+            for (const gid of missingGroupIds) _gaSelectedGroups.add(gid);
+            renderGAGroups();
+
+            // Pre-select chips that have missing groups
+            _gaSelectedChips.clear();
+            for (const cid of missingChipIds) _gaSelectedChips.add(cid);
+
+            // Set folder filter to show only relevant chips
+            const chip = data.chips.find(c => missingChipIds.has(c.chipId));
+            if (chip) {
+                const fullChip = chips.find(c => c.id === chip.chipId);
+                if (fullChip?.folder_id) {
+                    const folderFilter = document.getElementById('ga-chips-folder-filter');
+                    if (folderFilter) folderFilter.value = fullChip.folder_id;
+                }
+            }
+            renderGAChips();
+
+            // Set mode and preset
+            gaSetMode('invite_link');
+            gaSetPreset('normal');
+
+            // Uncheck promote (just enter as member first)
+            const promoteCheck = document.getElementById('ga-promote-admin');
+            if (promoteCheck) promoteCheck.checked = false;
+
+            updateGASummary();
+            showToast(`${missingGroupIds.size} grupos e ${missingChipIds.size} chips pre-selecionados!`, 'success');
+        }, 3000);
+    }
 }
 
 // ==================== LOAD CHIPS AQUECIDOS ====================
