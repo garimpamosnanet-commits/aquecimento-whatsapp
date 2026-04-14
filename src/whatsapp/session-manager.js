@@ -205,12 +205,16 @@ class SessionManager {
                     if (extChip) {
                         debugLog(`[SessionManager] Merge: chip ${chip.id} matched external_warmed chip ${extChip.id} (${phoneNumber})`);
                         // Transfer metadata from registered chip to connected chip
-                        if (extChip.client_tag) {
-                            db.setChipClientTag(chip.id, extChip.client_tag);
-                            // Set chip name: "ClientTag - last4digits"
-                            const last4 = phoneNumber.slice(-4);
-                            db.updateChipName(chip.id, `${extChip.client_tag} - ${last4}`);
+                        if (extChip.client_tag) db.setChipClientTag(chip.id, extChip.client_tag);
+
+                        // Set chip name from folder name (priority) or client_tag
+                        const last4 = phoneNumber.slice(-4);
+                        let label = extChip.client_tag || '';
+                        if (extChip.folder_id) {
+                            const folder = db.getAllFolders().find(f => f.id === extChip.folder_id);
+                            if (folder) label = folder.name;
                         }
+                        if (label) db.updateChipName(chip.id, `${label} - ${last4}`);
                         if (extChip.fornecedor) db.updateChipField(chip.id, 'fornecedor', extChip.fornecedor);
                         if (extChip.folder_id) db.assignChipToFolder(chip.id, extChip.folder_id);
                         db.updateChipField(chip.id, 'origin', 'external_warmed');
