@@ -864,70 +864,67 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
 
         try {
-            // 1. Get all groups from ADM
+            // 1. Get all groups from ADM (filtered by name)
             const admSock = sessionManager.getSocket(adminChip.session_id);
             const allGroups = await admSock.groupFetchAllParticipating();
             const filterLower = (groupFilter || '').toLowerCase();
-            const groups = [];
+            const admGroupList = [];
             for (const [gid, g] of Object.entries(allGroups)) {
                 if (g.isCommunity) continue;
-                // Apply group name filter
                 if (filterLower && !(g.subject || '').toLowerCase().includes(filterLower)) continue;
-                groups.push({
+                admGroupList.push({
                     id: gid,
                     subject: g.subject || 'Sem nome',
-                    size: g.participants?.length || 0,
-                    participants: (g.participants || []).map(p => ({
-                        phone: p.id.split(':')[0].split('@')[0],
-                        admin: p.admin === 'admin' || p.admin === 'superadmin'
-                    }))
+                    size: g.participants?.length || 0
                 });
             }
 
-            // 2. For each chip, check which groups they're in
+            console.log(`[Scan] ADM groups (filtered "${groupFilter}"): ${admGroupList.length}`);
+
+            // 2. For each chip, use ITS OWN socket to check which groups it's in
+            const admGroupIds = new Set(admGroupList.map(g => g.id));
             const results = [];
+
             for (const chipId of chipIds) {
                 const chip = db.getChipById(chipId);
                 if (!chip || !chip.phone) continue;
 
-                const chipPhone = chip.phone;
-                // Match phone numbers handling BR 9th digit + LID format
-                function phoneMatch(a, b) {
-                    if (!a || !b) return false;
-                    if (a === b) return true;
-                    // Skip LID-format numbers (not phone-based)
-                    if (a.length > 15 || b.length > 15) return false;
-                    // Strip country code 55
-                    const strip = (p) => p.startsWith('55') && p.length >= 12 ? p.slice(2) : p;
-                    const na = strip(a), nb = strip(b);
-                    if (na === nb) return true;
-                    // Handle 9th digit: one 11 digits, other 10 digits
-                    if (na.length === 11 && nb.length === 10) return (na.slice(0,2) + na.slice(3)) === nb;
-                    if (nb.length === 11 && na.length === 10) return (nb.slice(0,2) + nb.slice(3)) === na;
-                    // Also try: both have 55 prefix but different lengths
-                    if (a.length === 13 && b.length === 12) return (a.slice(0,4) + a.slice(5)) === b;
-                    if (b.length === 13 && a.length === 12) return (b.slice(0,4) + b.slice(5)) === a;
-                    return false;
+                const chipSock = chip.session_id ? sessionManager.getSocket(chip.session_id) : null;
+
+                let chipGroupIds = new Set();
+                let chipAdminGroups = new Set();
+
+                if (chipSock?.user) {
+                    try {
+                        const chipGroups = await chipSock.groupFetchAllParticipating();
+                        const myId = chipSock.user.id.split(':')[0];
+
+                        for (const [gid, g] of Object.entries(chipGroups)) {
+                            chipGroupIds.add(gid);
+                            // Check if admin
+                            const me = (g.participants || []).find(p =>
+                                p.id.split(':')[0] === myId || p.id.split('@')[0] === myId
+                            );
+                            if (me?.admin === 'admin' || me?.admin === 'superadmin') {
+                                chipAdminGroups.add(gid);
+                            }
+                        }
+                    } catch (e) {
+                        console.log(`[Scan] Erro ao buscar grupos do chip ${chip.phone}: ${e.message}`);
+                    }
                 }
 
-                const chipGroups = [];
+                const inGroups = [];
                 const missingGroups = [];
 
-                // Debug: log first group's participants to see format
-                if (groups.length > 0 && chipIds.indexOf(chipId) === 0) {
-                    const sample = groups[0].participants.slice(0, 3).map(p => p.phone);
-                    console.log(`[Scan] Chip phone: ${chipPhone} | Sample participants: ${sample.join(', ')}`);
-                }
-
-                for (const g of groups) {
-                    const found = g.participants.find(p => phoneMatch(p.phone, chipPhone));
-
-                    if (found) {
-                        chipGroups.push({
+                for (const g of admGroupList) {
+                    if (chipGroupIds.has(g.id)) {
+                        const isAdmin = chipAdminGroups.has(g.id);
+                        inGroups.push({
                             groupId: g.id,
                             subject: g.subject,
-                            isAdmin: found.admin,
-                            status: found.admin ? 'admin' : 'member'
+                            isAdmin,
+                            status: isAdmin ? 'admin' : 'member'
                         });
                     } else {
                         missingGroups.push({
@@ -940,20 +937,22 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
                 results.push({
                     chipId: chip.id,
-                    phone: chipPhone,
-                    name: chip.name || chipPhone,
-                    inGroups: chipGroups.length,
-                    asAdmin: chipGroups.filter(g => g.isAdmin).length,
-                    asMember: chipGroups.filter(g => !g.isAdmin).length,
+                    phone: chip.phone,
+                    name: chip.name || chip.phone,
+                    inGroups: inGroups.length,
+                    asAdmin: inGroups.filter(g => g.isAdmin).length,
+                    asMember: inGroups.filter(g => !g.isAdmin).length,
                     missing: missingGroups.length,
-                    totalGroups: groups.length,
-                    groups: chipGroups,
+                    totalGroups: admGroupList.length,
+                    groups: inGroups,
                     missingGroups
                 });
+
+                console.log(`[Scan] ${chip.name}: ${inGroups.length}/${admGroupList.length} grupos (${inGroups.filter(g=>g.isAdmin).length} admin)`);
             }
 
             // 3. Summary
-            const groupNames = groups.map(g => ({ id: g.id, subject: g.subject, size: g.size }));
+            const groupNames = admGroupList.map(g => ({ id: g.id, subject: g.subject, size: g.size }));
 
             res.json({
                 success: true,
