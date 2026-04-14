@@ -101,8 +101,7 @@ class GroupManager {
     }
 
     async getGroupParticipants(adminSessionId, groupId) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
-        if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
+        const sock = await this.getAdmSocket(adminSessionId, 'getGroupParticipants');
 
         const meta = await sock.groupMetadata(groupId);
         return (meta.participants || []).map(p => ({
@@ -112,8 +111,9 @@ class GroupManager {
     }
 
     async isNumberOnWhatsApp(adminSessionId, phoneNumber) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
-        if (!sock || !sock.user) return false;
+        let sock;
+        try { sock = await this.getAdmSocket(adminSessionId, 'isNumberOnWhatsApp'); } catch(e) { return false; }
+        if (!sock) return false;
         try {
             const jid = phoneNumber.replace(/\D/g, '') + '@s.whatsapp.net';
             const [result] = await sock.onWhatsApp(jid);
@@ -125,8 +125,7 @@ class GroupManager {
     }
 
     async addToGroup(adminSessionId, groupId, jid) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
-        if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
+        const sock = await this.getAdmSocket(adminSessionId, 'addToGroup');
 
         try {
             console.log(`[GroupManager] addToGroup: group=${groupId}, jid=${jid}`);
@@ -151,9 +150,36 @@ class GroupManager {
         }
     }
 
+    // Wait for ADM to reconnect (up to 60s)
+    async waitForAdm(adminSessionId, label) {
+        for (let i = 0; i < 12; i++) {
+            const sock = this.sessionManager.getSocket(adminSessionId);
+            if (sock?.user) return sock;
+            const wait = (i + 1) * 5;
+            console.log(`[GroupManager] ADM desconectado, aguardando reconexao... (${wait}s) [${label}]`);
+            if (this.io) {
+                this.io.emit('group_add_log', {
+                    operationId: this._currentOperation, type: 'warning',
+                    message: `ADM desconectado — aguardando reconexao (tentativa ${i + 1}/12)...`,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            await this._delay(5000);
+        }
+        return null; // failed after 60s
+    }
+
+    async getAdmSocket(adminSessionId, label) {
+        let sock = this.sessionManager.getSocket(adminSessionId);
+        if (sock?.user) return sock;
+        // ADM offline — wait for reconnect
+        sock = await this.waitForAdm(adminSessionId, label);
+        if (!sock) throw new Error('ADM desconectado por mais de 60s — operacao pausada');
+        return sock;
+    }
+
     async promoteToAdmin(adminSessionId, groupId, jid) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
-        if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
+        const sock = await this.getAdmSocket(adminSessionId, 'promote');
         try {
             await sock.groupParticipantsUpdate(groupId, [jid], 'promote');
             return { success: true };
@@ -200,8 +226,7 @@ class GroupManager {
             }
         }
         // Fetch fresh
-        const sock = this.sessionManager.getSocket(adminSessionId);
-        if (!sock || !sock.user) throw new Error('ADM nao conectada');
+        const sock = await this.getAdmSocket(adminSessionId, 'getInviteCode');
         const code = await sock.groupInviteCode(groupId);
         if (!code) throw new Error('Nao obteve codigo de convite');
         db.setGroupInviteLink(groupId, `https://chat.whatsapp.com/${code}`);
