@@ -123,13 +123,20 @@ class SessionManager {
             debugLog(`[SM] Version fetch failed (${e.message}), using fallback: ${JSON.stringify(version)}`);
         }
 
-        // Check for proxy
+        // Check for proxy — auto-assign if none
         const chip = db.getChipBySession(sessionId);
         if (!chip) {
             debugLog(`[SM] ERRO: chip nao encontrado para ${sessionId}`);
             throw new Error('Chip nao encontrado no banco de dados');
         }
-        const proxyData = db.getProxyForChip(chip.id);
+        let proxyData = db.getProxyForChip(chip.id);
+        if (!proxyData) {
+            // Try to assign a free proxy
+            proxyData = db.assignProxyToChip(chip.id);
+            if (proxyData) {
+                debugLog(`[SM] Proxy auto-atribuido ao chip ${chip.id}: ${proxyData.url}`);
+            }
+        }
         const agent = proxyData ? createProxyAgent(proxyData.url) : undefined;
 
         const socketOptions = {
