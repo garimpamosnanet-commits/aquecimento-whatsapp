@@ -1123,6 +1123,81 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true, imported });
     });
 
+    // Activate warming on external chips (add to warming groups)
+    router.post('/chips/activate-warming', async (req, res) => {
+        const { chipIds } = req.body;
+        if (!chipIds || !Array.isArray(chipIds) || chipIds.length === 0) {
+            return res.status(400).json({ error: 'chipIds obrigatorio' });
+        }
+
+        let activated = 0;
+        let addedToGroups = 0;
+
+        // Get existing warming groups
+        const warmingGroups = db.getWarmingGroups();
+
+        for (const chipId of chipIds) {
+            const chip = db.getChipById(chipId);
+            if (!chip || !chip.phone) continue;
+            if (!sessionManager.isConnected(chip.session_id)) continue;
+
+            // Set status to warming if connected
+            if (chip.status === 'connected') {
+                db.updateChipStatus(chipId, 'warming');
+                activated++;
+            }
+
+            // Add to existing warming groups (up to 3 random groups)
+            if (warmingGroups.length > 0) {
+                const shuffled = warmingGroups.sort(() => Math.random() - 0.5);
+                const groupsToJoin = shuffled.slice(0, Math.min(3, shuffled.length));
+
+                for (const wg of groupsToJoin) {
+                    try {
+                        const sock = sessionManager.getSocket(chip.session_id);
+                        if (!sock?.user) continue;
+
+                        // Join via invite link or direct add
+                        const code = await sock.groupInviteCode(wg.group_jid).catch(() => null);
+                        if (code) {
+                            await sock.groupAcceptInvite(code).catch(() => {});
+                        }
+                        db.addGroupMember(wg.id, chipId);
+                        addedToGroups++;
+                    } catch (e) {
+                        console.log(`[ActivateWarming] Erro ao adicionar chip ${chipId} no grupo ${wg.group_name}: ${e.message}`);
+                    }
+                    // Delay between group joins
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+
+            sessionManager.emitChipUpdate(chipId);
+        }
+
+        sessionManager.emitStats();
+        res.json({ success: true, activated, addedToGroups, totalGroups: warmingGroups.length });
+    });
+
+    // Deactivate warming on chips (back to connected)
+    router.post('/chips/deactivate-warming', (req, res) => {
+        const { chipIds } = req.body;
+        if (!chipIds || !Array.isArray(chipIds)) return res.status(400).json({ error: 'chipIds obrigatorio' });
+
+        let deactivated = 0;
+        for (const chipId of chipIds) {
+            const chip = db.getChipById(chipId);
+            if (!chip) continue;
+            if (chip.status === 'warming') {
+                db.updateChipStatus(chipId, 'connected');
+                deactivated++;
+                sessionManager.emitChipUpdate(chipId);
+            }
+        }
+        sessionManager.emitStats();
+        res.json({ success: true, deactivated });
+    });
+
     // ==================== CADASTRO CHIPS AQUECIDOS ====================
 
     router.post('/chips/register-warmed', (req, res) => {

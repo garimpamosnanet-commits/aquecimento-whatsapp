@@ -2303,15 +2303,21 @@ function renderAqList() {
         const connected = clientChips.filter(c => c.status === 'connected' || c.status === 'warming').length;
         const fornecedores = [...new Set(clientChips.map(c => c.fornecedor).filter(Boolean))];
 
+        const warming = clientChips.filter(c => c.status === 'warming').length;
+        const clientChipIds = clientChips.filter(c => c.status === 'connected' || c.status === 'warming').map(c => c.id);
+
         html += `<div class="aq-client-group">
-            <div class="aq-client-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-                <div class="aq-client-left">
+            <div class="aq-client-header">
+                <div class="aq-client-left" onclick="this.parentElement.nextElementSibling.style.display=this.parentElement.nextElementSibling.style.display==='none'?'block':'none'" style="cursor:pointer;flex:1">
                     <span class="aq-client-name">👤 ${client}</span>
                     <span class="aq-client-badge">${clientChips.length} chips</span>
+                    ${warming > 0 ? '<span class="aq-client-warming">🔥 ' + warming + ' aquecendo</span>' : ''}
                 </div>
                 <div class="aq-client-right">
                     ${fornecedores.length > 0 ? '<span class="aq-client-stat">🏪 ' + fornecedores.join(', ') + '</span>' : ''}
                     <span class="aq-client-stat"><strong>${connected}</strong>/${clientChips.length} conectados</span>
+                    ${connected > 0 && warming < connected ? `<button class="aq-btn aq-btn-primary" onclick="event.stopPropagation(); activateWarming([${clientChipIds.join(',')}], '${client}')" style="margin-left:8px">🔥 Ativar Aquecimento</button>` : ''}
+                    ${warming > 0 ? `<button class="aq-btn aq-btn-warning" onclick="event.stopPropagation(); deactivateWarming([${clientChipIds.join(',')}], '${client}')" style="margin-left:8px">⏸ Parar</button>` : ''}
                 </div>
             </div>
             <div class="aq-chip-list">`;
@@ -2443,6 +2449,45 @@ function connectAquecido(chipId, phone, mode) {
         _connectMode = 'qr';
         confirmChipName('qr');
     }
+}
+
+function activateWarming(chipIds, clientName) {
+    openConfirmModal('Ativar Aquecimento', `Ativar aquecimento nos ${chipIds.length} chips de "${clientName}"?\n\nEles vao entrar nos grupos de aquecimento e comecar a conversar entre si.`, 'Ativar 🔥', () => {
+        showToast('Ativando aquecimento...', 'info');
+        fetch('/api/chips/activate-warming', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chipIds })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`${data.activated} chips ativados! Adicionados em ${data.addedToGroups} grupos.`, 'success');
+                loadChipsAquecidos();
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}
+
+function deactivateWarming(chipIds, clientName) {
+    openConfirmModal('Parar Aquecimento', `Parar aquecimento nos chips de "${clientName}"?`, 'Parar', () => {
+        fetch('/api/chips/deactivate-warming', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chipIds })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`${data.deactivated} chips parados.`, 'success');
+                loadChipsAquecidos();
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
 }
 
 function importFromWarming() {
