@@ -805,6 +805,40 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json(groupStats);
     });
 
+    // Get groups a chip is member of
+    router.get('/chips/:id/groups', async (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        if (!chip.session_id || !sessionManager.isConnected(chip.session_id)) {
+            return res.status(400).json({ error: 'Chip nao conectado' });
+        }
+
+        try {
+            const sock = sessionManager.getSocket(chip.session_id);
+            if (!sock || !sock.user) return res.status(400).json({ error: 'Socket nao disponivel' });
+
+            const groups = await sock.groupFetchAllParticipating();
+            const result = [];
+            for (const [groupId, group] of Object.entries(groups)) {
+                if (group.isCommunity) continue;
+                // Check if this chip is admin in the group
+                const me = sock.user.id.split(':')[0];
+                const myParticipant = (group.participants || []).find(p => p.id.split(':')[0] === me || p.id.split('@')[0] === me);
+                const isAdmin = myParticipant?.admin === 'admin' || myParticipant?.admin === 'superadmin';
+                result.push({
+                    id: groupId,
+                    subject: group.subject || 'Sem nome',
+                    size: group.participants?.length || 0,
+                    isAdmin
+                });
+            }
+            res.json({ phone: chip.phone, groups: result.sort((a, b) => a.subject.localeCompare(b.subject)), total: result.length });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // ==================== CADASTRO CHIPS AQUECIDOS ====================
 
     router.post('/chips/register-warmed', (req, res) => {

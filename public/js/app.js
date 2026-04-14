@@ -2023,18 +2023,21 @@ function renderAqList() {
             const created = chip.created_at ? new Date(chip.created_at).toLocaleDateString('pt-BR') : '';
 
             const connectBtn = !isConn ? `<button class="btn btn-primary btn-xs" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}')" title="Conectar via QR">📱 Conectar</button>` : '';
+            const groupsBtn = isConn ? `<button class="btn btn-outline btn-xs" onclick="showChipGroups(${chip.id}, '${chip.phone || ''}')" title="Ver grupos">👥 Grupos</button>` : '';
             html += `<div class="aq-chip-row" data-phone="${chip.phone || ''}">
-                <div class="aq-chip-phone"><span class="aq-dot ${dotCls}"></span>${chip.phone || '—'}</div>
+                <div class="aq-chip-phone"><span class="aq-dot ${dotCls}"></span>${chip.phone || '—'}${chip.name && chip.name !== chip.phone ? ' <span style="font-weight:400;font-size:12px;color:var(--text-muted);font-family:Inter,sans-serif">(' + chip.name + ')</span>' : ''}</div>
                 <div class="aq-chip-meta">
                     ${chip.fornecedor ? '<span>🏪 ' + chip.fornecedor + '</span>' : ''}
                     ${created ? '<span>📅 ' + created + '</span>' : ''}
                 </div>
                 <span class="aq-chip-status ${statusCls}">${statusText}</span>
                 <div class="aq-chip-actions">
+                    ${groupsBtn}
                     ${connectBtn}
                     <button class="btn btn-ghost btn-xs" onclick="deleteAquecido(${chip.id})" title="Remover">🗑</button>
                 </div>
-            </div>`;
+            </div>
+            <div class="aq-chip-groups" id="aq-groups-${chip.id}" style="display:none"></div>`;
         }
 
         html += '</div></div>';
@@ -2044,6 +2047,52 @@ function renderAqList() {
 }
 
 function filterAquecidosList() { renderAqList(); }
+
+function showChipGroups(chipId, phone) {
+    const container = document.getElementById('aq-groups-' + chipId);
+    if (!container) return;
+
+    // Toggle
+    if (container.style.display !== 'none') {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    container.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:13px">Buscando grupos de ' + phone + '...</div>';
+
+    fetch('/api/chips/' + chipId + '/groups')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                container.innerHTML = '<div style="padding:12px;color:var(--danger);font-size:13px">Erro: ' + data.error + '</div>';
+                return;
+            }
+
+            if (data.groups.length === 0) {
+                container.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:13px">Nenhum grupo encontrado</div>';
+                return;
+            }
+
+            const adminCount = data.groups.filter(g => g.isAdmin).length;
+            container.innerHTML = `
+                <div class="aq-groups-header">
+                    <span>👥 ${data.total} grupos (${adminCount} como admin)</span>
+                </div>
+                <div class="aq-groups-list">
+                    ${data.groups.map(g => `
+                        <div class="aq-group-item">
+                            <span class="aq-group-name">${g.subject}</span>
+                            <span class="aq-group-meta">${g.size} membros</span>
+                            ${g.isAdmin ? '<span class="aq-group-admin">👑 Admin</span>' : '<span class="aq-group-member">👤 Membro</span>'}
+                        </div>
+                    `).join('')}
+                </div>`;
+        })
+        .catch(err => {
+            container.innerHTML = '<div style="padding:12px;color:var(--danger);font-size:13px">Erro: ' + err.message + '</div>';
+        });
+}
 
 function connectAquecido(chipId, phone) {
     // Open the QR modal — the chip will be connected as a new session

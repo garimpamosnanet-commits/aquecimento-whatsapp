@@ -1777,7 +1777,37 @@ body::before {
 }
 .aq-chip-status.connected { background: rgba(34,197,94,0.1); color: #16a34a; }
 .aq-chip-status.disconnected { background: rgba(107,114,128,0.1); color: #6b7280; }
-.aq-chip-actions { display: flex; justify-content: flex-end; }
+.aq-chip-actions { display: flex; justify-content: flex-end; gap: 4px; }
+
+/* Chip Groups Panel */
+.aq-chip-groups {
+    padding: 0 12px 12px;
+    margin: 0 12px 8px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+.aq-groups-header {
+    padding: 10px 0 8px;
+    font-size: 13px; font-weight: 600; color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+}
+.aq-groups-list { max-height: 300px; overflow-y: auto; }
+.aq-group-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px; border-radius: 6px; font-size: 13px;
+}
+.aq-group-item:hover { background: var(--bg-hover); }
+.aq-group-name { flex: 1; font-weight: 500; color: var(--text-primary); }
+.aq-group-meta { font-size: 11px; color: var(--text-muted); }
+.aq-group-admin {
+    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 8px;
+    background: rgba(249,115,22,0.1); color: #ea580c;
+}
+.aq-group-member {
+    font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 8px;
+    background: rgba(107,114,128,0.08); color: #6b7280;
+}
 
 /* Mode toggle */
 .ga-mode-toggle {
