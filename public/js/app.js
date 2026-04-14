@@ -993,7 +993,7 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
     const tabs = document.querySelectorAll('.tab');
-    const tabMap = { 'chips': 0, 'lista': 1, 'activity': 2, 'config': 3, 'rehab': 4, 'proxies': 5, 'groupadd': 6, 'adminmanage': 7 };
+    const tabMap = { 'chips': 0, 'lista': 1, 'activity': 2, 'config': 3, 'rehab': 4, 'proxies': 5, 'aquecidos': 6, 'groupadd': 7, 'adminmanage': 8 };
     tabs[tabMap[tabName]].classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
 
@@ -1004,6 +1004,7 @@ function switchTab(tabName) {
     if (tabName === 'groupadd') loadGroupAddTab();
     if (tabName === 'adminmanage') loadAdminManageTab();
     if (tabName === 'lista') renderListTab();
+    if (tabName === 'aquecidos') loadChipsAquecidos();
 }
 
 // ==================== LISTA TAB ====================
@@ -1789,6 +1790,174 @@ function discardChipUI(chipId) {
                 showToast(data.error || 'Erro', 'danger');
             }
         });
+    });
+}
+
+// ==================== CHIPS AQUECIDOS TAB ====================
+
+function toggleCadastroAquecidos() {
+    const el = document.getElementById('cadastro-aquecidos');
+    if (!el) return;
+    const visible = el.style.display !== 'none';
+    el.style.display = visible ? 'none' : 'block';
+    if (!visible) loadClientTagsForCadastro();
+}
+
+function loadClientTagsForCadastro() {
+    fetch('/api/client-tags').then(r => r.json()).then(tags => {
+        const select = document.getElementById('cad-client-tag');
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="">Selecione o cliente...</option>';
+        for (const tag of tags) {
+            const opt = document.createElement('option');
+            opt.value = tag;
+            opt.textContent = tag;
+            select.appendChild(opt);
+        }
+        if (current) select.value = current;
+
+        // Also populate filter
+        const filter = document.getElementById('aquecidos-filter-client');
+        if (filter) {
+            const fCurrent = filter.value;
+            filter.innerHTML = '<option value="">Todos os clientes</option>';
+            for (const tag of tags) {
+                const opt = document.createElement('option');
+                opt.value = tag;
+                opt.textContent = tag;
+                filter.appendChild(opt);
+            }
+            if (fCurrent) filter.value = fCurrent;
+        }
+    });
+}
+
+// Count numbers as user types
+document.addEventListener('DOMContentLoaded', () => {
+    const textarea = document.getElementById('cad-numbers');
+    if (textarea) {
+        textarea.addEventListener('input', () => {
+            const lines = textarea.value.split(/[\n,;]+/).filter(l => l.trim().replace(/\D/g, '').length >= 10);
+            const countEl = document.getElementById('cad-count');
+            if (countEl) countEl.textContent = lines.length + ' numeros detectados';
+        });
+    }
+});
+
+function cadastrarChipsAquecidos() {
+    const text = (document.getElementById('cad-numbers')?.value || '').trim();
+    if (!text) return showToast('Cole os numeros primeiro', 'warning');
+
+    const clientSelect = document.getElementById('cad-client-tag')?.value;
+    const clientNew = document.getElementById('cad-client-new')?.value?.trim();
+    const clientTag = clientNew || clientSelect || '';
+    const fornecedor = document.getElementById('cad-fornecedor')?.value?.trim() || '';
+
+    if (!clientTag) return showToast('Selecione ou digite o nome do cliente', 'warning');
+
+    // Parse numbers
+    const lines = text.split(/[\n,;]+/).map(l => l.trim()).filter(l => l);
+    const numbers = [];
+    for (const line of lines) {
+        let digits = line.replace(/\D/g, '');
+        if (digits.length === 10 || digits.length === 11) digits = '55' + digits;
+        if (digits.length >= 12 && digits.length <= 15) numbers.push(digits);
+    }
+
+    if (numbers.length === 0) return showToast('Nenhum numero valido encontrado', 'warning');
+
+    const statusEl = document.getElementById('cad-status');
+    if (statusEl) statusEl.textContent = 'Cadastrando...';
+
+    fetch('/api/chips/register-warmed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numbers, clientTag, fornecedor })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.total + ' chips cadastrados com sucesso!', 'success');
+            if (statusEl) statusEl.textContent = '✅ ' + data.total + ' chips cadastrados';
+            document.getElementById('cad-numbers').value = '';
+            document.getElementById('cad-count').textContent = '0 numeros detectados';
+            loadChipsAquecidos();
+            // Refresh main chip list too
+            fetch('/api/chips').then(r => r.json()).then(d => { chips = d; });
+        } else {
+            showToast(data.error || 'Erro ao cadastrar', 'danger');
+            if (statusEl) statusEl.textContent = '';
+        }
+    })
+    .catch(err => {
+        showToast('Erro: ' + err.message, 'danger');
+        if (statusEl) statusEl.textContent = '';
+    });
+}
+
+function loadChipsAquecidos() {
+    loadClientTagsForCadastro();
+
+    // Get all chips and filter external_warmed
+    fetch('/api/chips').then(r => r.json()).then(allChips => {
+        const clientFilter = document.getElementById('aquecidos-filter-client')?.value || '';
+        let warmed = allChips.filter(c => c.origin === 'external_warmed');
+        if (clientFilter) warmed = warmed.filter(c => c.client_tag === clientFilter);
+
+        const container = document.getElementById('aquecidos-list-container');
+        const totalEl = document.getElementById('aquecidos-total');
+        if (totalEl) totalEl.textContent = warmed.length + ' chips aquecidos';
+
+        if (warmed.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔥</div><h3>Nenhum chip aquecido cadastrado</h3><p>Clique em "+ Cadastrar Novos" para registrar chips comprados do fornecedor</p></div>`;
+            return;
+        }
+
+        // Group by client_tag
+        const byClient = {};
+        for (const chip of warmed) {
+            const tag = chip.client_tag || 'Sem cliente';
+            if (!byClient[tag]) byClient[tag] = [];
+            byClient[tag].push(chip);
+        }
+
+        let html = '<div class="aquecidos-grid">';
+        for (const [client, clientChips] of Object.entries(byClient)) {
+            const connected = clientChips.filter(c => c.status === 'connected' || c.status === 'warming').length;
+            html += `<div class="aquecidos-client-group">
+                <div class="aquecidos-client-header">
+                    <span class="aquecidos-client-name">👤 ${client}</span>
+                    <span class="aquecidos-client-stats">${clientChips.length} chips · ${connected} conectados</span>
+                </div>
+                <div class="aquecidos-chip-list">`;
+
+            for (const chip of clientChips) {
+                const isConn = chip.status === 'connected' || chip.status === 'warming';
+                const statusDot = isConn ? '🟢' : '⚪';
+                const statusText = isConn ? 'Conectado' : 'Nao conectado';
+                const fornText = chip.fornecedor ? ' · 🏪 ' + chip.fornecedor : '';
+                html += `<div class="aquecidos-chip-item">
+                    <span class="aquecidos-chip-phone">${statusDot} ${chip.phone || '—'}</span>
+                    <span class="aquecidos-chip-meta">${statusText}${fornText}</span>
+                    <button class="btn btn-ghost btn-xs" onclick="deleteAquecido(${chip.id})" title="Remover">🗑</button>
+                </div>`;
+            }
+
+            html += '</div></div>';
+        }
+        html += '</div>';
+        container.innerHTML = html;
+    });
+}
+
+function deleteAquecido(chipId) {
+    if (!confirm('Remover este chip aquecido?')) return;
+    fetch('/api/chips/' + chipId, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(() => {
+        loadChipsAquecidos();
+        showToast('Chip removido', 'success');
     });
 }
 

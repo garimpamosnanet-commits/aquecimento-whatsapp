@@ -104,6 +104,7 @@
             <div class="tab" onclick="switchTab('config')">Config</div>
             <div class="tab" onclick="switchTab('rehab')">Reabilitação <span class="rehab-badge" id="rehab-badge" style="display:none">0</span></div>
             <div class="tab" onclick="switchTab('proxies')">Proxies</div>
+            <div class="tab" onclick="switchTab('aquecidos')">Chips Aquecidos</div>
             <div class="tab" onclick="switchTab('groupadd')">Adicionar aos Grupos <span class="ga-badge" id="ga-badge" style="display:none">0</span></div>
             <div class="tab" onclick="switchTab('adminmanage')">Grupos</div>
         </div>
@@ -646,9 +647,119 @@
         <div id="tab-lista" class="tab-content">
             <div class="section-header">
                 <h2>Lista de Chips</h2>
-                <button class="btn btn-outline btn-sm" onclick="renderListTab()">↻ Atualizar</button>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary btn-sm" onclick="toggleCadastroAquecidos()">+ Cadastrar Chips Aquecidos</button>
+                    <button class="btn btn-outline btn-sm" onclick="renderListTab()">↻ Atualizar</button>
+                </div>
             </div>
+
+            <!-- CADASTRO DE CHIPS AQUECIDOS -->
+            <div id="cadastro-aquecidos" class="cadastro-aquecidos" style="display:none">
+                <div class="cadastro-card">
+                    <div class="cadastro-header">
+                        <h3>📱 Cadastrar Chips Aquecidos (do Fornecedor)</h3>
+                        <button class="btn btn-ghost btn-sm" onclick="toggleCadastroAquecidos()">✕</button>
+                    </div>
+                    <div class="cadastro-body">
+                        <div class="cadastro-row">
+                            <div class="cadastro-field">
+                                <label>Cliente</label>
+                                <div class="cadastro-client-row">
+                                    <select id="cad-client-tag" class="ga-select">
+                                        <option value="">Selecione o cliente...</option>
+                                    </select>
+                                    <input type="text" id="cad-client-new" class="input-sm" placeholder="Ou digite novo..." style="width:160px">
+                                </div>
+                            </div>
+                            <div class="cadastro-field">
+                                <label>Fornecedor (opcional)</label>
+                                <input type="text" id="cad-fornecedor" class="input-sm" placeholder="Nome do fornecedor">
+                            </div>
+                        </div>
+                        <div class="cadastro-field">
+                            <label>Numeros (um por linha)</label>
+                            <textarea id="cad-numbers" rows="8" class="cadastro-textarea" placeholder="62 98223 9695&#10;62 98219 6031&#10;62 98223 6773&#10;&#10;Cole os numeros do papel aqui..."></textarea>
+                            <div class="cadastro-hint">
+                                <span id="cad-count">0 numeros detectados</span>
+                                <span>Aceita qualquer formato: com DDD, com +55, com espacos ou tracos</span>
+                            </div>
+                        </div>
+                        <div class="cadastro-actions">
+                            <button class="btn btn-success" onclick="cadastrarChipsAquecidos()">📱 Cadastrar Chips</button>
+                            <span id="cad-status" class="cadastro-status"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div id="lista-table-container"></div>
+        </div>
+
+        <!-- TAB: CHIPS AQUECIDOS -->
+        <div id="tab-aquecidos" class="tab-content">
+            <div class="section-header">
+                <h2>Chips Aquecidos</h2>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary btn-sm" onclick="toggleCadastroAquecidos()">+ Cadastrar Novos</button>
+                    <button class="btn btn-outline btn-sm" onclick="loadChipsAquecidos()">↻ Atualizar</button>
+                </div>
+            </div>
+
+            <!-- CADASTRO -->
+            <div id="cadastro-aquecidos" class="cadastro-aquecidos" style="display:none">
+                <div class="cadastro-card">
+                    <div class="cadastro-header">
+                        <h3>📱 Cadastrar Chips Aquecidos (do Fornecedor)</h3>
+                        <button class="btn btn-ghost btn-sm" onclick="toggleCadastroAquecidos()">✕</button>
+                    </div>
+                    <div class="cadastro-body">
+                        <div class="cadastro-row">
+                            <div class="cadastro-field">
+                                <label>Cliente</label>
+                                <div class="cadastro-client-row">
+                                    <select id="cad-client-tag" class="ga-select">
+                                        <option value="">Selecione o cliente...</option>
+                                    </select>
+                                    <input type="text" id="cad-client-new" class="input-sm" placeholder="Ou digite novo..." style="width:160px">
+                                </div>
+                            </div>
+                            <div class="cadastro-field">
+                                <label>Fornecedor (opcional)</label>
+                                <input type="text" id="cad-fornecedor" class="input-sm" placeholder="Nome do fornecedor">
+                            </div>
+                        </div>
+                        <div class="cadastro-field">
+                            <label>Numeros (um por linha)</label>
+                            <textarea id="cad-numbers" rows="8" class="cadastro-textarea" placeholder="62 98223 9695&#10;62 98219 6031&#10;62 98223 6773&#10;&#10;Cole os numeros do papel aqui..."></textarea>
+                            <div class="cadastro-hint">
+                                <span id="cad-count">0 numeros detectados</span>
+                                <span>Aceita qualquer formato: com DDD, com espacos ou tracos</span>
+                            </div>
+                        </div>
+                        <div class="cadastro-actions">
+                            <button class="btn btn-success" onclick="cadastrarChipsAquecidos()">📱 Cadastrar Chips</button>
+                            <span id="cad-status" class="cadastro-status"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILTROS -->
+            <div class="aquecidos-filters" id="aquecidos-filters">
+                <select id="aquecidos-filter-client" class="ga-select" style="width:200px" onchange="loadChipsAquecidos()">
+                    <option value="">Todos os clientes</option>
+                </select>
+                <span id="aquecidos-total" style="font-size:13px;color:var(--text-muted)"></span>
+            </div>
+
+            <!-- LISTA -->
+            <div id="aquecidos-list-container">
+                <div class="empty-state">
+                    <div class="empty-icon">🔥</div>
+                    <h3>Nenhum chip aquecido cadastrado</h3>
+                    <p>Clique em "+ Cadastrar Novos" para registrar chips comprados do fornecedor</p>
+                </div>
+            </div>
         </div>
 
         <!-- TAB: PROXIES -->

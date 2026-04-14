@@ -780,6 +780,42 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json(db.getChipsByClientTag(req.params.tag));
     });
 
+    // ==================== CADASTRO CHIPS AQUECIDOS ====================
+
+    router.post('/chips/register-warmed', (req, res) => {
+        const { numbers, clientTag, fornecedor } = req.body;
+        if (!numbers || !Array.isArray(numbers) || numbers.length === 0) {
+            return res.status(400).json({ error: 'Nenhum numero fornecido' });
+        }
+
+        const registered = [];
+        for (const phone of numbers) {
+            // Check if phone already exists
+            const existing = db.getAllChips().find(c => c.phone === phone);
+            if (existing) {
+                // Just update tags if already exists
+                if (clientTag) db.setChipClientTag(existing.id, clientTag);
+                if (fornecedor) db.updateChipField(existing.id, 'fornecedor', fornecedor);
+                db.updateChipField(existing.id, 'origin', 'external_warmed');
+                registered.push({ phone, status: 'updated', chipId: existing.id });
+                continue;
+            }
+
+            // Create new chip entry (no session, disconnected)
+            const sessionId = `ext_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+            const chip = db.createChip(sessionId, '');
+            db.updateChipPhone(chip.id, phone);
+            db.updateChipField(chip.id, 'origin', 'external_warmed');
+            db.updateChipField(chip.id, 'phase', 4); // Already warmed
+            if (clientTag) db.setChipClientTag(chip.id, clientTag);
+            if (fornecedor) db.updateChipField(chip.id, 'fornecedor', fornecedor);
+            registered.push({ phone, status: 'created', chipId: chip.id });
+        }
+
+        sessionManager.emitStats();
+        res.json({ success: true, registered, total: registered.length });
+    });
+
     // ==================== SETTINGS ====================
 
     router.get('/settings', (req, res) => {
