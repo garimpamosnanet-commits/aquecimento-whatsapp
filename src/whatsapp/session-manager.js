@@ -203,10 +203,30 @@ class SessionManager {
                     db.updateChipPhone(chip.id, phoneNumber);
 
                     // Merge with pre-registered external_warmed chip (if exists)
+                    // Brazilian phones: WhatsApp may return with or without the 9th digit
+                    // Registered: 5562982184435 (13 digits, with 9)
+                    // WhatsApp:   556282184435  (12 digits, without 9)
+                    function phonesMatch(a, b) {
+                        if (!a || !b) return false;
+                        if (a === b) return true;
+                        // Strip country code 55 and compare with/without 9th digit
+                        const stripBR = (p) => {
+                            if (p.startsWith('55') && p.length >= 12) return p.slice(2);
+                            return p;
+                        };
+                        const na = stripBR(a);
+                        const nb = stripBR(b);
+                        if (na === nb) return true;
+                        // One has 11 digits (with 9), other has 10 (without 9)
+                        if (na.length === 11 && nb.length === 10) return na.slice(0, 2) + na.slice(3) === nb.slice(0, 2) + nb.slice(2);
+                        if (nb.length === 11 && na.length === 10) return nb.slice(0, 2) + nb.slice(3) === na.slice(0, 2) + na.slice(2);
+                        return false;
+                    }
+
                     const allChips = db.getAllChips();
                     const extChip = allChips.find(c =>
                         c.id !== chip.id &&
-                        c.phone === phoneNumber &&
+                        phonesMatch(c.phone, phoneNumber) &&
                         c.origin === 'external_warmed'
                     );
                     if (extChip) {

@@ -1973,18 +1973,28 @@ function loadChipsAquecidos() {
         // Get all chips with client_tag or origin=external_warmed
         const warmedRegistered = allChips.filter(c => c.origin === 'external_warmed' || c.client_tag);
 
+        // Brazilian phone normalization (strip 55 + optional 9th digit)
+        function normPhone(p) {
+            if (!p) return '';
+            let n = p.startsWith('55') && p.length >= 12 ? p.slice(2) : p;
+            // Normalize to 10 digits (without 9th digit) for comparison key
+            if (n.length === 11 && n[2] === '9') n = n.slice(0, 2) + n.slice(3);
+            return n;
+        }
+
         // Deduplicate by phone: prefer connected chip over disconnected
         const byPhone = {};
         for (const c of warmedRegistered) {
             if (!c.phone) continue;
-            const existing = byPhone[c.phone];
+            const key = normPhone(c.phone);
+            const existing = byPhone[key];
             if (!existing) {
-                byPhone[c.phone] = c;
+                byPhone[key] = c;
             } else {
                 // Prefer connected/warming over disconnected
                 const cConn = c.status === 'connected' || c.status === 'warming';
                 const eConn = existing.status === 'connected' || existing.status === 'warming';
-                if (cConn && !eConn) byPhone[c.phone] = c;
+                if (cConn && !eConn) byPhone[key] = c;
             }
         }
         _aqAllWarmed = Object.values(byPhone);
@@ -2155,7 +2165,7 @@ function connectAquecido(chipId, phone, mode) {
         confirmChipName('phone');
         // Auto-fill the phone number
         setTimeout(() => {
-            const phoneInput = document.getElementById('phone-number-input');
+            const phoneInput = document.getElementById('pairing-phone-input');
             if (phoneInput && phone) {
                 phoneInput.value = phone;
             }

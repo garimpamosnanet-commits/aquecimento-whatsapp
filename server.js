@@ -179,11 +179,23 @@ server.listen(PORT, async () => {
     if (proxyFreed > 0) console.log(`[Recovery] ${proxyFreed} proxies liberados de chips desconectados`);
 
     // Cleanup: merge orphan external_warmed chips
+    // Brazilian phone matching (with/without 9th digit)
+    function phonesMatch(a, b) {
+        if (!a || !b) return false;
+        if (a === b) return true;
+        const strip = (p) => p.startsWith('55') && p.length >= 12 ? p.slice(2) : p;
+        const na = strip(a), nb = strip(b);
+        if (na === nb) return true;
+        if (na.length === 11 && nb.length === 10) return na.slice(0, 2) + na.slice(3) === nb.slice(0, 2) + nb.slice(2);
+        if (nb.length === 11 && na.length === 10) return nb.slice(0, 2) + nb.slice(3) === na.slice(0, 2) + na.slice(2);
+        return false;
+    }
+
     const extChips = allChips.filter(c => c.origin === 'external_warmed' && c.session_id?.startsWith('ext_'));
     let merged = 0;
     for (const ext of extChips) {
         if (!ext.phone) continue;
-        const connected = allChips.find(c => c.id !== ext.id && c.phone === ext.phone && (c.status === 'connected' || c.status === 'warming'));
+        const connected = allChips.find(c => c.id !== ext.id && phonesMatch(c.phone, ext.phone) && (c.status === 'connected' || c.status === 'warming'));
         if (connected) {
             if (ext.client_tag && !connected.client_tag) db.setChipClientTag(connected.id, ext.client_tag);
             if (ext.fornecedor) db.updateChipField(connected.id, 'fornecedor', ext.fornecedor);
