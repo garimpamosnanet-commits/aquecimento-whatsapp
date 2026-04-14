@@ -2449,6 +2449,11 @@ function updateGASummary() {
 
     const modeLabel = _gaMode === 'invite_link' ? '🔗 Via Link de Convite' : '👤 Admin Adiciona';
     const presetLabel = _gaPresets[_gaPreset]?.label || _gaPreset;
+    const promoteAdmin = document.getElementById('ga-promote-admin')?.checked !== false;
+    const promoteLabel = promoteAdmin ? 'Sim — Membro + Admin' : 'Nao — Somente Membro';
+    // Update hint text
+    const hintEl = document.getElementById('ga-promote-hint');
+    if (hintEl) hintEl.textContent = promoteAdmin ? 'Chips entram e sao promovidos a admin' : 'Chips entram como membro apenas (sem promover)';
 
     summaryEl.style.display = 'block';
     summaryEl.innerHTML = `
@@ -2461,7 +2466,7 @@ function updateGASummary() {
                 <div class="ga-summary-row"><span>Grupos alvo:</span><strong>${groupCount} grupos</strong></div>
                 <div class="ga-summary-row"><span>Numeros:</span><strong>${chipCount} chips${manualCount > 0 ? ' + ' + manualCount + ' manuais' : ''} = ${totalNumbers}</strong></div>
                 <div class="ga-summary-row"><span>Total adicoes:</span><strong>${totalAdds} (${totalNumbers} x ${groupCount})</strong></div>
-                <div class="ga-summary-row"><span>Promover a admin:</span><strong>Sim (todos)</strong></div>
+                <div class="ga-summary-row"><span>Promover a admin:</span><strong>${promoteLabel}</strong></div>
                 <div class="ga-summary-row"><span>Estimativa:</span><strong>${estText}</strong></div>
             </div>
             <button class="btn btn-success" onclick="gaStartOperation()" id="ga-btn-start" style="margin-top:16px;width:100%">
@@ -2498,9 +2503,11 @@ function gaStartOperation() {
     }
 
     const selectedGroups = _gaGroups.filter(g => _gaSelectedGroups.has(g.id));
+    const promoteAdmin = document.getElementById('ga-promote-admin')?.checked !== false;
     const config = {
         mode: _gaMode,
         preset: _gaPreset,
+        promoteToAdmin: promoteAdmin,
         delayMin: parseInt(document.getElementById('ga-delay-min')?.value) || 30,
         delayMax: parseInt(document.getElementById('ga-delay-max')?.value) || 90,
         groupDelayMin: parseInt(document.getElementById('ga-group-delay-min')?.value) || 120,

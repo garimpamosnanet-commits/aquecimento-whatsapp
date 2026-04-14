@@ -257,6 +257,7 @@ class GroupManager {
     async processOneChip(adminSessionId, groupId, jid, groupName, callbacks, options = {}) {
         const phone = jid.replace('@s.whatsapp.net', '');
         const mode = options.mode || 'admin_add';
+        const shouldPromote = options.promoteToAdmin !== false; // default true
         const promoteDelayMin = (options.promoteDelayMin || 2) * 1000;
         const promoteDelayMax = (options.promoteDelayMax || 3) * 1000;
 
@@ -271,6 +272,10 @@ class GroupManager {
             }
 
             if (found && !found.isAdmin) {
+                if (!shouldPromote) {
+                    callbacks.onLog({ type: 'skip', message: `${phone} ja e membro de "${groupName}" — pulando (sem promover)` });
+                    return { status: 'skipped', adminPromoted: 0 };
+                }
                 callbacks.onLog({ type: 'info', message: `${phone} ja e membro de "${groupName}" mas NAO e admin — promovendo` });
                 await this._delay(this._random(promoteDelayMin, promoteDelayMax));
 
@@ -304,6 +309,10 @@ class GroupManager {
         }
 
         if (addResult.alreadyMember) {
+            if (!shouldPromote) {
+                callbacks.onLog({ type: 'skip', message: `${phone} ja e membro de "${groupName}" — pulando (sem promover)` });
+                return { status: 'skipped', adminPromoted: 0 };
+            }
             callbacks.onLog({ type: 'skip', message: `${phone} ja e membro de "${groupName}" — verificando admin` });
             await this._delay(this._random(promoteDelayMin, promoteDelayMax));
 
@@ -323,6 +332,13 @@ class GroupManager {
         }
 
         const modeLabel = mode === 'invite_link' ? 'via link' : 'pelo admin';
+
+        // If not promoting, done here
+        if (!shouldPromote) {
+            callbacks.onLog({ type: 'success', message: `${phone} entrou no grupo "${groupName}" como membro (${modeLabel})` });
+            return { status: 'success', adminPromoted: 0 };
+        }
+
         callbacks.onLog({ type: 'success', message: `${phone} entrou no grupo "${groupName}" (${modeLabel})` });
 
         // STEP 3 — Delay before promote (configurable)
@@ -578,6 +594,7 @@ class GroupManager {
                             mode,
                             chipSessionId,
                             inviteCode: inviteCodes[groupId],
+                            promoteToAdmin: config.promoteToAdmin !== false,
                             promoteDelayMin: config.promoteDelayMin || 2,
                             promoteDelayMax: config.promoteDelayMax || 3
                         });
