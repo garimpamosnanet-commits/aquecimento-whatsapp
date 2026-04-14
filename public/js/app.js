@@ -2075,6 +2075,7 @@ function renderScanResults(data) {
                     <span style="color:var(--text-muted)">${pct}%</span>
                 </div>
                 ${chip.missing > 0 && !chip.error ? `<button class="btn btn-success btn-xs" onclick="addMissingForChip(${chip.chipId})" title="Adicionar nos grupos faltantes">➕ Adicionar ${chip.missing}</button>` : ''}
+                ${chip.asMember > 0 && !chip.error ? `<button class="btn btn-warning btn-xs" onclick="promoteMissingForChip(${chip.chipId})" title="Promover a admin nos grupos que e so membro">👑 Promover ${chip.asMember}</button>` : ''}
                 <button class="btn btn-ghost btn-xs" onclick="toggleScanDetail('scan-detail-${chip.chipId}')">Detalhes</button>
             </div>
             <div class="scan-detail" id="scan-detail-${chip.chipId}" style="display:none">
@@ -2106,6 +2107,34 @@ function renderScanResults(data) {
     el.innerHTML = html;
     // Store scan data for "Add Missing" action
     window._lastScanData = data;
+}
+
+function promoteMissingForChip(chipId) {
+    const data = window._lastScanData;
+    if (!data) return showToast('Faca a varredura primeiro', 'warning');
+
+    const chip = data.chips.find(c => c.chipId === chipId);
+    if (!chip) return;
+
+    // Groups where chip is member but NOT admin
+    const memberOnly = chip.groups.filter(g => !g.isAdmin);
+    if (memberOnly.length === 0) return showToast('Ja e admin em todos!', 'success');
+
+    const groupIds = new Set(memberOnly.map(g => g.groupId));
+
+    window._pendingMissingGroups = groupIds;
+    window._pendingMissingChips = new Set([chipId]);
+    window._pendingMissingScanData = data;
+    window._pendingPromoteAdmin = true; // Flag to check promote
+
+    switchTab('groupadd');
+    const admSelect = document.getElementById('ga-admin-select');
+    const scanAdmId = document.getElementById('aq-scan-adm')?.value;
+    if (admSelect && scanAdmId) {
+        admSelect.value = scanAdmId;
+        onAdminInstanceSelect();
+        showToast(`Promovendo ${chip.name} a admin em ${memberOnly.length} grupos...`, 'info');
+    }
 }
 
 function addMissingForChip(chipId) {
@@ -2537,7 +2566,10 @@ function onAdminInstanceSelect() {
                 gaSetMode('invite_link');
                 gaSetPreset('normal');
                 const promoteCheck = document.getElementById('ga-promote-admin');
-                if (promoteCheck) promoteCheck.checked = false;
+                if (promoteCheck) {
+                    promoteCheck.checked = !!window._pendingPromoteAdmin;
+                }
+                delete window._pendingPromoteAdmin;
 
                 showToast(`${window._pendingMissingGroups.size} grupos e ${window._pendingMissingChips.size} chips pre-selecionados!`, 'success');
 
