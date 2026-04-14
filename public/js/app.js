@@ -1843,7 +1843,11 @@ function toggleCadastroAquecidos() {
     if (!el) return;
     const visible = el.style.display !== 'none';
     el.style.display = visible ? 'none' : 'block';
-    if (!visible) loadClientTagsForCadastro();
+    if (!visible) {
+        loadClientTagsForCadastro();
+        // Scroll into view
+        setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
 }
 
 function loadClientTagsForCadastro() {
