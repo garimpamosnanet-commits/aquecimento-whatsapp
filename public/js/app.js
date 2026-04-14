@@ -2446,24 +2446,35 @@ function connectAquecido(chipId, phone, mode) {
 }
 
 function importFromWarming() {
-    // Show chips from warming that are phase 4+ (finished warming)
+    // Show ALL connected warming chips (any phase)
     fetch('/api/chips').then(r => r.json()).then(allChips => {
         const ready = allChips.filter(c =>
-            c.phase >= 4 &&
             (c.status === 'connected' || c.status === 'warming') &&
             c.origin !== 'external_warmed' &&
             c.phone
         );
-        if (ready.length === 0) return showToast('Nenhum chip pronto pra importar (fase 4+)', 'warning');
+        if (ready.length === 0) return showToast('Nenhum chip conectado pra importar', 'warning');
 
         const list = ready.map((c, i) => `${i + 1}. ${c.name || c.phone} (Fase ${c.phase})`).join('\n');
-        const clientTag = prompt(`${ready.length} chips prontos (fase 4+):\n\n${list}\n\nNome do cliente pra importar:`);
+        const selection = prompt(`${ready.length} chips disponiveis:\n\n${list}\n\nDigite os numeros separados por virgula (ex: 1,3,5)\nOu "todos" pra importar todos:`);
+        if (!selection) return;
+
+        let selectedChips;
+        if (selection.toLowerCase() === 'todos') {
+            selectedChips = ready;
+        } else {
+            const indices = selection.split(',').map(s => parseInt(s.trim()) - 1).filter(i => i >= 0 && i < ready.length);
+            if (indices.length === 0) return showToast('Nenhum chip selecionado', 'warning');
+            selectedChips = indices.map(i => ready[i]);
+        }
+
+        const clientTag = prompt(`${selectedChips.length} chip(s) selecionado(s).\n\nNome do cliente:`);
         if (!clientTag) return;
 
         fetch('/api/chips/import-warmed', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chipIds: ready.map(c => c.id), clientTag })
+            body: JSON.stringify({ chipIds: selectedChips.map(c => c.id), clientTag })
         })
         .then(r => r.json())
         .then(data => {
