@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KS Digital — Command Center</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260413b">
+    <link rel="stylesheet" href="/css/style.css?v=20260413c">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -690,7 +690,7 @@
                         </div>
                         <div class="cadastro-field">
                             <label>Numeros (um por linha)</label>
-                            <textarea id="cad-numbers" rows="10" class="cadastro-textarea" placeholder="62 98223 9695&#10;62 98219 6031&#10;62 98223 6773&#10;62 98209 6890&#10;62 98223 6607&#10;&#10;Cole todos os numeros do papel aqui...&#10;Aceita qualquer formato!"></textarea>
+                            <textarea id="cad-numbers" rows="10" class="cadastro-textarea" oninput="cadCountNumbers()" placeholder="62 98223 9695&#10;62 98219 6031&#10;62 98223 6773&#10;62 98209 6890&#10;62 98223 6607&#10;&#10;Cole todos os numeros do papel aqui...&#10;Aceita qualquer formato!"></textarea>
                             <div class="cadastro-hint">
                                 <span id="cad-count">0 numeros detectados</span>
                                 <span>Qualquer formato: (62) 98223-9695, +5562982239695, 62 98223 9695</span>
@@ -855,6 +855,6 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js?v=20260413b"></script>
+<script src="/js/app.js?v=20260413c"></script>
 </body>
 </html>

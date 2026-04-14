@@ -1880,17 +1880,13 @@ function loadClientTagsForCadastro() {
     });
 }
 
-// Count numbers as user types
-document.addEventListener('DOMContentLoaded', () => {
+function cadCountNumbers() {
     const textarea = document.getElementById('cad-numbers');
-    if (textarea) {
-        textarea.addEventListener('input', () => {
-            const lines = textarea.value.split(/[\n,;]+/).filter(l => l.trim().replace(/\D/g, '').length >= 10);
-            const countEl = document.getElementById('cad-count');
-            if (countEl) countEl.textContent = lines.length + ' numeros detectados';
-        });
-    }
-});
+    if (!textarea) return;
+    const lines = textarea.value.split(/[\n,;]+/).filter(l => l.trim().replace(/\D/g, '').length >= 8);
+    const countEl = document.getElementById('cad-count');
+    if (countEl) countEl.textContent = lines.length + ' numeros detectados';
+}
 
 function cadastrarChipsAquecidos() {
     const text = (document.getElementById('cad-numbers')?.value || '').trim();
