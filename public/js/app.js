@@ -1990,8 +1990,11 @@ function runChipScan() {
     const groupFilter = (document.getElementById('aq-scan-filter')?.value || '').trim();
     if (!groupFilter) return showToast('Digite o nome dos grupos pra filtrar (ex: Entre e Compre)', 'warning');
 
-    const connectedChips = _aqAllWarmed.filter(c => c.status === 'connected' || c.status === 'warming');
-    if (connectedChips.length === 0) return showToast('Nenhum chip conectado pra escanear', 'warning');
+    // Filter by selected client
+    const clientFilter = document.getElementById('aquecidos-filter-client')?.value || '';
+    let chipsToScan = _aqAllWarmed.filter(c => c.status === 'connected' || c.status === 'warming');
+    if (clientFilter) chipsToScan = chipsToScan.filter(c => c.client_tag === clientFilter);
+    if (chipsToScan.length === 0) return showToast('Nenhum chip conectado' + (clientFilter ? ' deste cliente' : '') + ' pra escanear', 'warning');
 
     const btn = document.getElementById('aq-scan-btn');
     const status = document.getElementById('aq-scan-status');
@@ -2000,14 +2003,14 @@ function runChipScan() {
     let scanSeconds = 0;
     const scanTimer = setInterval(() => {
         scanSeconds++;
-        status.textContent = `Escaneando ${connectedChips.length} chips... ${scanSeconds}s`;
+        status.textContent = `Escaneando ${chipsToScan.length} chips... ${scanSeconds}s`;
     }, 1000);
 
     fetch('/api/chips/scan-groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            chipIds: connectedChips.map(c => c.id),
+            chipIds: chipsToScan.map(c => c.id),
             adminChipId,
             groupFilter
         })
