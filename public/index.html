@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KS Digital — Command Center</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260414g">
+    <link rel="stylesheet" href="/css/style.css?v=20260414h">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -715,6 +715,18 @@
                 </div>
             </div>
 
+            <!-- SCAN SECTION -->
+            <div class="aq-scan-section" id="aq-scan-section">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                    <select id="aq-scan-adm" class="ga-select" style="width:300px">
+                        <option value="">Selecione o ADM do cliente...</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="runChipScan()" id="aq-scan-btn">🔍 Varredura de Grupos</button>
+                    <span id="aq-scan-status" style="font-size:13px;color:var(--text-muted)"></span>
+                </div>
+                <div id="aq-scan-results" style="display:none"></div>
+            </div>
+
             <!-- FILTROS -->
             <div class="aq-toolbar">
                 <select id="aquecidos-filter-client" class="ga-select" style="width:220px" onchange="loadChipsAquecidos()">
@@ -866,6 +878,6 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js?v=20260414g"></script>
+<script src="/js/app.js?v=20260414h"></script>
 </body>
 </html>

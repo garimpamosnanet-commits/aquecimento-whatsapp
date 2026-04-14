@@ -848,6 +848,108 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true, cleaned, remaining: db.getAllChips().filter(c => c.origin === 'external_warmed').length });
     });
 
+    // SCAN: Cross-reference chips vs groups (which chips are in which groups)
+    router.post('/chips/scan-groups', async (req, res) => {
+        const { chipIds, adminChipId } = req.body;
+        if (!chipIds || !Array.isArray(chipIds) || chipIds.length === 0) {
+            return res.status(400).json({ error: 'chipIds obrigatorio' });
+        }
+        if (!adminChipId) {
+            return res.status(400).json({ error: 'adminChipId obrigatorio' });
+        }
+
+        const adminChip = db.getChipById(adminChipId);
+        if (!adminChip || !sessionManager.isConnected(adminChip.session_id)) {
+            return res.status(400).json({ error: 'ADM nao conectado' });
+        }
+
+        try {
+            // 1. Get all groups from ADM
+            const admSock = sessionManager.getSocket(adminChip.session_id);
+            const allGroups = await admSock.groupFetchAllParticipating();
+            const groups = [];
+            for (const [gid, g] of Object.entries(allGroups)) {
+                if (g.isCommunity) continue;
+                groups.push({
+                    id: gid,
+                    subject: g.subject || 'Sem nome',
+                    size: g.participants?.length || 0,
+                    participants: (g.participants || []).map(p => ({
+                        phone: p.id.split(':')[0].split('@')[0],
+                        admin: p.admin === 'admin' || p.admin === 'superadmin'
+                    }))
+                });
+            }
+
+            // 2. For each chip, check which groups they're in
+            const results = [];
+            for (const chipId of chipIds) {
+                const chip = db.getChipById(chipId);
+                if (!chip || !chip.phone) continue;
+
+                const chipPhone = chip.phone;
+                // Brazilian phone matching: strip 55, handle 9th digit
+                const normalize = (p) => {
+                    let n = p.startsWith('55') && p.length >= 12 ? p.slice(2) : p;
+                    if (n.length === 11 && n[2] === '9') n = n.slice(0, 2) + n.slice(3);
+                    return n;
+                };
+                const chipNorm = normalize(chipPhone);
+
+                const chipGroups = [];
+                const missingGroups = [];
+
+                for (const g of groups) {
+                    const found = g.participants.find(p => {
+                        const pNorm = normalize(p.phone);
+                        return pNorm === chipNorm;
+                    });
+
+                    if (found) {
+                        chipGroups.push({
+                            groupId: g.id,
+                            subject: g.subject,
+                            isAdmin: found.admin,
+                            status: found.admin ? 'admin' : 'member'
+                        });
+                    } else {
+                        missingGroups.push({
+                            groupId: g.id,
+                            subject: g.subject,
+                            size: g.size
+                        });
+                    }
+                }
+
+                results.push({
+                    chipId: chip.id,
+                    phone: chipPhone,
+                    name: chip.name || chipPhone,
+                    inGroups: chipGroups.length,
+                    asAdmin: chipGroups.filter(g => g.isAdmin).length,
+                    asMember: chipGroups.filter(g => !g.isAdmin).length,
+                    missing: missingGroups.length,
+                    totalGroups: groups.length,
+                    groups: chipGroups,
+                    missingGroups
+                });
+            }
+
+            // 3. Summary
+            const groupNames = groups.map(g => ({ id: g.id, subject: g.subject, size: g.size }));
+
+            res.json({
+                success: true,
+                totalGroups: groups.length,
+                totalChips: results.length,
+                chips: results,
+                groups: groupNames
+            });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // Get groups a chip is member of
     router.get('/chips/:id/groups', async (req, res) => {
         const chipId = parseInt(req.params.id);

@@ -1963,8 +1963,154 @@ function cadastrarChipsAquecidos() {
 
 let _aqAllWarmed = [];
 
+// ==================== SCAN GROUPS ====================
+
+function loadScanAdmSelect() {
+    fetch('/api/admin-instances').then(r => r.json()).then(admins => {
+        const select = document.getElementById('aq-scan-adm');
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="">Selecione o ADM do cliente...</option>';
+        for (const adm of admins) {
+            if (!adm.is_connected) continue;
+            const label = (adm.name || 'ADM') + (adm.phone ? ' (' + adm.phone + ')' : '');
+            const opt = document.createElement('option');
+            opt.value = adm.id;
+            opt.textContent = '🟢 ' + label;
+            select.appendChild(opt);
+        }
+        if (current) select.value = current;
+    });
+}
+
+function runChipScan() {
+    const adminChipId = parseInt(document.getElementById('aq-scan-adm')?.value);
+    if (!adminChipId) return showToast('Selecione o ADM primeiro', 'warning');
+
+    const connectedChips = _aqAllWarmed.filter(c => c.status === 'connected' || c.status === 'warming');
+    if (connectedChips.length === 0) return showToast('Nenhum chip conectado pra escanear', 'warning');
+
+    const btn = document.getElementById('aq-scan-btn');
+    const status = document.getElementById('aq-scan-status');
+    btn.disabled = true;
+    btn.textContent = '⏳ Escaneando...';
+    status.textContent = `Verificando ${connectedChips.length} chips nos grupos do ADM...`;
+
+    fetch('/api/chips/scan-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chipIds: connectedChips.map(c => c.id),
+            adminChipId
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.textContent = '🔍 Varredura de Grupos';
+        status.textContent = '';
+
+        if (data.error) {
+            showToast('Erro: ' + data.error, 'danger');
+            return;
+        }
+        renderScanResults(data);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = '🔍 Varredura de Grupos';
+        status.textContent = '';
+        showToast('Erro: ' + err.message, 'danger');
+    });
+}
+
+function renderScanResults(data) {
+    const el = document.getElementById('aq-scan-results');
+    el.style.display = 'block';
+
+    // Summary stats
+    const allMissing = [];
+    for (const chip of data.chips) {
+        for (const mg of chip.missingGroups) {
+            allMissing.push({ chipId: chip.chipId, chipName: chip.name, groupId: mg.groupId, groupName: mg.subject });
+        }
+    }
+
+    let html = `
+        <div class="scan-summary">
+            <div class="scan-stat"><span class="scan-stat-value">${data.totalGroups}</span><span class="scan-stat-label">Grupos do ADM</span></div>
+            <div class="scan-stat success"><span class="scan-stat-value">${data.chips.reduce((s, c) => s + c.asAdmin, 0)}</span><span class="scan-stat-label">Posicoes Admin</span></div>
+            <div class="scan-stat warning"><span class="scan-stat-value">${data.chips.reduce((s, c) => s + c.asMember, 0)}</span><span class="scan-stat-label">So Membro</span></div>
+            <div class="scan-stat danger"><span class="scan-stat-value">${allMissing.length}</span><span class="scan-stat-label">Faltantes</span></div>
+        </div>
+
+        <h4 style="margin:16px 0 8px">Resumo por Chip</h4>
+        <div class="scan-chips">`;
+
+    for (const chip of data.chips) {
+        const pct = data.totalGroups > 0 ? Math.round((chip.inGroups / data.totalGroups) * 100) : 0;
+        const barColor = pct === 100 ? '#22c55e' : pct > 50 ? '#f59e0b' : '#ef4444';
+        html += `
+            <div class="scan-chip-row">
+                <div class="scan-chip-name">${chip.name}</div>
+                <div class="scan-chip-bar-wrap">
+                    <div class="scan-chip-bar" style="width:${pct}%;background:${barColor}"></div>
+                </div>
+                <div class="scan-chip-stats">
+                    <span>👑 ${chip.asAdmin}</span>
+                    <span>👤 ${chip.asMember}</span>
+                    <span style="color:#ef4444">❌ ${chip.missing}</span>
+                    <span style="color:var(--text-muted)">${pct}%</span>
+                </div>
+                <button class="btn btn-ghost btn-xs" onclick="toggleScanDetail('scan-detail-${chip.chipId}')">Detalhes</button>
+            </div>
+            <div class="scan-detail" id="scan-detail-${chip.chipId}" style="display:none">
+                <div class="scan-detail-section">
+                    <strong>Falta entrar (${chip.missing}):</strong>
+                    <div class="scan-detail-list">${chip.missingGroups.map(g => `<span class="scan-tag missing">${g.subject}</span>`).join('')}</div>
+                </div>
+                <div class="scan-detail-section">
+                    <strong>Admin (${chip.asAdmin}):</strong>
+                    <div class="scan-detail-list">${chip.groups.filter(g => g.isAdmin).map(g => `<span class="scan-tag admin">${g.subject}</span>`).join('')}</div>
+                </div>
+                <div class="scan-detail-section">
+                    <strong>So membro (${chip.asMember}):</strong>
+                    <div class="scan-detail-list">${chip.groups.filter(g => !g.isAdmin).map(g => `<span class="scan-tag member">${g.subject}</span>`).join('')}</div>
+                </div>
+            </div>`;
+    }
+
+    html += `</div>`;
+
+    if (allMissing.length > 0) {
+        html += `<div style="margin-top:16px;text-align:center">
+            <button class="btn btn-success" onclick="goToAddMissing()" style="padding:10px 24px">
+                ➕ Adicionar ${allMissing.length} Faltantes aos Grupos
+            </button>
+        </div>`;
+    }
+
+    el.innerHTML = html;
+    // Store scan data for "Add Missing" action
+    window._lastScanData = data;
+}
+
+function toggleScanDetail(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function goToAddMissing() {
+    // Switch to "Adicionar aos Grupos" tab with pre-selected groups/chips from scan
+    showToast('Vá para "Adicionar aos Grupos", selecione o ADM e os grupos/chips faltantes', 'info');
+    switchTab('groupadd');
+}
+
+// ==================== LOAD CHIPS AQUECIDOS ====================
+
 function loadChipsAquecidos() {
     loadClientTagsForCadastro();
+    loadScanAdmSelect();
 
     // Cleanup orphans first, then load
     fetch('/api/chips/cleanup-orphans', { method: 'POST' }).catch(() => {});
