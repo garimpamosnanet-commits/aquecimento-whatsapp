@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KS Digital — Command Center</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260414r">
+    <link rel="stylesheet" href="/css/style.css?v=20260414s">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -358,6 +358,9 @@
                             <label>Limite diario por chip (0 = sem limite)</label>
                             <input type="number" id="ga-daily-limit" min="0" max="50" value="10" class="input-sm">
                         </div>
+                        <div class="ga-config-row" style="grid-column:1/-1">
+                            <button class="btn btn-primary btn-sm" onclick="updateGASummary(); showToast('Configuracao aplicada!', 'success')">✅ Aplicar Configuracao</button>
+                        </div>
                     </div>
                 </details>
 
@@ -668,6 +671,7 @@
             <div class="section-header">
                 <h2>🔥 Chips Aquecidos</h2>
                 <div style="display:flex;gap:8px">
+                    <button class="btn btn-success btn-sm" onclick="importFromWarming()">🔄 Importar da Aquecimento</button>
                     <button class="btn btn-primary btn-sm" onclick="toggleCadastroAquecidos()">+ Cadastrar Novos</button>
                     <button class="btn btn-outline btn-sm" onclick="loadChipsAquecidos()">↻ Atualizar</button>
                 </div>
@@ -879,6 +883,6 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js?v=20260414r"></script>
+<script src="/js/app.js?v=20260414s"></script>
 </body>
 </html>

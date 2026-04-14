@@ -1037,6 +1037,65 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
     });
 
+    // Rename chip
+    router.post('/chips/:id/rename', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const { name } = req.body;
+        db.updateChipName(chipId, name || '');
+        sessionManager.emitChipUpdate(chipId);
+        res.json({ success: true });
+    });
+
+    // Tag chip (usage purpose)
+    router.post('/chips/:id/tag', (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const { tag } = req.body;
+        db.updateChipField(chipId, 'tag', tag || '');
+        res.json({ success: true });
+    });
+
+    // Disconnect chip
+    router.post('/chips/:id/disconnect', async (req, res) => {
+        const chipId = parseInt(req.params.id);
+        const chip = db.getChipById(chipId);
+        if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
+        if (chip.session_id) {
+            await sessionManager.disconnect(chip.session_id);
+        }
+        res.json({ success: true });
+    });
+
+    // Import finished warming chips to Aquecidos
+    router.post('/chips/import-warmed', (req, res) => {
+        const { chipIds, clientTag } = req.body;
+        if (!chipIds || !Array.isArray(chipIds)) return res.status(400).json({ error: 'chipIds obrigatorio' });
+
+        let imported = 0;
+        let folderId = null;
+
+        // Auto-create folder
+        if (clientTag) {
+            const folders = db.getAllFolders();
+            const existing = folders.find(f => f.name.toLowerCase() === clientTag.toLowerCase());
+            folderId = existing ? existing.id : db.createFolder(clientTag).id;
+        }
+
+        for (const id of chipIds) {
+            const chip = db.getChipById(id);
+            if (!chip) continue;
+            db.updateChipField(id, 'origin', 'external_warmed');
+            if (clientTag) db.setChipClientTag(id, clientTag);
+            if (folderId) db.assignChipToFolder(id, folderId);
+            // Update name
+            const last4 = (chip.phone || '').slice(-4);
+            if (clientTag && last4) db.updateChipName(id, `${clientTag} - ${last4}`);
+            imported++;
+        }
+
+        sessionManager.emitStats();
+        res.json({ success: true, imported });
+    });
+
     // ==================== CADASTRO CHIPS AQUECIDOS ====================
 
     router.post('/chips/register-warmed', (req, res) => {

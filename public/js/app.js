@@ -2314,26 +2314,45 @@ function renderAqList() {
             </div>
             <div class="aq-chip-list">`;
 
+        // Table header
+        html += `<div class="aq-chip-table-header">
+            <span></span><span>Nome</span><span>Numero</span><span>Tag</span><span>Status</span><span>Origem</span><span>Data</span><span style="text-align:right">Acoes</span>
+        </div>`;
+
         for (const chip of clientChips.sort((a, b) => (a.phone || '').localeCompare(b.phone || ''))) {
             const isConn = chip.status === 'connected' || chip.status === 'warming';
             const dotCls = isConn ? 'on' : 'off';
-            const statusText = isConn ? 'Conectado' : 'Aguardando';
+            const statusText = isConn ? 'Online' : 'Offline';
             const statusCls = isConn ? 'connected' : 'disconnected';
             const created = chip.created_at ? new Date(chip.created_at).toLocaleDateString('pt-BR') : '';
+            const chipName = chip.name || 'Sem nome';
+            const escapedName = chipName.replace(/'/g, "\\'");
+            const tag = chip.tag || '';
+            const escapedTag = tag.replace(/'/g, "\\'");
 
-            const connectBtn = !isConn ? `<button class="btn btn-primary btn-xs" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}', 'qr')" title="Conectar via QR">📷 QR</button><button class="btn btn-outline btn-xs" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}', 'phone')" title="Conectar via numero">📱 Numero</button>` : '';
-            const groupsBtn = isConn ? `<button class="btn btn-outline btn-xs" onclick="showChipGroups(${chip.id}, '${chip.phone || ''}')" title="Ver grupos">👥 Grupos</button>` : '';
+            const connectBtns = !isConn ? `
+                <button class="aq-btn aq-btn-primary" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}', 'qr')">📷 QR</button>
+                <button class="aq-btn aq-btn-secondary" onclick="connectAquecido(${chip.id}, '${chip.phone || ''}', 'phone')">📱 Num</button>` : '';
+            const connBtns = isConn ? `
+                <button class="aq-btn aq-btn-info" onclick="showChipGroups(${chip.id}, '${chip.phone || ''}')">👥</button>
+                <button class="aq-btn aq-btn-warning" onclick="disconnectAquecido(${chip.id})">⏏</button>` : '';
+
             html += `<div class="aq-chip-row" data-phone="${chip.phone || ''}">
-                <div class="aq-chip-phone"><span class="aq-dot ${dotCls}"></span>${chip.phone || '—'}${chip.name && chip.name !== chip.phone ? ' <span style="font-weight:400;font-size:12px;color:var(--text-muted);font-family:Inter,sans-serif">(' + chip.name + ')</span>' : ''}</div>
-                <div class="aq-chip-meta">
-                    ${chip.fornecedor ? '<span>🏪 ' + chip.fornecedor + '</span>' : ''}
-                    ${created ? '<span>📅 ' + created + '</span>' : ''}
+                <div class="aq-dot-wrap"><span class="aq-dot ${dotCls}"></span></div>
+                <div class="aq-chip-name">
+                    ${chipName}
+                    <span class="aq-edit-btn" onclick="renameAquecido(${chip.id}, '${escapedName}')" title="Editar nome">✏️</span>
+                    ${tag ? '<span class="aq-tag">' + tag + '</span>' : '<span class="aq-tag-add" onclick="tagAquecido(' + chip.id + ', \'' + escapedTag + '\')" title="Adicionar tag">+ tag</span>'}
                 </div>
+                <div class="aq-chip-phone-col">${chip.phone || '—'}</div>
+                <div>${tag ? '<span class="aq-tag" onclick="tagAquecido(' + chip.id + ', \'' + escapedTag + '\')">' + tag + '</span>' : '<span class="aq-tag-add" onclick="tagAquecido(' + chip.id + ', \'\')">+ tag</span>'}</div>
                 <span class="aq-chip-status ${statusCls}">${statusText}</span>
+                <div><span class="aq-origin ${chip.fornecedor ? 'fornecedor' : 'proprio'}">${chip.fornecedor ? '🏪 Forn.' : '🔥 Próprio'}</span></div>
+                <div class="aq-chip-date">${created}</div>
                 <div class="aq-chip-actions">
-                    ${groupsBtn}
-                    ${connectBtn}
-                    <button class="btn btn-ghost btn-xs" onclick="deleteAquecido(${chip.id})" title="Remover">🗑</button>
+                    ${connBtns}
+                    ${connectBtns}
+                    <button class="aq-btn aq-btn-danger" onclick="deleteAquecido(${chip.id})" title="Excluir">🗑</button>
                 </div>
             </div>
             <div class="aq-chip-groups" id="aq-groups-${chip.id}" style="display:none"></div>`;
@@ -2421,6 +2440,72 @@ function connectAquecido(chipId, phone, mode) {
         _connectMode = 'qr';
         confirmChipName('qr');
     }
+}
+
+function importFromWarming() {
+    // Show chips from warming that are phase 4+ (finished warming)
+    fetch('/api/chips').then(r => r.json()).then(allChips => {
+        const ready = allChips.filter(c =>
+            c.phase >= 4 &&
+            (c.status === 'connected' || c.status === 'warming') &&
+            c.origin !== 'external_warmed' &&
+            c.phone
+        );
+        if (ready.length === 0) return showToast('Nenhum chip pronto pra importar (fase 4+)', 'warning');
+
+        const list = ready.map((c, i) => `${i + 1}. ${c.name || c.phone} (Fase ${c.phase})`).join('\n');
+        const clientTag = prompt(`${ready.length} chips prontos (fase 4+):\n\n${list}\n\nNome do cliente pra importar:`);
+        if (!clientTag) return;
+
+        fetch('/api/chips/import-warmed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chipIds: ready.map(c => c.id), clientTag })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`${data.imported} chips importados para "${clientTag}"!`, 'success');
+                loadChipsAquecidos();
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}
+
+function tagAquecido(chipId, currentTag) {
+    const newTag = prompt('Tag (ex: Contingencia, Achadinhos, Bot):', currentTag || '');
+    if (newTag === null) return;
+    fetch('/api/chips/' + chipId + '/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: newTag })
+    })
+    .then(r => r.json())
+    .then(() => { showToast('Tag atualizada', 'success'); loadChipsAquecidos(); })
+    .catch(err => showToast('Erro: ' + err.message, 'danger'));
+}
+
+function disconnectAquecido(chipId) {
+    if (!confirm('Desconectar este chip?')) return;
+    fetch('/api/chips/' + chipId + '/disconnect', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => { showToast('Chip desconectado', 'success'); loadChipsAquecidos(); })
+    .catch(err => showToast('Erro: ' + err.message, 'danger'));
+}
+
+function renameAquecido(chipId, currentName) {
+    const newName = prompt('Novo nome:', currentName || '');
+    if (newName === null || newName === currentName) return;
+    fetch('/api/chips/' + chipId + '/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+    })
+    .then(r => r.json())
+    .then(() => { showToast('Nome atualizado', 'success'); loadChipsAquecidos(); })
+    .catch(err => showToast('Erro: ' + err.message, 'danger'));
 }
 
 function deleteAquecido(chipId) {
