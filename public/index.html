@@ -698,18 +698,21 @@
         <!-- TAB: CHIPS AQUECIDOS -->
         <div id="tab-aquecidos" class="tab-content">
             <div class="section-header">
-                <h2>Chips Aquecidos</h2>
+                <h2>🔥 Chips Aquecidos</h2>
                 <div style="display:flex;gap:8px">
                     <button class="btn btn-primary btn-sm" onclick="toggleCadastroAquecidos()">+ Cadastrar Novos</button>
                     <button class="btn btn-outline btn-sm" onclick="loadChipsAquecidos()">↻ Atualizar</button>
                 </div>
             </div>
 
-            <!-- CADASTRO -->
+            <!-- STATS -->
+            <div class="aq-stats" id="aq-stats"></div>
+
+            <!-- CADASTRO (toggle) -->
             <div id="cadastro-aquecidos" class="cadastro-aquecidos" style="display:none">
                 <div class="cadastro-card">
                     <div class="cadastro-header">
-                        <h3>📱 Cadastrar Chips Aquecidos (do Fornecedor)</h3>
+                        <h3>📱 Cadastrar Chips do Fornecedor</h3>
                         <button class="btn btn-ghost btn-sm" onclick="toggleCadastroAquecidos()">✕</button>
                     </div>
                     <div class="cadastro-body">
@@ -725,19 +728,19 @@
                             </div>
                             <div class="cadastro-field">
                                 <label>Fornecedor (opcional)</label>
-                                <input type="text" id="cad-fornecedor" class="input-sm" placeholder="Nome do fornecedor">
+                                <input type="text" id="cad-fornecedor" class="input-sm" placeholder="Ex: Mario, Ze Chips...">
                             </div>
                         </div>
                         <div class="cadastro-field">
                             <label>Numeros (um por linha)</label>
-                            <textarea id="cad-numbers" rows="8" class="cadastro-textarea" placeholder="62 98223 9695&#10;62 98219 6031&#10;62 98223 6773&#10;&#10;Cole os numeros do papel aqui..."></textarea>
+                            <textarea id="cad-numbers" rows="10" class="cadastro-textarea" placeholder="62 98223 9695&#10;62 98219 6031&#10;62 98223 6773&#10;62 98209 6890&#10;62 98223 6607&#10;&#10;Cole todos os numeros do papel aqui...&#10;Aceita qualquer formato!"></textarea>
                             <div class="cadastro-hint">
                                 <span id="cad-count">0 numeros detectados</span>
-                                <span>Aceita qualquer formato: com DDD, com espacos ou tracos</span>
+                                <span>Qualquer formato: (62) 98223-9695, +5562982239695, 62 98223 9695</span>
                             </div>
                         </div>
                         <div class="cadastro-actions">
-                            <button class="btn btn-success" onclick="cadastrarChipsAquecidos()">📱 Cadastrar Chips</button>
+                            <button class="btn btn-success" onclick="cadastrarChipsAquecidos()" style="padding:10px 24px;font-size:14px">📱 Cadastrar Chips</button>
                             <span id="cad-status" class="cadastro-status"></span>
                         </div>
                     </div>
@@ -745,11 +748,12 @@
             </div>
 
             <!-- FILTROS -->
-            <div class="aquecidos-filters" id="aquecidos-filters">
-                <select id="aquecidos-filter-client" class="ga-select" style="width:200px" onchange="loadChipsAquecidos()">
+            <div class="aq-toolbar">
+                <select id="aquecidos-filter-client" class="ga-select" style="width:220px" onchange="loadChipsAquecidos()">
                     <option value="">Todos os clientes</option>
                 </select>
-                <span id="aquecidos-total" style="font-size:13px;color:var(--text-muted)"></span>
+                <input type="text" id="aq-search" class="ga-search" placeholder="Buscar numero..." oninput="filterAquecidosList()" style="flex:1;max-width:300px">
+                <span id="aquecidos-total" class="aq-total-badge"></span>
             </div>
 
             <!-- LISTA -->

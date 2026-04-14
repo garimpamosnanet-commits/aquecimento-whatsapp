@@ -1939,67 +1939,118 @@ function cadastrarChipsAquecidos() {
     });
 }
 
+let _aqAllWarmed = [];
+
 function loadChipsAquecidos() {
     loadClientTagsForCadastro();
 
-    // Get all chips and filter external_warmed
     fetch('/api/chips').then(r => r.json()).then(allChips => {
-        const clientFilter = document.getElementById('aquecidos-filter-client')?.value || '';
-        let warmed = allChips.filter(c => c.origin === 'external_warmed');
-        if (clientFilter) warmed = warmed.filter(c => c.client_tag === clientFilter);
-
-        const container = document.getElementById('aquecidos-list-container');
-        const totalEl = document.getElementById('aquecidos-total');
-        if (totalEl) totalEl.textContent = warmed.length + ' chips aquecidos';
-
-        if (warmed.length === 0) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔥</div><h3>Nenhum chip aquecido cadastrado</h3><p>Clique em "+ Cadastrar Novos" para registrar chips comprados do fornecedor</p></div>`;
-            return;
-        }
-
-        // Group by client_tag
-        const byClient = {};
-        for (const chip of warmed) {
-            const tag = chip.client_tag || 'Sem cliente';
-            if (!byClient[tag]) byClient[tag] = [];
-            byClient[tag].push(chip);
-        }
-
-        let html = '<div class="aquecidos-grid">';
-        for (const [client, clientChips] of Object.entries(byClient)) {
-            const connected = clientChips.filter(c => c.status === 'connected' || c.status === 'warming').length;
-            html += `<div class="aquecidos-client-group">
-                <div class="aquecidos-client-header">
-                    <span class="aquecidos-client-name">👤 ${client}</span>
-                    <span class="aquecidos-client-stats">${clientChips.length} chips · ${connected} conectados</span>
-                </div>
-                <div class="aquecidos-chip-list">`;
-
-            for (const chip of clientChips) {
-                const isConn = chip.status === 'connected' || chip.status === 'warming';
-                const statusDot = isConn ? '🟢' : '⚪';
-                const statusText = isConn ? 'Conectado' : 'Nao conectado';
-                const fornText = chip.fornecedor ? ' · 🏪 ' + chip.fornecedor : '';
-                html += `<div class="aquecidos-chip-item">
-                    <span class="aquecidos-chip-phone">${statusDot} ${chip.phone || '—'}</span>
-                    <span class="aquecidos-chip-meta">${statusText}${fornText}</span>
-                    <button class="btn btn-ghost btn-xs" onclick="deleteAquecido(${chip.id})" title="Remover">🗑</button>
-                </div>`;
-            }
-
-            html += '</div></div>';
-        }
-        html += '</div>';
-        container.innerHTML = html;
+        _aqAllWarmed = allChips.filter(c => c.origin === 'external_warmed');
+        renderAqStats();
+        renderAqList();
     });
 }
+
+function renderAqStats() {
+    const el = document.getElementById('aq-stats');
+    if (!el) return;
+    const total = _aqAllWarmed.length;
+    const connected = _aqAllWarmed.filter(c => c.status === 'connected' || c.status === 'warming').length;
+    const clients = new Set(_aqAllWarmed.map(c => c.client_tag).filter(Boolean)).size;
+    const pending = total - connected;
+
+    if (total === 0) { el.innerHTML = ''; return; }
+
+    el.innerHTML = `
+        <div class="aq-stat accent"><div class="aq-stat-value">${total}</div><div class="aq-stat-label">Total Aquecidos</div></div>
+        <div class="aq-stat success"><div class="aq-stat-value">${connected}</div><div class="aq-stat-label">Conectados</div></div>
+        <div class="aq-stat warning"><div class="aq-stat-value">${pending}</div><div class="aq-stat-label">Aguardando Conexao</div></div>
+        <div class="aq-stat"><div class="aq-stat-value">${clients}</div><div class="aq-stat-label">Clientes</div></div>
+    `;
+}
+
+function renderAqList() {
+    const clientFilter = document.getElementById('aquecidos-filter-client')?.value || '';
+    const search = (document.getElementById('aq-search')?.value || '').toLowerCase();
+    let warmed = _aqAllWarmed;
+    if (clientFilter) warmed = warmed.filter(c => c.client_tag === clientFilter);
+    if (search) warmed = warmed.filter(c => (c.phone || '').includes(search) || (c.name || '').toLowerCase().includes(search));
+
+    const container = document.getElementById('aquecidos-list-container');
+    const totalEl = document.getElementById('aquecidos-total');
+    if (totalEl) totalEl.textContent = warmed.length + ' chip' + (warmed.length !== 1 ? 's' : '');
+
+    if (warmed.length === 0 && _aqAllWarmed.length === 0) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔥</div><h3>Nenhum chip aquecido cadastrado</h3><p>Clique em "+ Cadastrar Novos" para registrar chips comprados do fornecedor</p></div>`;
+        return;
+    }
+    if (warmed.length === 0) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><h3>Nenhum resultado</h3><p>Tente outro filtro</p></div>`;
+        return;
+    }
+
+    // Group by client_tag
+    const byClient = {};
+    for (const chip of warmed) {
+        const tag = chip.client_tag || 'Sem cliente';
+        if (!byClient[tag]) byClient[tag] = [];
+        byClient[tag].push(chip);
+    }
+
+    let html = '<div class="aq-grid">';
+    for (const [client, clientChips] of Object.entries(byClient).sort((a, b) => a[0].localeCompare(b[0]))) {
+        const connected = clientChips.filter(c => c.status === 'connected' || c.status === 'warming').length;
+        const fornecedores = [...new Set(clientChips.map(c => c.fornecedor).filter(Boolean))];
+
+        html += `<div class="aq-client-group">
+            <div class="aq-client-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                <div class="aq-client-left">
+                    <span class="aq-client-name">👤 ${client}</span>
+                    <span class="aq-client-badge">${clientChips.length} chips</span>
+                </div>
+                <div class="aq-client-right">
+                    ${fornecedores.length > 0 ? '<span class="aq-client-stat">🏪 ' + fornecedores.join(', ') + '</span>' : ''}
+                    <span class="aq-client-stat"><strong>${connected}</strong>/${clientChips.length} conectados</span>
+                </div>
+            </div>
+            <div class="aq-chip-list">`;
+
+        for (const chip of clientChips.sort((a, b) => (a.phone || '').localeCompare(b.phone || ''))) {
+            const isConn = chip.status === 'connected' || chip.status === 'warming';
+            const dotCls = isConn ? 'on' : 'off';
+            const statusText = isConn ? 'Conectado' : 'Aguardando';
+            const statusCls = isConn ? 'connected' : 'disconnected';
+            const created = chip.created_at ? new Date(chip.created_at).toLocaleDateString('pt-BR') : '';
+
+            html += `<div class="aq-chip-row" data-phone="${chip.phone || ''}">
+                <div class="aq-chip-phone"><span class="aq-dot ${dotCls}"></span>${chip.phone || '—'}</div>
+                <div class="aq-chip-meta">
+                    ${chip.fornecedor ? '<span>🏪 ' + chip.fornecedor + '</span>' : ''}
+                    ${created ? '<span>📅 ' + created + '</span>' : ''}
+                </div>
+                <span class="aq-chip-status ${statusCls}">${statusText}</span>
+                <div class="aq-chip-actions">
+                    <button class="btn btn-ghost btn-xs" onclick="deleteAquecido(${chip.id})" title="Remover">🗑</button>
+                </div>
+            </div>`;
+        }
+
+        html += '</div></div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function filterAquecidosList() { renderAqList(); }
 
 function deleteAquecido(chipId) {
     if (!confirm('Remover este chip aquecido?')) return;
     fetch('/api/chips/' + chipId, { method: 'DELETE' })
     .then(r => r.json())
     .then(() => {
-        loadChipsAquecidos();
+        _aqAllWarmed = _aqAllWarmed.filter(c => c.id !== chipId);
+        renderAqStats();
+        renderAqList();
         showToast('Chip removido', 'success');
     });
 }
