@@ -2072,6 +2072,7 @@ let _gaLogItems = [];
 let _gaMode = 'invite_link';
 let _gaPreset = 'normal';
 let _gaPresets = {};
+let _gaGroupHistory = {}; // groupId -> { count, successCount, lastDate }
 
 function loadGroupAddTab() {
     loadAdminInstances();
@@ -2164,7 +2165,11 @@ function onAdminInstanceSelect() {
             panels.style.display = 'grid';
             if (modeSection) modeSection.style.display = 'block';
             gaLoadPresets();
-            renderGAGroups();
+            // Load group-add history
+            fetch('/api/group-add/group-history').then(r => r.json()).then(h => {
+                _gaGroupHistory = h;
+                renderGAGroups();
+            }).catch(() => renderGAGroups());
             renderGAChips();
         })
         .catch(err => {
@@ -2188,11 +2193,13 @@ function renderGAGroups() {
 
     list.innerHTML = filtered.map(g => {
         const checked = _gaSelectedGroups.has(g.id) ? 'checked' : '';
-        return `<label class="ga-item ${checked ? 'selected' : ''}">
+        const hist = _gaGroupHistory[g.id];
+        const doneBadge = hist ? `<span class="ga-done-badge" title="${hist.count} chips adicionados em ${hist.lastDate ? new Date(hist.lastDate).toLocaleDateString('pt-BR') : '?'}">✅ ${hist.count} adds</span>` : '';
+        return `<label class="ga-item ${checked ? 'selected' : ''} ${hist ? 'ga-item-done' : ''}">
             <input type="checkbox" ${checked} onchange="gaToggleGroup('${g.id}')">
             <div class="ga-item-info">
-                <div class="ga-item-name">${g.subject || 'Sem nome'}</div>
-                <div class="ga-item-meta">${g.size} participantes</div>
+                <div class="ga-item-name">${g.subject || 'Sem nome'} ${doneBadge}</div>
+                <div class="ga-item-meta">${g.size} participantes${hist ? ' · Ultimo: ' + new Date(hist.lastDate).toLocaleDateString('pt-BR') : ''}</div>
             </div>
         </label>`;
     }).join('');

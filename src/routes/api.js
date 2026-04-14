@@ -780,6 +780,31 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json(db.getChipsByClientTag(req.params.tag));
     });
 
+    // Get group-add history per group (which groups already had chips added)
+    router.get('/group-add/group-history', (req, res) => {
+        const ops = db.getAddOperations(100);
+        const groupStats = {}; // groupId -> { count, lastDate, successCount }
+
+        for (const op of ops) {
+            if (op.status !== 'completed' && op.status !== 'paused_daily' && op.status !== 'stopped') continue;
+            const items = db.getOperationItems(op.id);
+            for (const item of items) {
+                if (item.status === 'success' || item.status === 'skipped') {
+                    if (!groupStats[item.group_id]) {
+                        groupStats[item.group_id] = { count: 0, successCount: 0, groupName: item.group_name, lastDate: null };
+                    }
+                    groupStats[item.group_id].count++;
+                    if (item.status === 'success') groupStats[item.group_id].successCount++;
+                    const d = item.processed_at || op.completed_at;
+                    if (d && (!groupStats[item.group_id].lastDate || d > groupStats[item.group_id].lastDate)) {
+                        groupStats[item.group_id].lastDate = d;
+                    }
+                }
+            }
+        }
+        res.json(groupStats);
+    });
+
     // ==================== CADASTRO CHIPS AQUECIDOS ====================
 
     router.post('/chips/register-warmed', (req, res) => {
