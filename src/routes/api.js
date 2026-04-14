@@ -877,7 +877,9 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
             // Create new chip entry (no session, disconnected)
             const sessionId = `ext_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-            const chip = db.createChip(sessionId, '');
+            const last4 = phone.slice(-4);
+            const chipName = clientTag ? `${clientTag} - ${last4}` : last4;
+            const chip = db.createChip(sessionId, chipName);
             db.updateChipPhone(chip.id, phone);
             db.updateChipField(chip.id, 'origin', 'external_warmed');
             db.updateChipField(chip.id, 'phase', 4); // Already warmed

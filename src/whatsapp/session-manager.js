@@ -207,11 +207,9 @@ class SessionManager {
                         // Transfer metadata from registered chip to connected chip
                         if (extChip.client_tag) {
                             db.setChipClientTag(chip.id, extChip.client_tag);
-                            // Set chip name to client tag if no name set
-                            const currentName = db.getChipById(chip.id)?.name;
-                            if (!currentName || currentName.startsWith('Chip ')) {
-                                db.updateChipName(chip.id, extChip.client_tag);
-                            }
+                            // Set chip name: "ClientTag - last4digits"
+                            const last4 = phoneNumber.slice(-4);
+                            db.updateChipName(chip.id, `${extChip.client_tag} - ${last4}`);
                         }
                         if (extChip.fornecedor) db.updateChipField(chip.id, 'fornecedor', extChip.fornecedor);
                         if (extChip.folder_id) db.assignChipToFolder(chip.id, extChip.folder_id);

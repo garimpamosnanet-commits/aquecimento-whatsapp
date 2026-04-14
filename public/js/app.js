@@ -2097,7 +2097,8 @@ function showChipGroups(chipId, phone) {
 function connectAquecido(chipId, phone) {
     // Open QR modal and skip the name step — chip already has a name
     const chip = _aqAllWarmed.find(c => c.id === chipId);
-    const name = chip?.client_tag || phone || '';
+    const last4 = (phone || '').slice(-4);
+    const name = chip?.client_tag ? `${chip.client_tag} - ${last4}` : last4;
 
     document.getElementById('qr-modal').classList.add('active');
     document.getElementById('qr-step-name').style.display = 'none';
