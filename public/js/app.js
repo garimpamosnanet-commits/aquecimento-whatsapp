@@ -1944,8 +1944,32 @@ let _aqAllWarmed = [];
 function loadChipsAquecidos() {
     loadClientTagsForCadastro();
 
+    // Cleanup orphans first, then load
+    fetch('/api/chips/cleanup-orphans', { method: 'POST' }).catch(() => {});
+
     fetch('/api/chips').then(r => r.json()).then(allChips => {
-        _aqAllWarmed = allChips.filter(c => c.origin === 'external_warmed');
+        // Get external_warmed chips
+        let warmed = allChips.filter(c => c.origin === 'external_warmed');
+
+        // Also include connected chips that have client_tag but no origin
+        // (chips that were merged but origin wasn't set)
+        const warmedPhones = new Set(warmed.map(c => c.phone));
+        for (const c of allChips) {
+            if (c.client_tag && !warmedPhones.has(c.phone) && c.origin !== 'external_warmed') {
+                // Skip — only show external_warmed
+            }
+        }
+
+        // Deduplicate by phone: if same phone exists as connected + disconnected, keep connected
+        const byPhone = {};
+        for (const c of warmed) {
+            if (!c.phone) continue;
+            if (!byPhone[c.phone] || (c.status === 'connected' || c.status === 'warming')) {
+                byPhone[c.phone] = c;
+            }
+        }
+        _aqAllWarmed = Object.values(byPhone);
+
         renderAqStats();
         renderAqList();
     });

@@ -805,6 +805,37 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json(groupStats);
     });
 
+    // Cleanup: merge orphaned external_warmed chips with connected chips
+    router.post('/chips/cleanup-orphans', (req, res) => {
+        const allChips = db.getAllChips();
+        const extChips = allChips.filter(c => c.origin === 'external_warmed' && (c.status === 'disconnected' || c.session_id?.startsWith('ext_')));
+        let cleaned = 0;
+
+        for (const ext of extChips) {
+            if (!ext.phone) continue;
+            // Find a connected chip with the same phone
+            const connected = allChips.find(c => c.id !== ext.id && c.phone === ext.phone && (c.status === 'connected' || c.status === 'warming'));
+            if (connected) {
+                // Transfer metadata to connected chip
+                if (ext.client_tag && !connected.client_tag) db.setChipClientTag(connected.id, ext.client_tag);
+                if (ext.fornecedor && !connected.fornecedor) db.updateChipField(connected.id, 'fornecedor', ext.fornecedor);
+                if (ext.folder_id && !connected.folder_id) db.assignChipToFolder(connected.id, ext.folder_id);
+                if (!connected.origin) db.updateChipField(connected.id, 'origin', 'external_warmed');
+                // Fix name
+                const last4 = ext.phone.slice(-4);
+                const label = ext.client_tag || (ext.folder_id ? (db.getAllFolders().find(f => f.id === ext.folder_id)?.name || '') : '');
+                if (label && (!connected.name || connected.name.startsWith('Chip '))) {
+                    db.updateChipName(connected.id, `${label} - ${last4}`);
+                }
+                // Delete orphan
+                db.deleteChip(ext.id);
+                cleaned++;
+            }
+        }
+        sessionManager.emitStats();
+        res.json({ success: true, cleaned, remaining: db.getAllChips().filter(c => c.origin === 'external_warmed').length });
+    });
+
     // Get groups a chip is member of
     router.get('/chips/:id/groups', async (req, res) => {
         const chipId = parseInt(req.params.id);

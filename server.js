@@ -167,6 +167,39 @@ server.listen(PORT, async () => {
         }
     }
 
+    // Cleanup: release proxies from disconnected chips
+    const allChips = db.getAllChips();
+    let proxyFreed = 0;
+    for (const chip of allChips) {
+        if ((chip.status === 'disconnected' || chip.status === 'discarded') && chip.proxy_id) {
+            db.releaseProxy(chip.id);
+            proxyFreed++;
+        }
+    }
+    if (proxyFreed > 0) console.log(`[Recovery] ${proxyFreed} proxies liberados de chips desconectados`);
+
+    // Cleanup: merge orphan external_warmed chips
+    const extChips = allChips.filter(c => c.origin === 'external_warmed' && c.session_id?.startsWith('ext_'));
+    let merged = 0;
+    for (const ext of extChips) {
+        if (!ext.phone) continue;
+        const connected = allChips.find(c => c.id !== ext.id && c.phone === ext.phone && (c.status === 'connected' || c.status === 'warming'));
+        if (connected) {
+            if (ext.client_tag && !connected.client_tag) db.setChipClientTag(connected.id, ext.client_tag);
+            if (ext.fornecedor) db.updateChipField(connected.id, 'fornecedor', ext.fornecedor);
+            if (ext.folder_id && !connected.folder_id) db.assignChipToFolder(connected.id, ext.folder_id);
+            db.updateChipField(connected.id, 'origin', 'external_warmed');
+            const last4 = ext.phone.slice(-4);
+            const label = ext.client_tag || '';
+            if (label && (!connected.name || connected.name.startsWith('Chip '))) {
+                db.updateChipName(connected.id, `${label} - ${last4}`);
+            }
+            db.deleteChip(ext.id);
+            merged++;
+        }
+    }
+    if (merged > 0) console.log(`[Recovery] ${merged} chips orfaos merged com chips conectados`);
+
     // Reconnect existing sessions
     await sessionManager.initialize();
     console.log('[Sessions] Sessoes reconectadas');
