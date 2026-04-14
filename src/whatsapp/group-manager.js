@@ -308,11 +308,23 @@ class GroupManager {
                 if (chipSock?.user) {
                     const myGroups = await chipSock.groupFetchAllParticipating();
                     if (myGroups[groupId]) {
+                        // Check if already admin in this group
+                        const myId = chipSock.user.id.split(':')[0];
+                        const myParticipant = (myGroups[groupId].participants || []).find(
+                            p => p.id.split(':')[0] === myId || p.id.split('@')[0] === myId
+                        );
+                        const alreadyAdmin = myParticipant?.admin === 'admin' || myParticipant?.admin === 'superadmin';
+
+                        if (alreadyAdmin) {
+                            callbacks.onLog({ type: 'skip', message: `${phone} ja e membro E admin de "${groupName}" — pulando` });
+                            return { status: 'skipped', adminPromoted: 1 };
+                        }
+
                         if (!shouldPromote) {
-                            callbacks.onLog({ type: 'skip', message: `${phone} ja esta no grupo "${groupName}" — pulando` });
+                            callbacks.onLog({ type: 'skip', message: `${phone} ja esta no grupo "${groupName}" — pulando (sem promover)` });
                             return { status: 'skipped', adminPromoted: 0 };
                         } else {
-                            callbacks.onLog({ type: 'info', message: `${phone} ja esta no grupo "${groupName}" — promovendo a admin` });
+                            callbacks.onLog({ type: 'info', message: `${phone} ja esta no grupo "${groupName}" mas NAO e admin — promovendo` });
                             const pDelay = this._random(promoteDelayMin, promoteDelayMax);
                             if (pDelay > 5000) await this._delayWithCountdown(pDelay, 'Promovendo a admin');
                             else await this._delay(pDelay);

@@ -2095,10 +2095,20 @@ function showChipGroups(chipId, phone) {
 }
 
 function connectAquecido(chipId, phone) {
-    // Open the QR modal — the chip will be connected as a new session
-    // After connection, the phone number will match and we can link them
-    showToast('Abra o WhatsApp no chip ' + phone + ' e escaneie o QR Code', 'info');
-    openQRModal();
+    // Open QR modal and skip the name step — chip already has a name
+    const chip = _aqAllWarmed.find(c => c.id === chipId);
+    const name = chip?.client_tag || phone || '';
+
+    document.getElementById('qr-modal').classList.add('active');
+    document.getElementById('qr-step-name').style.display = 'none';
+    document.getElementById('qr-step-scan').style.display = 'none';
+    document.getElementById('qr-step-phone').style.display = 'none';
+    document.getElementById('chip-name-input').value = name;
+    currentQRSessionId = null;
+    _connectMode = 'qr';
+
+    // Go straight to creating session + showing QR
+    confirmChipName('qr');
 }
 
 function deleteAquecido(chipId) {
