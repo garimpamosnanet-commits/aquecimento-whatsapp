@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KS Digital — Command Center</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260413h">
+    <link rel="stylesheet" href="/css/style.css?v=20260413i">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -396,6 +396,9 @@
                             <button class="btn btn-outline btn-xs" onclick="gaDeselectAllChips()">Nenhum</button>
                         </div>
                     </div>
+                    <select id="ga-chips-folder-filter" class="ga-select" style="margin:8px 0;font-size:12px" onchange="renderGAChips()">
+                        <option value="">Todas as pastas</option>
+                    </select>
                     <div id="ga-chips-list" class="ga-list"></div>
                     <div class="ga-manual-section">
                         <label class="ga-label-sm">Numeros manuais (um por linha)</label>
@@ -863,6 +866,6 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js?v=20260413h"></script>
+<script src="/js/app.js?v=20260413i"></script>
 </body>
 </html>

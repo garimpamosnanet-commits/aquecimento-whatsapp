@@ -2295,18 +2295,45 @@ function renderGAChips() {
     const list = document.getElementById('ga-chips-list');
     if (!list) return;
 
-    if (_gaWarmingChips.length === 0) {
-        list.innerHTML = '<div class="ga-empty">Nenhum chip em aquecimento com numero</div>';
+    // Populate folder filter
+    const filterEl = document.getElementById('ga-chips-folder-filter');
+    if (filterEl && filterEl.options.length <= 1) {
+        const folderSet = new Set();
+        for (const c of _gaWarmingChips) {
+            if (c.folder_id) {
+                const f = folders.find(f => f.id === c.folder_id);
+                if (f) folderSet.add(JSON.stringify({ id: f.id, name: f.name }));
+            }
+        }
+        for (const fJson of [...folderSet].sort()) {
+            const f = JSON.parse(fJson);
+            const opt = document.createElement('option');
+            opt.value = f.id;
+            opt.textContent = '📁 ' + f.name;
+            filterEl.appendChild(opt);
+        }
+    }
+
+    // Filter by folder
+    const folderFilter = parseInt(document.getElementById('ga-chips-folder-filter')?.value) || 0;
+    let filtered = _gaWarmingChips;
+    if (folderFilter) {
+        filtered = _gaWarmingChips.filter(c => c.folder_id === folderFilter);
+    }
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="ga-empty">Nenhum chip' + (folderFilter ? ' nesta pasta' : ' em aquecimento com numero') + '</div>';
         return;
     }
 
-    list.innerHTML = _gaWarmingChips.map(c => {
+    list.innerHTML = filtered.map(c => {
         const checked = _gaSelectedChips.has(c.id) ? 'checked' : '';
         const statusLabel = getStatusLabel(c.status);
+        const folderName = c.folder_id ? (folders.find(f => f.id === c.folder_id)?.name || '') : '';
         return `<label class="ga-item ${checked ? 'selected' : ''}">
             <input type="checkbox" ${checked} onchange="gaToggleChip(${c.id})">
             <div class="ga-item-info">
-                <div class="ga-item-name">${c.name || 'Chip ' + c.id}</div>
+                <div class="ga-item-name">${c.name || 'Chip ' + c.id}${folderName && !folderFilter ? ' <span style="font-size:10px;color:var(--text-muted)">📁' + folderName + '</span>' : ''}</div>
                 <div class="ga-item-meta">${c.phone} · Fase ${c.phase} · ${statusLabel}</div>
             </div>
         </label>`;
@@ -2325,7 +2352,9 @@ function gaToggleChip(chipId) {
 }
 
 function gaSelectAllChips() {
-    for (const c of _gaWarmingChips) _gaSelectedChips.add(c.id);
+    const folderFilter = parseInt(document.getElementById('ga-chips-folder-filter')?.value) || 0;
+    const filtered = folderFilter ? _gaWarmingChips.filter(c => c.folder_id === folderFilter) : _gaWarmingChips;
+    for (const c of filtered) _gaSelectedChips.add(c.id);
     renderGAChips();
 }
 
