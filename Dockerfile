@@ -13,6 +13,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --production
 
+COPY BUILD_VERSION /tmp/build_version
 COPY . .
 
 RUN mkdir -p sessions data media/audios media/images media/stickers
