@@ -194,6 +194,25 @@ class SessionManager {
                 const phoneNumber = socket.user?.id?.split(':')[0] || socket.user?.id?.split('@')[0];
                 if (phoneNumber) {
                     db.updateChipPhone(chip.id, phoneNumber);
+
+                    // Merge with pre-registered external_warmed chip (if exists)
+                    const allChips = db.getAllChips();
+                    const extChip = allChips.find(c =>
+                        c.id !== chip.id &&
+                        c.phone === phoneNumber &&
+                        c.origin === 'external_warmed'
+                    );
+                    if (extChip) {
+                        debugLog(`[SessionManager] Merge: chip ${chip.id} matched external_warmed chip ${extChip.id} (${phoneNumber})`);
+                        // Transfer metadata from registered chip to connected chip
+                        if (extChip.client_tag) db.setChipClientTag(chip.id, extChip.client_tag);
+                        if (extChip.fornecedor) db.updateChipField(chip.id, 'fornecedor', extChip.fornecedor);
+                        if (extChip.folder_id) db.assignChipToFolder(chip.id, extChip.folder_id);
+                        db.updateChipField(chip.id, 'origin', 'external_warmed');
+                        // Delete the orphan registered chip
+                        db.deleteChip(extChip.id);
+                        debugLog(`[SessionManager] Merge completo: chip ${extChip.id} removido, metadata transferida para ${chip.id}`);
+                    }
                 }
 
                 // Get push name (only if user hasn't set a custom name)
