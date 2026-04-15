@@ -345,6 +345,12 @@ class GroupManager {
 
             callbacks.onLog({ type: 'info', message: `${phone} entrando no grupo "${groupName}" via link de convite...` });
             addResult = await this.joinViaInviteLink(options.chipSessionId, options.inviteCode, groupName);
+
+            // Fallback: if invite link forbidden, try admin add
+            if (!addResult.success && !addResult.alreadyMember && addResult.error && (addResult.error.includes('forbidden') || addResult.error.includes('restrito') || addResult.error.includes('not-authorized'))) {
+                callbacks.onLog({ type: 'warning', message: `Link bloqueado em "${groupName}" — tentando via admin...` });
+                addResult = await this.addToGroup(adminSessionId, groupId, jid);
+            }
         } else {
             // ADMIN ADD MODE (legado): admin adiciona
             addResult = await this.addToGroup(adminSessionId, groupId, jid);
