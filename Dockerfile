@@ -13,8 +13,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --production
 
-COPY BUILD_VERSION /tmp/build_version
-COPY . .
+# Force no-cache from here — any file change invalidates
+ADD . .
 
 RUN mkdir -p sessions data media/audios media/images media/stickers
 
