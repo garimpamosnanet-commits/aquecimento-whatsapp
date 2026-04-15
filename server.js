@@ -55,6 +55,9 @@ function isAuthenticated(req) {
     return true;
 }
 
+// Share io with routes
+app.set('io', io);
+
 // Middleware
 app.use(express.json());
 
@@ -134,6 +137,7 @@ io.use((socket, next) => {
     const cookies = parseCookies(cookieHeader);
     const token = cookies.auth_token;
     if (token && sessions.has(token) && sessions.get(token).expiry > Date.now()) {
+        socket.userName = sessions.get(token).name;
         return next();
     }
     next(new Error('Nao autorizado'));

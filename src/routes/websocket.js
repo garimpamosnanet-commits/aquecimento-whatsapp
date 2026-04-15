@@ -1,8 +1,35 @@
 module.exports = function(io, sessionManager, warmingEngine, groupManager, adminManager) {
 
+    // Track online users
+    const onlineUsers = new Map(); // socketId -> { name, connectedAt }
+
+    function broadcastOnlineUsers() {
+        const users = [];
+        for (const [sid, u] of onlineUsers) {
+            if (!users.find(x => x.name === u.name)) users.push({ name: u.name, since: u.connectedAt });
+        }
+        io.emit('online_users', users);
+    }
+
+    function broadcastUserAction(userName, action, details) {
+        io.emit('user_action', { user: userName, action, details, timestamp: new Date().toISOString() });
+    }
+
     io.on('connection', (socket) => {
-        console.log('[WebSocket] Cliente conectado');
+        const userName = socket.userName || 'Desconhecido';
+        console.log(`[WebSocket] ${userName} conectado`);
         const db = require('../database/db');
+
+        // Track online user
+        onlineUsers.set(socket.id, { name: userName, connectedAt: new Date().toISOString() });
+        broadcastOnlineUsers();
+        broadcastUserAction(userName, 'login', 'Entrou na plataforma');
+
+        socket.on('disconnect', () => {
+            onlineUsers.delete(socket.id);
+            broadcastOnlineUsers();
+            console.log(`[WebSocket] ${userName} desconectou`);
+        });
 
         // Send initial data (with proxy info)
         socket.emit('stats', db.getChipStats());
@@ -18,6 +45,7 @@ module.exports = function(io, sessionManager, warmingEngine, groupManager, admin
             try {
                 const { name } = data || {};
                 console.log(`[WS] request_qr recebido (nome: ${name || 'vazio'})`);
+                broadcastUserAction(userName, 'connect_chip', `Conectando chip "${name || 'novo'}"`);
                 await sessionManager.createSession(name || '');
             } catch (err) {
                 console.log(`[WS] request_qr ERRO: ${err.message}`);

@@ -43,6 +43,39 @@ socket.on('connect_error', (err) => {
     console.error('[KS] Socket.IO ERRO de conexao:', err.message);
 });
 
+// ==================== ONLINE USERS & USER ACTIONS ====================
+
+socket.on('online_users', (users) => {
+    const el = document.getElementById('online-users');
+    if (!el) return;
+    el.innerHTML = users.map(u =>
+        `<span class="online-user-dot"></span><span class="online-user-name">${u.name}</span>`
+    ).join(' ');
+});
+
+socket.on('user_action', (data) => {
+    // Show toast for other users' actions
+    let container = document.getElementById('user-action-toast');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'user-action-toast';
+        container.className = 'user-action-toast';
+        document.body.appendChild(container);
+    }
+
+    const time = new Date(data.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const item = document.createElement('div');
+    item.className = 'user-action-item';
+    item.innerHTML = `<span class="ua-user">${data.user}</span> <span class="ua-text">${data.details}</span> <span class="ua-time">${time}</span>`;
+    container.appendChild(item);
+
+    // Auto-remove after 8s
+    setTimeout(() => { item.remove(); }, 8000);
+
+    // Also add to live feed
+    addFeedItem(data.user, data.details, null, 'system');
+});
+
 socket.on('disconnect', (reason) => {
     console.warn('[KS] Socket.IO DESCONECTADO:', reason);
 });

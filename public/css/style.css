@@ -1696,6 +1696,41 @@ body::before {
     border-left: 3px solid rgba(34,197,94,0.3);
 }
 
+/* Online Users Indicator */
+.online-users {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; color: var(--text-secondary);
+}
+.online-user-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--success); display: inline-block;
+    animation: aqPulse 2s infinite;
+}
+.online-user-name {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(34,197,94,0.1); color: #16a34a; font-weight: 600;
+}
+
+/* User Action Toast */
+.user-action-toast {
+    position: fixed; bottom: 20px; left: 20px; z-index: 9999;
+    max-width: 350px;
+}
+.user-action-item {
+    padding: 8px 14px; margin-bottom: 6px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px;
+    font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    animation: slideInLeft 0.3s ease;
+}
+.user-action-item .ua-user { font-weight: 700; color: var(--accent); }
+.user-action-item .ua-text { color: var(--text-secondary); }
+.user-action-item .ua-time { color: var(--text-muted); font-size: 10px; }
+@keyframes slideInLeft {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
 /* Cadastro Chips Aquecidos */
 .cadastro-aquecidos { margin-bottom: 20px; }
 .cadastro-card {

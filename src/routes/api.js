@@ -22,6 +22,11 @@ const upload = multer({ storage: mediaStorage, limits: { fileSize: 10 * 1024 * 1
 
 module.exports = function(sessionManager, warmingEngine, groupManager, adminManager) {
 
+    function emitUserAction(req, action, details) {
+        const io = req.app.get('io');
+        if (io) io.emit('user_action', { user: req.userName || '?', action, details, timestamp: new Date().toISOString() });
+    }
+
     // ==================== DEBUG ====================
     router.get('/debug/logs', (req, res) => {
         const logs = sessionManager.getDebugLogs();
@@ -624,6 +629,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             console.error('[GroupAdd] Erro:', err);
         });
 
+        emitUserAction(req, 'group_add_start', `Iniciou adicao: ${items.length} chips em ${groups.length} grupos`);
         res.json({ success: true, operationId: operation.id, totalItems: items.length });
     });
 
@@ -1176,6 +1182,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
 
         sessionManager.emitStats();
+        emitUserAction(req, 'activate_warming', `Ativou aquecimento: ${activated} chips em ${addedToGroups} grupos`);
         res.json({ success: true, activated, addedToGroups, totalGroups: warmingGroups.length });
     });
 
@@ -1255,6 +1262,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
 
         sessionManager.emitStats();
+        emitUserAction(req, 'register_chips', `Cadastrou ${registered.length} chips para "${clientTag}"`);
         res.json({ success: true, registered, total: registered.length, folderId, folderName: clientTag });
     });
 
