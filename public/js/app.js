@@ -1,5 +1,11 @@
 // ==================== KS DIGITAL — COMMAND CENTER ====================
 console.log('[KS] App.js carregado v2');
+
+// ==================== ESCAPE HTML (XSS prevention) ====================
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 const socket = io();
 let chips = [];
 let folders = [];
@@ -2162,14 +2168,12 @@ function promoteMissingForChip(chipId) {
     window._pendingMissingScanData = data;
     window._pendingPromoteAdmin = true; // Flag to check promote
 
-    switchTab('groupadd');
-    const admSelect = document.getElementById('ga-admin-select');
+    // Store ADM ID for deferred selection (loadAdminInstances will pick it up)
     const scanAdmId = document.getElementById('aq-scan-adm')?.value;
-    if (admSelect && scanAdmId) {
-        admSelect.value = scanAdmId;
-        onAdminInstanceSelect();
-        showToast(`Promovendo ${chip.name} a admin em ${memberOnly.length} grupos...`, 'info');
-    }
+    if (scanAdmId) window._pendingScanAdmId = scanAdmId;
+
+    switchTab('groupadd');
+    showToast(`Promovendo ${chip.name} a admin em ${memberOnly.length} grupos...`, 'info');
 }
 
 function addMissingForChip(chipId) {
@@ -2181,21 +2185,18 @@ function addMissingForChip(chipId) {
 
     const missingGroupIds = new Set(chip.missingGroups.map(g => g.groupId));
 
-    // Store pending selection
+    // Store pending selection (consumed by onAdminInstanceSelect after groups load)
     window._pendingMissingGroups = missingGroupIds;
     window._pendingMissingChips = new Set([chipId]);
     window._pendingMissingScanData = data;
 
-    // Switch to add tab
-    switchTab('groupadd');
-
-    const admSelect = document.getElementById('ga-admin-select');
+    // Store ADM ID for deferred selection (loadAdminInstances will pick it up)
     const scanAdmId = document.getElementById('aq-scan-adm')?.value;
-    if (admSelect && scanAdmId) {
-        admSelect.value = scanAdmId;
-        onAdminInstanceSelect();
-        showToast(`Carregando ${chip.missing} grupos faltantes de ${chip.name}...`, 'info');
-    }
+    if (scanAdmId) window._pendingScanAdmId = scanAdmId;
+
+    // Switch to add tab — loadAdminInstances() will handle admin selection
+    switchTab('groupadd');
+    showToast(`Carregando ${chip.missing} grupos faltantes de ${chip.name}...`, 'info');
 }
 
 function toggleScanDetail(id) {
@@ -2221,24 +2222,18 @@ function goToAddMissing() {
 
     if (missingGroupIds.size === 0) return showToast('Nenhum grupo faltante!', 'success');
 
-    // Switch to Adicionar aos Grupos tab
-    switchTab('groupadd');
+    // Store what needs to be pre-selected (consumed by onAdminInstanceSelect after groups load)
+    window._pendingMissingGroups = missingGroupIds;
+    window._pendingMissingChips = missingChipIds;
+    window._pendingMissingScanData = data;
 
-    // Pre-select ADM (same as scan)
-    const admSelect = document.getElementById('ga-admin-select');
+    // Store ADM ID for deferred selection (loadAdminInstances will pick it up)
     const scanAdmId = document.getElementById('aq-scan-adm')?.value;
-    if (admSelect && scanAdmId) {
-        admSelect.value = scanAdmId;
+    if (scanAdmId) window._pendingScanAdmId = scanAdmId;
 
-        // Store what needs to be pre-selected
-        window._pendingMissingGroups = missingGroupIds;
-        window._pendingMissingChips = missingChipIds;
-        window._pendingMissingScanData = data;
-
-        // Trigger load groups
-        onAdminInstanceSelect();
-        showToast('Carregando grupos do ADM... aguarde', 'info');
-    }
+    // Switch to Adicionar aos Grupos tab — loadAdminInstances() will handle admin selection
+    switchTab('groupadd');
+    showToast('Carregando grupos do ADM... aguarde', 'info');
 }
 
 // ==================== LOAD CHIPS AQUECIDOS ====================
@@ -2716,6 +2711,23 @@ function loadAdminInstances() {
             select.appendChild(opt);
         }
         if (current) select.value = current;
+
+        // Handle deferred admin selection from scan flow
+        if (window._pendingScanAdmId) {
+            const admId = window._pendingScanAdmId;
+            delete window._pendingScanAdmId;
+            select.value = admId;
+            if (select.value === String(admId)) {
+                onAdminInstanceSelect();
+            } else {
+                // ADM not available — clean up pending data
+                delete window._pendingMissingGroups;
+                delete window._pendingMissingChips;
+                delete window._pendingMissingScanData;
+                delete window._pendingPromoteAdmin;
+                showToast('Instancia ADM da varredura nao disponivel', 'warning');
+            }
+        }
     });
 }
 
@@ -2755,7 +2767,13 @@ function onAdminInstanceSelect() {
             // Apply pending pre-selection from scan (if any)
             if (window._pendingMissingGroups) {
                 _gaSelectedGroups = new Set();
-                for (const gid of window._pendingMissingGroups) _gaSelectedGroups.add(gid);
+                const loadedGroupIds = new Set(_gaGroups.map(g => g.id));
+                for (const gid of window._pendingMissingGroups) {
+                    if (loadedGroupIds.has(gid)) _gaSelectedGroups.add(gid);
+                }
+                if (_gaSelectedGroups.size === 0) {
+                    showToast('Nenhum dos grupos faltantes foi encontrado neste ADM', 'warning');
+                }
 
                 _gaSelectedChips = new Set();
                 for (const cid of window._pendingMissingChips) _gaSelectedChips.add(cid);
@@ -2818,11 +2836,13 @@ function renderGAGroups() {
     list.innerHTML = filtered.map(g => {
         const checked = _gaSelectedGroups.has(g.id) ? 'checked' : '';
         const hist = _gaGroupHistory[g.id];
-        const doneBadge = hist ? `<span class="ga-done-badge" title="${hist.count} chips adicionados em ${hist.lastDate ? new Date(hist.lastDate).toLocaleDateString('pt-BR') : '?'}">✅ ${hist.count} adds</span>` : '';
+        const doneBadge = hist ? `<span class="ga-done-badge" title="${hist.count} chips adicionados em ${hist.lastDate ? new Date(hist.lastDate).toLocaleDateString('pt-BR') : '?'}">&#9989; ${hist.count} adds</span>` : '';
+        const safeName = escapeHtml(g.subject || 'Sem nome');
+        const safeId = escapeHtml(g.id);
         return `<label class="ga-item ${checked ? 'selected' : ''} ${hist ? 'ga-item-done' : ''}">
-            <input type="checkbox" ${checked} onchange="gaToggleGroup('${g.id}')">
+            <input type="checkbox" ${checked} onchange="gaToggleGroup('${safeId}')">
             <div class="ga-item-info">
-                <div class="ga-item-name">${g.subject || 'Sem nome'} ${doneBadge}</div>
+                <div class="ga-item-name">${safeName} ${doneBadge}</div>
                 <div class="ga-item-meta">${g.size} participantes${hist ? ' · Ultimo: ' + new Date(hist.lastDate).toLocaleDateString('pt-BR') : ''}</div>
             </div>
         </label>`;
@@ -3005,7 +3025,7 @@ function gaSetPreset(preset) {
 
 function updateGASummary() {
     const summaryEl = document.getElementById('ga-summary');
-    const groupCount = _gaSelectedGroups.size;
+    const groupCount = _gaGroups.filter(g => _gaSelectedGroups.has(g.id)).length;
     const chipCount = _gaSelectedChips.size;
     const manualText = (document.getElementById('ga-manual-numbers')?.value || '').trim();
     const manualCount = manualText ? manualText.split(/[\n,;]+/).filter(l => l.trim()).length : 0;
@@ -3102,6 +3122,11 @@ function gaStartOperation() {
     }
 
     const selectedGroups = _gaGroups.filter(g => _gaSelectedGroups.has(g.id));
+    if (selectedGroups.length === 0) {
+        _gaSelectedGroups.clear();
+        renderGAGroups();
+        return showToast('Nenhum grupo valido selecionado. Selecione novamente.', 'warning');
+    }
     const promoteAdmin = document.getElementById('ga-promote-admin')?.checked !== false;
     const config = {
         mode: _gaMode,
