@@ -2309,7 +2309,7 @@ function renderAqList() {
         html += `<div class="aq-client-group">
             <div class="aq-client-header">
                 <div class="aq-client-left" onclick="this.parentElement.nextElementSibling.style.display=this.parentElement.nextElementSibling.style.display==='none'?'block':'none'" style="cursor:pointer;flex:1">
-                    <span class="aq-client-name">👤 ${client}</span>
+                    <span class="aq-client-name">👤 ${client} <span class="aq-edit-btn" onclick="event.stopPropagation(); renameClient('${client.replace(/'/g, "\\'")}')" title="Editar nome do cliente">✏️</span></span>
                     <span class="aq-client-badge">${clientChips.length} chips</span>
                     ${warming > 0 ? '<span class="aq-client-warming">🔥 ' + warming + ' aquecendo</span>' : ''}
                 </div>
@@ -2449,6 +2449,26 @@ function connectAquecido(chipId, phone, mode) {
         _connectMode = 'qr';
         confirmChipName('qr');
     }
+}
+
+function renameClient(currentName) {
+    const newName = prompt('Novo nome do cliente:', currentName);
+    if (!newName || newName === currentName) return;
+    // Update client_tag on all chips with this client
+    const chipsToUpdate = _aqAllWarmed.filter(c => c.client_tag === currentName);
+    if (chipsToUpdate.length === 0) return;
+    fetch('/api/chips/bulk-client-tag', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chipIds: chipsToUpdate.map(c => c.id), clientTag: newName })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`Cliente renomeado: "${currentName}" → "${newName}"`, 'success');
+            loadChipsAquecidos();
+        }
+    });
 }
 
 function activateWarming(chipIds, clientName) {
