@@ -419,9 +419,36 @@
             <div id="ga-summary" class="ga-summary" style="display:none"></div>
 
             <!-- STEP 5: Running Operations (multiple) -->
-            <div id="ga-operations-container"></div>
+            <div id="ga-ops-wrapper" style="display:none">
+                <div class="ga-ops-header">
+                    <div class="ga-ops-header-left">
+                        <span class="ga-ops-icon">⚡</span>
+                        <span class="ga-ops-title">Operacoes em Andamento</span>
+                        <span class="ga-ops-badge" id="ga-ops-count">0</span>
+                    </div>
+                    <div class="ga-ops-header-right">
+                        <button class="btn btn-outline btn-xs" onclick="gaStopAllOps()">⏹ Parar Todas</button>
+                    </div>
+                </div>
+                <div id="ga-operations-container"></div>
+            </div>
 
-            <!-- Legacy (hidden, kept for backward compat) -->
+            <!-- Completed operations -->
+            <div id="ga-done-wrapper" style="display:none">
+                <div class="ga-ops-header ga-ops-header-done">
+                    <div class="ga-ops-header-left">
+                        <span class="ga-ops-icon">✅</span>
+                        <span class="ga-ops-title">Concluidas</span>
+                        <span class="ga-ops-badge ga-ops-badge-done" id="ga-done-count">0</span>
+                    </div>
+                    <div class="ga-ops-header-right">
+                        <button class="btn btn-outline btn-xs" onclick="gaClearDoneOps()">🗑 Limpar</button>
+                    </div>
+                </div>
+                <div id="ga-done-container"></div>
+            </div>
+
+            <!-- Legacy (hidden) -->
             <div id="ga-execution" style="display:none"></div>
             <div id="ga-report" class="ga-report" style="display:none"></div>
 

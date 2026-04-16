@@ -338,21 +338,44 @@ function renderChipCard(chip) {
 
 function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
     const count = folderChips.length;
-    const label = isUnassigned
-        ? `Conexoes Sem Pasta (${count} chip${count !== 1 ? 's' : ''})`
-        : `${folderName} (${count}/${count})`;
     const dropId = isUnassigned ? 'drop-none' : `drop-folder-${folderId}`;
     const dataFolder = isUnassigned ? 'null' : folderId;
     const folderKey = isUnassigned ? 'none' : folderId;
 
+    // Compute stats for subtitle
+    const connected = folderChips.filter(c => c.status === 'connected' || c.status === 'warming').length;
+    const warming = folderChips.filter(c => c.status === 'warming').length;
+    const disconnected = count - connected;
+    const title = isUnassigned ? 'Conexoes Sem Pasta' : escapeHtml(folderName);
+    const icon = isUnassigned ? '📂' : '📁';
+    const iconClass = isUnassigned ? 'unassigned' : 'client';
+
+    // Status bar widths
+    const connPct = count > 0 ? Math.round((connected - warming) / count * 100) : 0;
+    const warmPct = count > 0 ? Math.round(warming / count * 100) : 0;
+    const discPct = count > 0 ? (100 - connPct - warmPct) : 100;
+
     return `
     <div class="folder-section" id="${dropId}">
+        <div class="folder-status-bar">
+            <div class="fsb-segment fsb-connected" style="width:${connPct}%"></div>
+            <div class="fsb-segment fsb-warming" style="width:${warmPct}%"></div>
+            <div class="fsb-segment fsb-disconnected" style="width:${discPct}%"></div>
+        </div>
         <div class="folder-header" onclick="toggleFolder('${dropId}')">
             <div class="folder-header-left">
                 <span class="folder-toggle" id="toggle-${dropId}">▶</span>
-                <span class="folder-title">${isUnassigned ? '📂' : '📁'} ${label}</span>
-                ${getFolderSummaryHtml(folderKey)}
+                <div class="folder-icon ${iconClass}">${icon}</div>
+                <div class="folder-name-block">
+                    <span class="folder-title">${title}</span>
+                    <div class="folder-subtitle">
+                        <span class="fs-connected">🟢 ${connected} conectados</span>
+                        ${warming > 0 ? '<span class="fs-dot"></span><span class="fs-warming">🔥 ' + warming + ' aquecendo</span>' : ''}
+                        ${disconnected > 0 ? '<span class="fs-dot"></span><span>🔴 ' + disconnected + ' offline</span>' : ''}
+                    </div>
+                </div>
             </div>
+            <span class="folder-chip-count">${count} chip${count !== 1 ? 's' : ''}</span>
             ${!isUnassigned ? `
             <div class="folder-actions" onclick="event.stopPropagation()">
                 <button class="btn-icon" onclick="renameFolder(${folderId}, '${folderName.replace(/'/g, "\\'")}')" title="Renomear">✏️</button>
@@ -589,27 +612,27 @@ document.addEventListener('dragend', () => {
 const _openFolders = new Set();
 
 function toggleFolder(dropId) {
-    const zone = document.querySelector(`#${dropId} .folder-drop-zone`);
-    const toggle = document.getElementById('toggle-' + dropId);
+    const section = document.getElementById(dropId);
+    const zone = section?.querySelector('.folder-drop-zone');
     if (!zone) return;
     if (zone.style.display === 'none') {
         zone.style.display = '';
-        if (toggle) toggle.textContent = '▼';
+        section.classList.add('folder-open');
         _openFolders.add(dropId);
     } else {
         zone.style.display = 'none';
-        if (toggle) toggle.textContent = '▶';
+        section.classList.remove('folder-open');
         _openFolders.delete(dropId);
     }
 }
 
 function restoreOpenFolders() {
     for (const dropId of _openFolders) {
-        const zone = document.querySelector(`#${dropId} .folder-drop-zone`);
-        const toggle = document.getElementById('toggle-' + dropId);
+        const section = document.getElementById(dropId);
+        const zone = section?.querySelector('.folder-drop-zone');
         if (zone) {
             zone.style.display = '';
-            if (toggle) toggle.textContent = '▼';
+            section?.classList.add('folder-open');
         }
     }
 }
