@@ -1266,8 +1266,6 @@ body::before {
     color: var(--text-primary);
     letter-spacing: -0.2px;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .folder-subtitle {
@@ -1277,7 +1275,10 @@ body::before {
     align-items: center;
     gap: 8px;
     margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
 }
+.folder-name-block { overflow: hidden; }
 .folder-subtitle .fs-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
 .folder-subtitle .fs-connected { color: var(--success); font-weight: 500; }
 .folder-subtitle .fs-warming { color: var(--warming); }

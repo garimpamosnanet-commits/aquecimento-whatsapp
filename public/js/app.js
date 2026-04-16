@@ -105,10 +105,10 @@ socket.on('folders_list', (list) => {
 
 socket.on('chip_update', (chip) => {
     const idx = chips.findIndex(c => c.id === chip.id);
+    const oldChip = idx >= 0 ? chips[idx] : null;
     if (idx >= 0) {
         chips[idx] = chip;
     } else {
-        // Check if a chip with the same phone already exists (avoid duplicates)
         const phoneIdx = chip.phone ? chips.findIndex(c => c.phone === chip.phone) : -1;
         if (phoneIdx >= 0) {
             chips[phoneIdx] = chip;
@@ -116,7 +116,18 @@ socket.on('chip_update', (chip) => {
             chips.unshift(chip);
         }
     }
-    renderChips();
+    // Try surgical DOM update instead of full re-render (preserves open folders)
+    const chipEl = document.getElementById('chip-' + chip.id);
+    if (chipEl && oldChip && oldChip.folder_id === chip.folder_id) {
+        // Same folder — just replace the card HTML in place
+        const temp = document.createElement('div');
+        temp.innerHTML = renderChipCard(chip);
+        const newCard = temp.firstElementChild;
+        if (newCard) chipEl.replaceWith(newCard);
+    } else {
+        // Folder changed or new chip — full re-render needed
+        renderChips();
+    }
 });
 
 socket.on('chip_deleted', ({ chipId }) => {
