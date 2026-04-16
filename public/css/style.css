@@ -1240,8 +1240,6 @@ body::before {
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     flex: 1;
 }
 
@@ -1348,6 +1346,42 @@ body::before {
     font-size: 13px;
     font-style: italic;
     grid-column: 1 / -1;
+}
+
+/* Move chip popup menu */
+.move-chip-menu {
+    position: fixed;
+    z-index: 1000;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    min-width: 180px;
+    max-width: 280px;
+    padding: 6px 0;
+    animation: feedFadeIn 0.15s ease;
+}
+.mcm-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 6px 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.mcm-item {
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.1s;
+    white-space: nowrap;
+}
+.mcm-item:hover { background: var(--bg-hover); }
+.mcm-empty {
+    padding: 8px 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 .chip-card[draggable="true"] {

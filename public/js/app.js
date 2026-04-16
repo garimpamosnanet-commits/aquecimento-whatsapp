@@ -342,6 +342,7 @@ function renderChipCard(chip) {
             ${['connected','warming','paused'].includes(chip.status) && (chip.instance_type || 'warming') === 'warming' ? `<button class="btn btn-outline btn-sm" onclick="setInstanceType(${chip.id},'admin')" title="Marcar como ADM do cliente">👤 ADM</button>` : ''}
             ${chip.instance_type === 'admin' ? `<button class="btn btn-outline btn-sm btn-adm-active" onclick="setInstanceType(${chip.id},'warming')" title="Voltar para aquecimento">👤 ADM ✓</button>` : ''}
             <button class="btn-icon" onclick="openChipHistory(${chip.id})" title="Historico">📋</button>
+            <button class="btn-icon" onclick="showMoveChipMenu(${chip.id}, event)" title="Mover para pasta">📂</button>
             <button class="btn-icon danger" onclick="deleteChip(${chip.id})" title="Excluir">✕</button>
         </div>
     </div>`;
@@ -630,6 +631,70 @@ document.addEventListener('dragend', () => {
         draggedChipId = null;
     }
 });
+
+// ==================== MOVE CHIP TO FOLDER ====================
+function showMoveChipMenu(chipId, event) {
+    event.stopPropagation();
+    // Remove any existing menu
+    const old = document.getElementById('move-chip-menu');
+    if (old) old.remove();
+
+    const chip = chips.find(c => c.id === chipId);
+    if (!chip) return;
+
+    const menu = document.createElement('div');
+    menu.id = 'move-chip-menu';
+    menu.className = 'move-chip-menu';
+
+    let html = '<div class="mcm-title">Mover para:</div>';
+    // "Sem pasta" option
+    if (chip.folder_id) {
+        html += `<div class="mcm-item" onclick="moveChipToFolder(${chipId}, null)">📂 Sem Pasta</div>`;
+    }
+    for (const f of folders) {
+        if (f.id === chip.folder_id) continue; // skip current folder
+        html += `<div class="mcm-item" onclick="moveChipToFolder(${chipId}, ${f.id})">📁 ${escapeHtml(f.name)}</div>`;
+    }
+    if (folders.length === 0 && !chip.folder_id) {
+        html += '<div class="mcm-empty">Crie uma pasta primeiro</div>';
+    }
+    menu.innerHTML = html;
+
+    // Position near the button
+    document.body.appendChild(menu);
+    const rect = event.target.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
+
+    // Close on click outside
+    setTimeout(() => {
+        document.addEventListener('click', function closeMcm() {
+            const m = document.getElementById('move-chip-menu');
+            if (m) m.remove();
+            document.removeEventListener('click', closeMcm);
+        });
+    }, 10);
+}
+
+function moveChipToFolder(chipId, folderId) {
+    const menu = document.getElementById('move-chip-menu');
+    if (menu) menu.remove();
+
+    const chip = chips.find(c => c.id === chipId);
+    if (chip) chip.folder_id = folderId;
+
+    fetch(`/api/chips/${chipId}/folder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_id: folderId })
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            const folderName = folderId ? (folders.find(f => f.id === folderId)?.name || 'pasta') : 'Sem Pasta';
+            showToast('Chip movido para ' + folderName, 'success');
+            renderChips();
+        }
+    });
+}
 
 const _openFolders = new Set();
 
