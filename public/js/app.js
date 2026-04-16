@@ -2352,7 +2352,7 @@ function renderAqList() {
 
         // Table header
         html += `<div class="aq-chip-table-header">
-            <span></span><span>Nome</span><span>Numero</span><span>Tag</span><span>Status</span><span>Origem</span><span>Data</span><span>Situacao</span><span style="text-align:right">Acoes</span>
+            <span></span><span>Nome</span><span>Numero</span><span>Tag</span><span>Status</span><span>Proxy</span><span>Origem</span><span>Data</span><span>Situacao</span><span style="text-align:right">Acoes</span>
         </div>`;
 
         for (const chip of clientChips.sort((a, b) => (a.phone || '').localeCompare(b.phone || ''))) {
@@ -2378,11 +2378,11 @@ function renderAqList() {
                 <div class="aq-chip-name">
                     ${chipName}
                     <span class="aq-edit-btn" onclick="renameAquecido(${chip.id}, '${escapedName}')" title="Editar nome">✏️</span>
-                    ${tag ? '<span class="aq-tag">' + tag + '</span>' : '<span class="aq-tag-add" onclick="tagAquecido(' + chip.id + ', \'' + escapedTag + '\')" title="Adicionar tag">+ tag</span>'}
                 </div>
                 <div class="aq-chip-phone-col">${chip.phone || '—'}</div>
                 <div>${tag ? '<span class="aq-tag" onclick="tagAquecido(' + chip.id + ', \'' + escapedTag + '\')">' + tag + '</span>' : '<span class="aq-tag-add" onclick="tagAquecido(' + chip.id + ', \'\')">+ tag</span>'}</div>
                 <span class="aq-chip-status ${statusCls}">${statusText}</span>
+                <div>${chip.proxy_ip ? '<span class="aq-proxy-badge on" title="' + escapeHtml(chip.proxy_ip) + '">🛡️ Sim</span>' : '<span class="aq-proxy-badge off">❌ Não</span>'}</div>
                 <div><span class="aq-origin ${chip.fornecedor ? 'fornecedor' : 'proprio'}" onclick="editOrigem(${chip.id}, '${(chip.fornecedor || '').replace(/'/g, "\\'")}')" style="cursor:pointer" title="Clique pra editar">${chip.fornecedor ? '🏪 ' + chip.fornecedor : '🔥 Próprio'} ✏️</span></div>
                 <div class="aq-chip-date">${created}</div>
                 <div><span class="aq-situacao ${isConn ? 'pronto' : 'aguardando'}">${isConn ? '✅ Pronto' : '⏳ Aguardando'}</span></div>

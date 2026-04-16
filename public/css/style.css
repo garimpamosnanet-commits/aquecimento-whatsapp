@@ -1861,14 +1861,14 @@ body::before {
 
 .aq-chip-list { padding: 0; }
 .aq-chip-table-header {
-    display: grid; grid-template-columns: 24px 180px 130px 90px 85px 85px 80px 110px 1fr;
+    display: grid; grid-template-columns: 24px 170px 125px 80px 85px 60px 85px 76px 100px 1fr;
     align-items: center; gap: 6px; padding: 8px 12px;
     font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
     color: var(--text-muted); border-bottom: 2px solid var(--border);
     white-space: nowrap;
 }
 .aq-chip-row {
-    display: grid; grid-template-columns: 24px 180px 130px 90px 85px 85px 80px 110px 1fr;
+    display: grid; grid-template-columns: 24px 170px 125px 80px 85px 60px 85px 76px 100px 1fr;
     align-items: center; gap: 6px;
     padding: 7px 12px; border-radius: 0;
     transition: background 0.15s;
@@ -1909,6 +1909,12 @@ body::before {
 .aq-chip-status.connected { background: rgba(34,197,94,0.1); color: #16a34a; }
 .aq-chip-status.disconnected { background: rgba(239,68,68,0.08); color: #dc2626; }
 .aq-chip-date { font-size: 11px; color: var(--text-muted); }
+.aq-proxy-badge {
+    font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 8px;
+    white-space: nowrap;
+}
+.aq-proxy-badge.on { background: rgba(34,197,94,0.1); color: #16a34a; }
+.aq-proxy-badge.off { background: rgba(239,68,68,0.08); color: #dc2626; }
 .aq-tag {
     font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 8px;
     background: rgba(139,92,246,0.1); color: #7c3aed; cursor: pointer;
