@@ -242,6 +242,7 @@ server.listen(PORT, async () => {
     const ProxyRotator = require('./src/proxy-rotator');
     const proxyRotator = new ProxyRotator(sessionManager);
     proxyRotator.start();
+    app.set('proxyRotator', proxyRotator);
     console.log('');
 });
 

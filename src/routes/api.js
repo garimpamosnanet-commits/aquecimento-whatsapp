@@ -329,6 +329,19 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true });
     });
 
+    // Force rotate all proxies NOW
+    router.post('/proxies/force-rotate', async (req, res) => {
+        try {
+            const proxyRotator = req.app.get('proxyRotator');
+            if (!proxyRotator) return res.status(500).json({ error: 'ProxyRotator nao inicializado' });
+            const result = await proxyRotator.forceRotateAll();
+            emitUserAction(req, 'proxy_force_rotate', `Rotacao forcada: ${result.rotated} chips`);
+            res.json({ success: true, ...result });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // ==================== REHABILITATION ====================
 
     // Get chips in rehabilitation

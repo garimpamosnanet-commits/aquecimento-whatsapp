@@ -238,6 +238,10 @@
                         <input type="number" id="proxyrot-hours" min="1" max="48" value="6" class="input-sm" onchange="saveProxyRotSettings()">
                     </div>
                     <p class="settings-hint">Proxies serao alternados automaticamente entre os chips no intervalo definido.</p>
+                    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+                        <button class="btn btn-warning" onclick="forceRotateProxies()" id="btn-force-rotate" style="width:100%">🔄 Rotacionar Todos Agora</button>
+                        <p class="settings-hint" style="margin-top:8px">Troca o proxy de todos os chips conectados imediatamente. Os chips sao reconectados com o novo IP.</p>
+                    </div>
                 </div>
             </div>
 

@@ -3661,6 +3661,29 @@ function saveProxyRotSettings() {
         .then(() => showToast('Rotacao de proxy salva', 'success'));
 }
 
+function forceRotateProxies() {
+    const btn = document.getElementById('btn-force-rotate');
+    btn.disabled = true;
+    btn.textContent = '🔄 Rotacionando...';
+    fetch('/api/proxies/force-rotate', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`${data.rotated} chips rotacionados de ${data.total}!`, 'success');
+            } else {
+                showToast(data.error || 'Erro na rotacao', 'danger');
+            }
+            btn.disabled = false;
+            btn.textContent = '🔄 Rotacionar Todos Agora';
+            loadProxies();
+        })
+        .catch(err => {
+            showToast('Erro: ' + err.message, 'danger');
+            btn.disabled = false;
+            btn.textContent = '🔄 Rotacionar Todos Agora';
+        });
+}
+
 // ==================== MEDIA MANAGEMENT ====================
 
 function loadAllMedia() {
