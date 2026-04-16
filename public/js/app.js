@@ -2658,6 +2658,32 @@ let _gaGroupHistory = {}; // groupId -> { count, successCount, lastDate }
 function loadGroupAddTab() {
     loadAdminInstances();
     loadWarmingChipsForGA();
+    // Check if another user has a running operation (multi-user sync)
+    checkRunningOperation();
+}
+
+function checkRunningOperation() {
+    fetch('/api/group-add/current').then(r => r.json()).then(data => {
+        if (data.running) {
+            _gaCurrentOpId = data.operationId;
+            _gaRunning = true;
+            _gaPaused = false;
+            _gaLogItems = [];
+            showExecutionUI(data.totalItems);
+            // Update progress with current state
+            document.getElementById('ga-progress-text').textContent =
+                data.processed + '/' + data.totalItems + ' adicoes (' + Math.round(data.processed / data.totalItems * 100) + '%)';
+            document.getElementById('ga-progress-fill').style.width =
+                Math.round(data.processed / data.totalItems * 100) + '%';
+            document.getElementById('ga-progress-stats').innerHTML = `
+                <span class="ga-stat-item ga-stat-success">✅ ${data.success}</span>
+                <span class="ga-stat-item ga-stat-admin">👑 ${data.adminOk} admins</span>
+                <span class="ga-stat-item ga-stat-skip">⏭️ ${data.skip}</span>
+                <span class="ga-stat-item ga-stat-fail">❌ ${data.fail}</span>
+            `;
+            showToast('Operacao em andamento (iniciada por ' + (data.admin_name || 'outro usuario') + ')', 'info');
+        }
+    }).catch(() => {});
 }
 
 // ==================== ADMIN INSTANCES ====================
@@ -3219,7 +3245,14 @@ function gaStop() {
 // ==================== SOCKET LISTENERS FOR GROUP ADD ====================
 
 socket.on('group_add_stats', (data) => {
-    if (!_gaRunning) return;
+    if (!_gaRunning) {
+        // Another user started operation — auto-sync
+        _gaRunning = true;
+        _gaCurrentOpId = data.operationId;
+        if (document.getElementById('ga-execution')?.style.display === 'none') {
+            showExecutionUI(data.total);
+        }
+    }
     document.getElementById('ga-progress-text').textContent =
         data.processed + '/' + data.total + ' adicoes (' + data.percent + '%)';
     document.getElementById('ga-progress-fill').style.width = data.percent + '%';

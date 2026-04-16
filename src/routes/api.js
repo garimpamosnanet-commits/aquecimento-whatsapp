@@ -671,6 +671,28 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
     });
 
     // List operations history
+    // Check if there's a running operation (for multi-user sync)
+    router.get('/group-add/current', (req, res) => {
+        if (!groupManager.isRunning()) return res.json({ running: false });
+        const ops = db.getAddOperations(1);
+        const op = ops.find(o => o.status === 'running');
+        if (!op) return res.json({ running: false });
+        const items = db.getOperationItems(op.id);
+        const adminChip = db.getChipById(op.admin_chip_id);
+        res.json({
+            running: true,
+            operationId: op.id,
+            totalItems: items.length,
+            processed: op.success_count + op.fail_count + op.skip_count,
+            success: op.success_count,
+            fail: op.fail_count,
+            skip: op.skip_count,
+            adminOk: op.admin_promoted_count || 0,
+            adminFail: op.admin_failed_count || 0,
+            admin_name: adminChip?.name
+        });
+    });
+
     router.get('/group-add/operations', (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const ops = db.getAddOperations(limit).map(op => {
