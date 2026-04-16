@@ -3253,6 +3253,13 @@ function createOpCard(operationId, adminName, totalItems) {
     // Don't create duplicate
     if (document.getElementById('ga-op-' + operationId)) return;
 
+    // Show the wrapper
+    const wrapper = document.getElementById('ga-ops-wrapper');
+    if (wrapper) wrapper.style.display = '';
+
+    // Update count badge
+    _updateOpsCount();
+
     const card = document.createElement('div');
     card.className = 'ga-op-card running';
     card.id = 'ga-op-' + operationId;
@@ -3265,7 +3272,6 @@ function createOpCard(operationId, adminName, totalItems) {
             <div class="ga-controls">
                 <button class="btn btn-warning btn-xs" id="ga-op-pause-${operationId}" onclick="gaTogglePauseOp(${operationId})">Pausar</button>
                 <button class="btn btn-danger btn-xs" onclick="gaStopOp(${operationId})">Parar</button>
-                <span class="ga-op-log-toggle" onclick="gaToggleOpLog(${operationId})">📋 Log</span>
             </div>
         </div>
         <div class="ga-progress-section">
@@ -3275,9 +3281,30 @@ function createOpCard(operationId, adminName, totalItems) {
             </div>
             <div id="ga-op-stats-${operationId}" class="ga-progress-stats"></div>
         </div>
-        <div id="ga-op-log-${operationId}" class="ga-op-log" style="display:none"></div>
+        <div id="ga-op-log-${operationId}" class="ga-op-log"></div>
     `;
     container.prepend(card);
+}
+
+function _updateOpsCount() {
+    const countEl = document.getElementById('ga-ops-count');
+    if (countEl) countEl.textContent = _gaActiveOps.size;
+    const doneCountEl = document.getElementById('ga-done-count');
+    const doneContainer = document.getElementById('ga-done-container');
+    if (doneCountEl && doneContainer) doneCountEl.textContent = doneContainer.children.length;
+}
+
+function gaStopAllOps() {
+    openConfirmModal('Parar TODAS', 'Deseja parar todas as operacoes em andamento?', 'Parar Tudo', () => {
+        fetch('/api/group-add/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    });
+}
+
+function gaClearDoneOps() {
+    const doneContainer = document.getElementById('ga-done-container');
+    if (doneContainer) doneContainer.innerHTML = '';
+    const doneWrapper = document.getElementById('ga-done-wrapper');
+    if (doneWrapper) doneWrapper.style.display = 'none';
 }
 
 function updateOpCardProgress(operationId, data) {
@@ -3337,9 +3364,22 @@ function markOpCardDone(operationId, status) {
             <button class="btn btn-outline btn-xs" onclick="gaExportCSV(${operationId})">CSV</button>
             <button class="btn btn-outline btn-xs" onclick="gaRetryOp(${operationId})">Reexecutar falhas</button>
             ${status === 'paused_daily' ? '<button class="btn btn-success btn-xs" onclick="gaResumeOperationOp(' + operationId + ')">▶ Retomar</button>' : ''}
-            <span class="ga-op-log-toggle" onclick="gaToggleOpLog(${operationId})">📋 Log</span>
         `;
     }
+    // Move to done container
+    const doneContainer = document.getElementById('ga-done-container');
+    const doneWrapper = document.getElementById('ga-done-wrapper');
+    if (doneContainer) {
+        doneContainer.prepend(card);
+        if (doneWrapper) doneWrapper.style.display = '';
+    }
+    // Hide running wrapper if empty
+    const runContainer = document.getElementById('ga-operations-container');
+    const runWrapper = document.getElementById('ga-ops-wrapper');
+    if (runContainer && runWrapper && runContainer.children.length === 0) {
+        runWrapper.style.display = 'none';
+    }
+    _updateOpsCount();
 }
 
 function gaToggleOpLog(operationId) {
