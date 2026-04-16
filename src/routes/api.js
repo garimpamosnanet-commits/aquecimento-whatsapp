@@ -564,27 +564,27 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
     // Start group add operation
     router.post('/group-add/start', async (req, res) => {
-        if (groupManager.isRunning()) {
+        const { adminChipId, chipIds, manualNumbers, groups, config } = req.body;
+
+        // Multi-op: only block if THIS admin is already running an operation
+        if (groupManager.isRunning(adminChipId)) {
             // Check if operation is stale (running > 10 min without progress)
-            const ops = db.getAddOperations(1);
-            const current = ops.find(o => o.status === 'running');
+            const ops = db.getAddOperations(10);
+            const current = ops.find(o => o.status === 'running' && o.admin_chip_id === adminChipId);
             if (current) {
                 const startedAt = new Date(current.started_at || current.created_at).getTime();
                 const staleMinutes = (Date.now() - startedAt) / 60000;
                 if (staleMinutes > 10) {
                     console.log(`[GroupAdd] Operacao #${current.id} travada ha ${Math.round(staleMinutes)}min — auto-reset`);
-                    groupManager.forceReset();
+                    groupManager.forceReset(current.id);
                     db.updateAddOperation(current.id, { status: 'failed' });
-                    // Continue — allow new operation
                 } else {
-                    return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
+                    return res.status(400).json({ error: `Ja existe uma operacao em andamento para este ADM (op #${current.id})` });
                 }
             } else {
-                // isRunning but no running op in DB — ghost state, reset
-                groupManager.forceReset();
+                groupManager.forceReset(); // ghost state
             }
         }
-        const { adminChipId, chipIds, manualNumbers, groups, config } = req.body;
         if (!adminChipId || !groups || groups.length === 0) {
             return res.status(400).json({ error: 'Instancia ADM e pelo menos 1 grupo sao obrigatorios' });
         }
@@ -646,50 +646,69 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true, operationId: operation.id, totalItems: items.length });
     });
 
-    // Pause operation
+    // Pause operation (optional operationId, or all)
     router.post('/group-add/pause', (req, res) => {
-        groupManager.pause();
-        res.json({ success: true });
+        const opId = req.body.operationId ? parseInt(req.body.operationId) : null;
+        groupManager.pause(opId);
+        res.json({ success: true, operationId: opId || 'all' });
     });
 
-    // Resume operation
+    // Resume operation (optional operationId, or all)
     router.post('/group-add/resume', (req, res) => {
-        groupManager.resume();
-        res.json({ success: true });
+        const opId = req.body.operationId ? parseInt(req.body.operationId) : null;
+        groupManager.resume(opId);
+        res.json({ success: true, operationId: opId || 'all' });
     });
 
-    // Stop operation
+    // Stop operation (optional operationId, or all)
     router.post('/group-add/stop', (req, res) => {
-        groupManager.stop();
-        res.json({ success: true });
+        const opId = req.body.operationId ? parseInt(req.body.operationId) : null;
+        groupManager.stop(opId);
+        res.json({ success: true, operationId: opId || 'all' });
     });
 
-    // Force reset stuck operation
+    // Force reset stuck operation (optional operationId, or all)
     router.post('/group-add/force-reset', (req, res) => {
-        groupManager.forceReset();
-        res.json({ success: true, message: 'Operacao resetada' });
+        const opId = req.body.operationId ? parseInt(req.body.operationId) : null;
+        groupManager.forceReset(opId);
+        res.json({ success: true, message: 'Operacao resetada', operationId: opId || 'all' });
     });
 
-    // List operations history
-    // Check if there's a running operation (for multi-user sync)
+    // Check running operations (multi-user sync, multi-operation support)
     router.get('/group-add/current', (req, res) => {
-        if (!groupManager.isRunning()) return res.json({ running: false });
-        const ops = db.getAddOperations(1);
-        const op = ops.find(o => o.status === 'running');
-        if (!op) return res.json({ running: false });
-        const items = db.getOperationItems(op.id);
-        const adminChip = db.getChipById(op.admin_chip_id);
+        const runningIds = groupManager.getRunningOperations();
+        if (runningIds.length === 0) {
+            // Also check DB for operations marked running (in case of desync)
+            const dbOps = db.getAddOperations(10);
+            const dbRunning = dbOps.filter(o => o.status === 'running');
+            if (dbRunning.length === 0) return res.json({ running: false, operations: [] });
+        }
+
+        const dbOps = db.getAddOperations(20);
+        const runningOps = dbOps.filter(o => o.status === 'running');
+
+        const operations = runningOps.map(op => {
+            const items = db.getOperationItems(op.id);
+            const adminChip = db.getChipById(op.admin_chip_id);
+            return {
+                operationId: op.id,
+                totalItems: items.length,
+                processed: op.success_count + op.fail_count + op.skip_count,
+                success: op.success_count,
+                fail: op.fail_count,
+                skip: op.skip_count,
+                adminOk: op.admin_promoted_count || 0,
+                adminFail: op.admin_failed_count || 0,
+                admin_name: adminChip?.name,
+                admin_chip_id: op.admin_chip_id
+            };
+        });
+
         res.json({
-            running: true,
-            operationId: op.id,
-            totalItems: items.length,
-            processed: op.success_count + op.fail_count + op.skip_count,
-            success: op.success_count,
-            fail: op.fail_count,
-            skip: op.skip_count,
-            adminOk: op.admin_promoted_count || 0,
-            adminFail: op.admin_failed_count || 0,
-            admin_name: adminChip?.name
+            running: operations.length > 0,
+            operations,
+            // Backward compat: also send first operation flat for old clients
+            ...(operations.length > 0 ? operations[0] : {})
         });
     });
 
@@ -732,12 +751,14 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
     // Retry failed items
     router.post('/group-add/retry/:id', async (req, res) => {
-        if (groupManager.isRunning()) {
-            return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
-        }
         const opId = parseInt(req.params.id);
         const originalOp = db.getAddOperation(opId);
         if (!originalOp) return res.status(404).json({ error: 'Operacao nao encontrada' });
+
+        // Only block if this specific admin is already running
+        if (groupManager.isRunning(originalOp.admin_chip_id)) {
+            return res.status(400).json({ error: 'Este ADM ja esta executando outra operacao' });
+        }
 
         const failedItems = db.getFailedItems(opId);
         if (failedItems.length === 0) {
@@ -779,14 +800,15 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
 
     // Resume paused_daily or stopped operation
     router.post('/group-add/resume-operation/:id', async (req, res) => {
-        if (groupManager.isRunning()) {
-            return res.status(400).json({ error: 'Ja existe uma operacao em andamento' });
-        }
         const opId = parseInt(req.params.id);
         const op = db.getAddOperation(opId);
         if (!op) return res.status(404).json({ error: 'Operacao nao encontrada' });
         if (op.status !== 'paused_daily' && op.status !== 'stopped') {
             return res.status(400).json({ error: `Operacao com status "${op.status}" nao pode ser retomada` });
+        }
+        // Only block if this specific admin is already running
+        if (groupManager.isRunning(op.admin_chip_id)) {
+            return res.status(400).json({ error: 'Este ADM ja esta executando outra operacao' });
         }
         const pending = db.getPendingItems(opId);
         if (pending.length === 0) {

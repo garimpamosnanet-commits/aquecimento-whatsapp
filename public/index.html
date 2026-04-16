@@ -418,28 +418,11 @@
             <!-- STEP 4: Summary -->
             <div id="ga-summary" class="ga-summary" style="display:none"></div>
 
-            <!-- STEP 5: Execution -->
-            <div id="ga-execution" class="ga-execution" style="display:none">
-                <div class="ga-progress-section">
-                    <div class="ga-progress-header">
-                        <span id="ga-progress-text">0/0 adicoes (0%)</span>
-                        <div class="ga-controls">
-                            <button class="btn btn-warning btn-sm" id="ga-btn-pause" onclick="gaTogglePause()">Pausar</button>
-                            <button class="btn btn-danger btn-sm" onclick="gaStop()">Parar</button>
-                        </div>
-                    </div>
-                    <div class="ga-progress-bar">
-                        <div class="ga-progress-fill" id="ga-progress-fill" style="width:0%"></div>
-                    </div>
-                    <div id="ga-progress-stats" class="ga-progress-stats"></div>
-                </div>
-                <div class="ga-log-section">
-                    <div class="ga-log-header">Log em tempo real</div>
-                    <div id="ga-log" class="ga-log"></div>
-                </div>
-            </div>
+            <!-- STEP 5: Running Operations (multiple) -->
+            <div id="ga-operations-container"></div>
 
-            <!-- STEP 6: Report -->
+            <!-- Legacy (hidden, kept for backward compat) -->
+            <div id="ga-execution" style="display:none"></div>
             <div id="ga-report" class="ga-report" style="display:none"></div>
 
             <!-- STEP 7: History -->

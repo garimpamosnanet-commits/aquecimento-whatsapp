@@ -52,11 +52,8 @@ class GroupManager {
     constructor(sessionManager, io) {
         this.sessionManager = sessionManager;
         this.io = io;
-        this._currentOperation = null;
-        this._paused = false;
-        this._stopped = false;
-        this._pauseResolve = null;
-        this._retryCount = {};
+        // Multi-operation support: Map<operationId, { paused, stopped, pauseResolve, adminChipId, retryCount }>
+        this._operations = new Map();
     }
 
     // ==================== WHATSAPP FUNCTIONS ====================
@@ -158,8 +155,9 @@ class GroupManager {
             const wait = (i + 1) * 5;
             console.log(`[GroupManager] ADM desconectado, aguardando reconexao... (${wait}s) [${label}]`);
             if (this.io) {
+                const opId = Array.from(this._operations.keys())[0] || null;
                 this.io.emit('group_add_log', {
-                    operationId: this._currentOperation, type: 'warning',
+                    operationId: opId, type: 'warning',
                     message: `ADM desconectado — aguardando reconexao (tentativa ${i + 1}/12)...`,
                     timestamp: new Date().toISOString()
                 });
@@ -260,6 +258,7 @@ class GroupManager {
         const shouldPromote = options.promoteToAdmin !== false; // default true
         const promoteDelayMin = (options.promoteDelayMin || 2) * 1000;
         const promoteDelayMax = (options.promoteDelayMax || 3) * 1000;
+        const opId = options.operationId || null;
 
         // STEP 1 — Check if already member
         try {
@@ -326,7 +325,7 @@ class GroupManager {
                         } else {
                             callbacks.onLog({ type: 'info', message: `${phone} ja esta no grupo "${groupName}" mas NAO e admin — promovendo` });
                             const pDelay = this._random(promoteDelayMin, promoteDelayMax);
-                            if (pDelay > 5000) await this._delayWithCountdown(pDelay, 'Promovendo a admin');
+                            if (pDelay > 5000) await this._delayWithCountdown(pDelay, 'Promovendo a admin', opId);
                             else await this._delay(pDelay);
                             const pr = await this.promoteToAdmin(adminSessionId, groupId, jid);
                             if (pr.success) {
@@ -392,7 +391,7 @@ class GroupManager {
         // STEP 3 — Delay before promote (configurable)
         const promoteDelay = this._random(promoteDelayMin, promoteDelayMax);
         if (promoteDelay > 5000) {
-            await this._delayWithCountdown(promoteDelay, 'Promovendo a admin');
+            await this._delayWithCountdown(promoteDelay, 'Promovendo a admin', opId);
         } else {
             await this._delay(promoteDelay);
         }
@@ -410,24 +409,36 @@ class GroupManager {
 
     // ==================== MAIN ORCHESTRATOR ====================
 
-    forceReset() {
-        console.log(`[GroupManager] Force reset: _currentOperation was ${this._currentOperation}`);
-        this._currentOperation = null;
-        this._paused = false;
-        this._stopped = false;
-        this._retryCount = {};
-        if (this._pauseResolve) this._pauseResolve();
-        this._pauseResolve = null;
+    forceReset(operationId) {
+        if (operationId) {
+            const op = this._operations.get(operationId);
+            if (op) {
+                if (op.pauseResolve) op.pauseResolve();
+                this._operations.delete(operationId);
+            }
+            console.log(`[GroupManager] Force reset: operation ${operationId}`);
+        } else {
+            // Reset ALL operations
+            for (const [id, op] of this._operations) {
+                if (op.pauseResolve) op.pauseResolve();
+            }
+            this._operations.clear();
+            console.log(`[GroupManager] Force reset: ALL operations cleared`);
+        }
     }
 
     async executeBulkGroupAdd(operationId) {
         const operation = db.getAddOperation(operationId);
         if (!operation) throw new Error('Operacao nao encontrada');
 
-        this._currentOperation = operationId;
-        this._paused = false;
-        this._stopped = false;
-        this._retryCount = {};
+        // Register this operation in the multi-op map
+        this._operations.set(operationId, {
+            paused: false,
+            stopped: false,
+            pauseResolve: null,
+            adminChipId: operation.admin_chip_id,
+            retryCount: {}
+        });
 
         try {
 
@@ -560,8 +571,9 @@ class GroupManager {
                 });
 
                 for (let ji = 0; ji < groupItems.length; ji++) {
-                    // Check pause/stop
-                    if (this._stopped) {
+                    // Check pause/stop (per-operation state)
+                    const opState = this._operations.get(operationId);
+                    if (!opState || opState.stopped) {
                         db.updateAddOperation(operationId, {
                             status: 'stopped',
                             success_count: successCount, fail_count: failCount,
@@ -569,13 +581,13 @@ class GroupManager {
                             admin_failed_count: adminFailedCount
                         });
                         this.io.emit('group_add_status', { operationId, status: 'stopped', message: 'Operacao parada pelo usuario' });
-                        this._currentOperation = null;
+                        this._operations.delete(operationId);
                         return;
                     }
 
-                    if (this._paused) {
+                    if (opState.paused) {
                         this.io.emit('group_add_status', { operationId, status: 'paused', message: 'Pausado' });
-                        await this._waitForResume();
+                        await this._waitForResume(operationId);
                         this.io.emit('group_add_status', { operationId, status: 'running', message: 'Retomando...' });
                     }
 
@@ -644,7 +656,8 @@ class GroupManager {
                             inviteCode: inviteCodes[groupId],
                             promoteToAdmin: config.promoteToAdmin !== false,
                             promoteDelayMin: config.promoteDelayMin || 2,
-                            promoteDelayMax: config.promoteDelayMax || 3
+                            promoteDelayMax: config.promoteDelayMax || 3,
+                            operationId
                         });
 
                         // Update item in DB
@@ -672,11 +685,12 @@ class GroupManager {
                     } catch (e) {
                         // Rate limit detection
                         const retryKey = `${groupId}_${item.phone_number}`;
-                        if ((e.message?.includes('rate') || e.message?.includes('429') || e.message?.includes('too many')) && (this._retryCount[retryKey] || 0) < 3) {
-                            this._retryCount[retryKey] = (this._retryCount[retryKey] || 0) + 1;
+                        const opRetry = this._operations.get(operationId)?.retryCount || {};
+                        if ((e.message?.includes('rate') || e.message?.includes('429') || e.message?.includes('too many')) && (opRetry[retryKey] || 0) < 3) {
+                            opRetry[retryKey] = (opRetry[retryKey] || 0) + 1;
                             this.io.emit('group_add_log', {
                                 operationId, type: 'warning',
-                                message: `Rate limit detectado (tentativa ${this._retryCount[retryKey]}/3) — pausando por 5 minutos`,
+                                message: `Rate limit detectado (tentativa ${opRetry[retryKey]}/3) — pausando por 5 minutos`,
                                 timestamp: new Date().toISOString()
                             });
                             await this._delay(300000);
@@ -709,7 +723,7 @@ class GroupManager {
                             (config.delayMax || 15) * 1000
                         );
                         if (delay > 5000) {
-                            await this._delayWithCountdown(delay, 'Proximo chip');
+                            await this._delayWithCountdown(delay, 'Proximo chip', operationId);
                         } else {
                             await this._delay(delay);
                         }
@@ -722,7 +736,7 @@ class GroupManager {
                         (config.groupDelayMin || 30) * 1000,
                         (config.groupDelayMax || 60) * 1000
                     );
-                    await this._delayWithCountdown(groupDelay, 'Proximo grupo');
+                    await this._delayWithCountdown(groupDelay, 'Proximo grupo', operationId);
                 }
             }
 
@@ -791,7 +805,7 @@ class GroupManager {
             console.error('[GroupManager] Erro antes da execucao:', outerErr);
             this.io.emit('group_add_status', { operationId, status: 'failed', message: 'Erro: ' + outerErr.message });
         } finally {
-            this._currentOperation = null;
+            this._operations.delete(operationId);
         }
     }
 
@@ -816,30 +830,74 @@ class GroupManager {
         await this.executeBulkGroupAdd(operationId);
     }
 
-    // ==================== CONTROL ====================
+    // ==================== CONTROL (per-operation) ====================
 
-    pause() {
-        if (this._currentOperation) this._paused = true;
-    }
-
-    resume() {
-        if (this._paused && this._pauseResolve) {
-            this._paused = false;
-            this._pauseResolve();
-            this._pauseResolve = null;
+    pause(operationId) {
+        if (operationId) {
+            const op = this._operations.get(operationId);
+            if (op) op.paused = true;
+        } else {
+            // Pause all
+            for (const [, op] of this._operations) op.paused = true;
         }
     }
 
-    stop() {
-        this._stopped = true;
-        if (this._paused && this._pauseResolve) {
-            this._pauseResolve();
-            this._pauseResolve = null;
+    resume(operationId) {
+        if (operationId) {
+            const op = this._operations.get(operationId);
+            if (op && op.paused && op.pauseResolve) {
+                op.paused = false;
+                op.pauseResolve();
+                op.pauseResolve = null;
+            }
+        } else {
+            // Resume all
+            for (const [, op] of this._operations) {
+                if (op.paused && op.pauseResolve) {
+                    op.paused = false;
+                    op.pauseResolve();
+                    op.pauseResolve = null;
+                }
+            }
         }
     }
 
-    isRunning() {
-        return this._currentOperation !== null;
+    stop(operationId) {
+        if (operationId) {
+            const op = this._operations.get(operationId);
+            if (op) {
+                op.stopped = true;
+                if (op.paused && op.pauseResolve) {
+                    op.pauseResolve();
+                    op.pauseResolve = null;
+                }
+            }
+        } else {
+            // Stop all
+            for (const [, op] of this._operations) {
+                op.stopped = true;
+                if (op.paused && op.pauseResolve) {
+                    op.pauseResolve();
+                    op.pauseResolve = null;
+                }
+            }
+        }
+    }
+
+    isRunning(adminChipId) {
+        if (this._operations.size === 0) return false;
+        if (adminChipId) {
+            // Check if specific admin is busy
+            for (const [, op] of this._operations) {
+                if (op.adminChipId === adminChipId) return true;
+            }
+            return false;
+        }
+        return true; // any operation running
+    }
+
+    getRunningOperations() {
+        return Array.from(this._operations.keys());
     }
 
     // ==================== HELPERS ====================
@@ -865,7 +923,8 @@ class GroupManager {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    _delayWithCountdown(ms, label) {
+    _delayWithCountdown(ms, label, operationId) {
+        const opId = operationId || Array.from(this._operations.keys())[0] || null;
         return new Promise(resolve => {
             const total = Math.round(ms / 1000);
             let remaining = total;
@@ -873,7 +932,7 @@ class GroupManager {
 
             // Emit initial
             this.io.emit('group_add_countdown', {
-                operationId: this._currentOperation, logId, remaining, total, label
+                operationId: opId, logId, remaining, total, label
             });
 
             const interval = setInterval(() => {
@@ -881,12 +940,12 @@ class GroupManager {
                 if (remaining <= 0) {
                     clearInterval(interval);
                     this.io.emit('group_add_countdown', {
-                        operationId: this._currentOperation, logId, remaining: 0, total, label, done: true
+                        operationId: opId, logId, remaining: 0, total, label, done: true
                     });
                     resolve();
                 } else {
                     this.io.emit('group_add_countdown', {
-                        operationId: this._currentOperation, logId, remaining, total, label
+                        operationId: opId, logId, remaining, total, label
                     });
                 }
             }, 1000);
@@ -897,9 +956,10 @@ class GroupManager {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
-    _waitForResume() {
+    _waitForResume(operationId) {
         return new Promise(resolve => {
-            this._pauseResolve = resolve;
+            const op = this._operations.get(operationId);
+            if (op) op.pauseResolve = resolve;
         });
     }
 }

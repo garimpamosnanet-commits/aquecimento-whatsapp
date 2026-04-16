@@ -220,26 +220,30 @@ module.exports = function(io, sessionManager, warmingEngine, groupManager, admin
             socket.emit('group_add_status', { status: 'info', message: 'Use o botao na interface para iniciar' });
         });
 
-        // Pause group add
-        socket.on('pause_group_add', () => {
-            if (groupManager) groupManager.pause();
+        // Pause group add (optional operationId)
+        socket.on('pause_group_add', (data) => {
+            const opId = data?.operationId ? parseInt(data.operationId) : null;
+            if (groupManager) groupManager.pause(opId);
         });
 
-        // Resume group add
-        socket.on('resume_group_add', () => {
-            if (groupManager) groupManager.resume();
+        // Resume group add (optional operationId)
+        socket.on('resume_group_add', (data) => {
+            const opId = data?.operationId ? parseInt(data.operationId) : null;
+            if (groupManager) groupManager.resume(opId);
         });
 
-        // Stop group add
-        socket.on('stop_group_add', () => {
-            if (groupManager) groupManager.stop();
+        // Stop group add (optional operationId)
+        socket.on('stop_group_add', (data) => {
+            const opId = data?.operationId ? parseInt(data.operationId) : null;
+            if (groupManager) groupManager.stop(opId);
         });
 
         // Resume paused_daily or stopped operation
         socket.on('resume_group_add_operation', async (data) => {
             const { operationId } = data;
-            if (groupManager.isRunning()) {
-                socket.emit('group_add_status', { status: 'error', message: 'Ja existe operacao em andamento' });
+            const op = db.getAddOperation(operationId);
+            if (op && groupManager.isRunning(op.admin_chip_id)) {
+                socket.emit('group_add_status', { operationId, status: 'error', message: 'Este ADM ja esta executando outra operacao' });
                 return;
             }
             groupManager.resumeOperation(operationId).catch(err => {

@@ -2646,10 +2646,11 @@ let _gaGroups = [];
 let _gaSelectedGroups = new Set();
 let _gaSelectedChips = new Set();
 let _gaWarmingChips = [];
-let _gaRunning = false;
-let _gaPaused = false;
-let _gaCurrentOpId = null;
+let _gaRunning = false;  // true if ANY operation is running (backward compat)
+let _gaPaused = false;   // legacy compat
+let _gaCurrentOpId = null; // legacy compat (first/latest op)
 let _gaLogItems = [];
+let _gaActiveOps = new Map(); // operationId -> { paused, adminName, totalItems }
 let _gaMode = 'invite_link';
 let _gaPreset = 'normal';
 let _gaPresets = {};
@@ -2664,24 +2665,31 @@ function loadGroupAddTab() {
 
 function checkRunningOperation() {
     fetch('/api/group-add/current').then(r => r.json()).then(data => {
-        if (data.running) {
+        if (data.running && data.operations && data.operations.length > 0) {
+            for (const op of data.operations) {
+                _gaActiveOps.set(op.operationId, {
+                    paused: false,
+                    adminName: op.admin_name || '?',
+                    totalItems: op.totalItems
+                });
+                createOpCard(op.operationId, op.admin_name || 'ADM', op.totalItems);
+                updateOpCardProgress(op.operationId, op);
+            }
+            _gaRunning = true;
+            _gaCurrentOpId = data.operations[0].operationId;
+            showToast(data.operations.length + ' operacao(oes) em andamento', 'info');
+        } else if (data.running && data.operationId) {
+            // Legacy single-op response
+            _gaActiveOps.set(data.operationId, {
+                paused: false,
+                adminName: data.admin_name || '?',
+                totalItems: data.totalItems
+            });
             _gaCurrentOpId = data.operationId;
             _gaRunning = true;
-            _gaPaused = false;
-            _gaLogItems = [];
-            showExecutionUI(data.totalItems);
-            // Update progress with current state
-            document.getElementById('ga-progress-text').textContent =
-                data.processed + '/' + data.totalItems + ' adicoes (' + Math.round(data.processed / data.totalItems * 100) + '%)';
-            document.getElementById('ga-progress-fill').style.width =
-                Math.round(data.processed / data.totalItems * 100) + '%';
-            document.getElementById('ga-progress-stats').innerHTML = `
-                <span class="ga-stat-item ga-stat-success">✅ ${data.success}</span>
-                <span class="ga-stat-item ga-stat-admin">👑 ${data.adminOk} admins</span>
-                <span class="ga-stat-item ga-stat-skip">⏭️ ${data.skip}</span>
-                <span class="ga-stat-item ga-stat-fail">❌ ${data.fail}</span>
-            `;
-            showToast('Operacao em andamento (iniciada por ' + (data.admin_name || 'outro usuario') + ')', 'info');
+            createOpCard(data.operationId, data.admin_name || 'ADM', data.totalItems);
+            updateOpCardProgress(data.operationId, data);
+            showToast('Operacao em andamento (' + (data.admin_name || 'outro usuario') + ')', 'info');
         }
     }).catch(() => {});
 }
@@ -3133,6 +3141,200 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// ==================== MULTI-OP CARD MANAGEMENT ====================
+
+function createOpCard(operationId, adminName, totalItems) {
+    const container = document.getElementById('ga-operations-container');
+    if (!container) return;
+    // Don't create duplicate
+    if (document.getElementById('ga-op-' + operationId)) return;
+
+    const card = document.createElement('div');
+    card.className = 'ga-op-card running';
+    card.id = 'ga-op-' + operationId;
+    card.innerHTML = `
+        <div class="ga-op-header">
+            <div class="ga-op-title">
+                <span>Op #${operationId} — ${escapeHtml(adminName)}</span>
+                <span class="op-badge running" id="ga-op-badge-${operationId}">Executando</span>
+            </div>
+            <div class="ga-controls">
+                <button class="btn btn-warning btn-xs" id="ga-op-pause-${operationId}" onclick="gaTogglePauseOp(${operationId})">Pausar</button>
+                <button class="btn btn-danger btn-xs" onclick="gaStopOp(${operationId})">Parar</button>
+                <span class="ga-op-log-toggle" onclick="gaToggleOpLog(${operationId})">📋 Log</span>
+            </div>
+        </div>
+        <div class="ga-progress-section">
+            <span id="ga-op-text-${operationId}" style="font-size:13px;font-weight:600">0/${totalItems} (0%)</span>
+            <div class="ga-progress-bar" style="margin:8px 0">
+                <div class="ga-progress-fill" id="ga-op-fill-${operationId}" style="width:0%"></div>
+            </div>
+            <div id="ga-op-stats-${operationId}" class="ga-progress-stats"></div>
+        </div>
+        <div id="ga-op-log-${operationId}" class="ga-op-log" style="display:none"></div>
+    `;
+    container.prepend(card);
+}
+
+function updateOpCardProgress(operationId, data) {
+    const textEl = document.getElementById('ga-op-text-' + operationId);
+    const fillEl = document.getElementById('ga-op-fill-' + operationId);
+    const statsEl = document.getElementById('ga-op-stats-' + operationId);
+    if (!textEl) return;
+
+    const pct = data.percent || (data.totalItems ? Math.round((data.processed / data.totalItems) * 100) : 0);
+    const total = data.total || data.totalItems || 0;
+    textEl.textContent = (data.processed || 0) + '/' + total + ' (' + pct + '%)';
+    if (fillEl) fillEl.style.width = pct + '%';
+    if (statsEl) {
+        statsEl.innerHTML = `
+            <span class="ga-stat-item ga-stat-success">✅ ${data.success || 0}</span>
+            <span class="ga-stat-item ga-stat-admin">👑 ${data.adminOk || 0}</span>
+            <span class="ga-stat-item ga-stat-skip">⏭️ ${data.skip || 0}</span>
+            <span class="ga-stat-item ga-stat-fail">❌ ${data.fail || 0}</span>
+            ${(data.adminFail || 0) > 0 ? '<span class="ga-stat-item ga-stat-warn">⚠️ ' + data.adminFail + '</span>' : ''}
+            ${data.currentGroup ? '<span class="ga-stat-item ga-stat-group">📂 ' + escapeHtml(data.currentGroup) + '</span>' : ''}
+        `;
+    }
+}
+
+function appendOpLog(operationId, data) {
+    const logEl = document.getElementById('ga-op-log-' + operationId);
+    if (!logEl) return;
+    const icons = {
+        'success': '✅', 'admin': '👑', 'admin_fail': '⚠️',
+        'skip': '⏭️', 'error': '❌', 'warning': '⚠️',
+        'info': 'ℹ️', 'system': '🔄'
+    };
+    const icon = icons[data.type] || '📝';
+    const time = new Date(data.timestamp || Date.now()).toLocaleTimeString('pt-BR');
+    const cls = data.type === 'error' ? 'ga-log-error' : data.type === 'admin' ? 'ga-log-admin' : data.type === 'success' ? 'ga-log-success' : data.type === 'warning' || data.type === 'admin_fail' ? 'ga-log-warn' : 'ga-log-info';
+    const item = document.createElement('div');
+    item.className = 'ga-log-item ' + cls;
+    item.innerHTML = '<span class="ga-log-icon">' + icon + '</span><span class="ga-log-msg">' + escapeHtml(data.message || '') + '</span><span class="ga-log-time">' + time + '</span>';
+    logEl.appendChild(item);
+    if (logEl.style.display !== 'none') logEl.scrollTop = logEl.scrollHeight;
+}
+
+function markOpCardDone(operationId, status) {
+    const card = document.getElementById('ga-op-' + operationId);
+    if (!card) return;
+    card.className = 'ga-op-card ' + status;
+    const badge = document.getElementById('ga-op-badge-' + operationId);
+    if (badge) {
+        const labels = { completed: 'Concluido', stopped: 'Parado', failed: 'Falhou', paused_daily: 'Limite diario' };
+        badge.textContent = labels[status] || status;
+        badge.className = 'op-badge ' + (status === 'paused_daily' ? 'paused' : status);
+    }
+    // Replace controls with report actions
+    const controls = card.querySelector('.ga-controls');
+    if (controls) {
+        controls.innerHTML = `
+            <button class="btn btn-outline btn-xs" onclick="gaExportCSV(${operationId})">CSV</button>
+            <button class="btn btn-outline btn-xs" onclick="gaRetryOp(${operationId})">Reexecutar falhas</button>
+            ${status === 'paused_daily' ? '<button class="btn btn-success btn-xs" onclick="gaResumeOperationOp(' + operationId + ')">▶ Retomar</button>' : ''}
+            <span class="ga-op-log-toggle" onclick="gaToggleOpLog(${operationId})">📋 Log</span>
+        `;
+    }
+}
+
+function gaToggleOpLog(operationId) {
+    const logEl = document.getElementById('ga-op-log-' + operationId);
+    if (!logEl) return;
+    logEl.style.display = logEl.style.display === 'none' ? 'block' : 'none';
+    if (logEl.style.display === 'block') logEl.scrollTop = logEl.scrollHeight;
+}
+
+function gaTogglePauseOp(operationId) {
+    const opState = _gaActiveOps.get(operationId);
+    if (!opState) return;
+    if (opState.paused) {
+        fetch('/api/group-add/resume', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ operationId })
+        });
+        opState.paused = false;
+        const btn = document.getElementById('ga-op-pause-' + operationId);
+        if (btn) btn.textContent = 'Pausar';
+        const badge = document.getElementById('ga-op-badge-' + operationId);
+        if (badge) { badge.textContent = 'Executando'; badge.className = 'op-badge running'; }
+        const card = document.getElementById('ga-op-' + operationId);
+        if (card) card.className = 'ga-op-card running';
+    } else {
+        fetch('/api/group-add/pause', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ operationId })
+        });
+        opState.paused = true;
+        const btn = document.getElementById('ga-op-pause-' + operationId);
+        if (btn) btn.textContent = 'Retomar';
+        const badge = document.getElementById('ga-op-badge-' + operationId);
+        if (badge) { badge.textContent = 'Pausado'; badge.className = 'op-badge paused'; }
+        const card = document.getElementById('ga-op-' + operationId);
+        if (card) card.className = 'ga-op-card paused';
+    }
+}
+
+function gaStopOp(operationId) {
+    openConfirmModal('Parar Operacao #' + operationId, 'Deseja parar esta operacao? Itens processados serao mantidos.', 'Parar', () => {
+        fetch('/api/group-add/stop', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ operationId })
+        });
+    });
+}
+
+function gaRetryOp(operationId) {
+    openConfirmModal('Reexecutar Falhas', 'Reexecutar apenas os itens que falharam na operacao #' + operationId + '?', 'Reexecutar', () => {
+        fetch('/api/group-add/retry/' + operationId, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                _gaActiveOps.set(data.operationId, { paused: false, adminName: 'Retry', totalItems: data.retrying });
+                _gaCurrentOpId = data.operationId;
+                _gaRunning = true;
+                createOpCard(data.operationId, 'Retry #' + operationId, data.retrying);
+                showToast('Reexecutando ' + data.retrying + ' itens', 'success');
+            } else {
+                showToast(data.error || 'Erro', 'danger');
+            }
+        });
+    });
+}
+
+function gaResumeOperationOp(operationId) {
+    openConfirmModal('Retomar Operacao', 'Retomar adicao dos itens pendentes?', 'Retomar', () => {
+        fetch('/api/group-add/resume-operation/' + operationId, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                _gaActiveOps.set(data.operationId, { paused: false, adminName: 'Resume', totalItems: data.pendingItems });
+                _gaRunning = true;
+                // Reuse existing card or create new
+                const card = document.getElementById('ga-op-' + data.operationId);
+                if (card) {
+                    card.className = 'ga-op-card running';
+                    const badge = document.getElementById('ga-op-badge-' + data.operationId);
+                    if (badge) { badge.textContent = 'Executando'; badge.className = 'op-badge running'; }
+                    const controls = card.querySelector('.ga-controls');
+                    if (controls) {
+                        controls.innerHTML = `
+                            <button class="btn btn-warning btn-xs" id="ga-op-pause-${data.operationId}" onclick="gaTogglePauseOp(${data.operationId})">Pausar</button>
+                            <button class="btn btn-danger btn-xs" onclick="gaStopOp(${data.operationId})">Parar</button>
+                            <span class="ga-op-log-toggle" onclick="gaToggleOpLog(${data.operationId})">📋 Log</span>
+                        `;
+                    }
+                } else {
+                    createOpCard(data.operationId, 'Retomando', data.pendingItems);
+                }
+                showToast('Retomando — ' + data.pendingItems + ' itens pendentes', 'success');
+            } else {
+                showToast(data.error || 'Erro ao retomar', 'danger');
+            }
+        });
+    });
+}
+
 // ==================== EXECUTION ====================
 
 function gaStartOperation() {
@@ -3168,8 +3370,12 @@ function gaStartOperation() {
         checkExists: true
     };
 
-    document.getElementById('ga-btn-start').disabled = true;
-    document.getElementById('ga-btn-start').textContent = 'Iniciando...';
+    const startBtn = document.getElementById('ga-btn-start');
+    if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'Iniciando...'; }
+
+    // Get admin name for card title
+    const admSelect = document.getElementById('ga-admin-select');
+    const admLabel = admSelect?.options[admSelect.selectedIndex]?.textContent || 'ADM';
 
     fetch('/api/group-add/start', {
         method: 'POST',
@@ -3185,155 +3391,142 @@ function gaStartOperation() {
             _gaCurrentOpId = data.operationId;
             _gaRunning = true;
             _gaPaused = false;
-            _gaLogItems = [];
-            showExecutionUI(data.totalItems);
-            showToast('Operacao iniciada!', 'success');
+            _gaActiveOps.set(data.operationId, { paused: false, adminName: admLabel, totalItems: data.totalItems });
+            createOpCard(data.operationId, admLabel, data.totalItems);
+            // Hide summary, keep config visible for new operations
+            hideSummary();
+            showToast('Operacao #' + data.operationId + ' iniciada!', 'success');
+            // Re-enable start button for next operation
+            if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Iniciar Adicao'; }
         } else if (data.error && data.error.includes('andamento')) {
-            // Operation stuck — offer force reset
-            document.getElementById('ga-btn-start').disabled = false;
-            document.getElementById('ga-btn-start').textContent = 'Iniciar Adicao';
-            openConfirmModal('Operacao Travada', 'Existe uma operacao travada no servidor. Deseja forcar o reset e tentar novamente?', 'Forcar Reset', () => {
-                fetch('/api/group-add/force-reset', { method: 'POST' })
+            if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Iniciar Adicao'; }
+            openConfirmModal('ADM Ocupado', data.error + ' Deseja forcar o reset?', 'Forcar Reset', () => {
+                fetch('/api/group-add/force-reset', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ operationId: null })
+                })
                 .then(r => r.json())
-                .then(() => {
-                    showToast('Reset feito! Clique em Iniciar novamente.', 'success');
-                });
+                .then(() => showToast('Reset feito! Clique em Iniciar novamente.', 'success'));
             });
         } else {
             showToast(data.error || 'Erro ao iniciar', 'danger');
-            document.getElementById('ga-btn-start').disabled = false;
-            document.getElementById('ga-btn-start').textContent = 'Iniciar Adicao';
+            if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Iniciar Adicao'; }
         }
     })
     .catch(err => {
         showToast('Erro: ' + err.message, 'danger');
-        document.getElementById('ga-btn-start').disabled = false;
-        document.getElementById('ga-btn-start').textContent = 'Iniciar Adicao';
+        if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Iniciar Adicao'; }
     });
 }
 
 function showExecutionUI(totalItems) {
-    document.getElementById('ga-summary').style.display = 'none';
-    document.getElementById('ga-execution').style.display = 'block';
-    document.getElementById('ga-report').style.display = 'none';
-    document.getElementById('ga-progress-text').textContent = '0/' + totalItems + ' adicoes (0%)';
-    document.getElementById('ga-progress-fill').style.width = '0%';
-    document.getElementById('ga-progress-stats').innerHTML = '';
-    document.getElementById('ga-log').innerHTML = '';
-    document.getElementById('ga-btn-pause').textContent = 'Pausar';
+    // Legacy — now handled by createOpCard
+    hideSummary();
 }
 
 function gaTogglePause() {
+    // Legacy — pause ALL operations
     if (_gaPaused) {
-        fetch('/api/group-add/resume', { method: 'POST' });
+        fetch('/api/group-add/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         _gaPaused = false;
-        document.getElementById('ga-btn-pause').textContent = 'Pausar';
     } else {
-        fetch('/api/group-add/pause', { method: 'POST' });
+        fetch('/api/group-add/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         _gaPaused = true;
-        document.getElementById('ga-btn-pause').textContent = 'Retomar';
     }
 }
 
 function gaStop() {
-    openConfirmModal('Parar Operacao', 'Deseja parar a operacao em andamento? Itens ja processados serao mantidos.', 'Parar', () => {
-        fetch('/api/group-add/stop', { method: 'POST' });
+    openConfirmModal('Parar TODAS Operacoes', 'Deseja parar TODAS as operacoes em andamento?', 'Parar Tudo', () => {
+        fetch('/api/group-add/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         _gaRunning = false;
     });
 }
 
-// ==================== SOCKET LISTENERS FOR GROUP ADD ====================
+// ==================== SOCKET LISTENERS FOR GROUP ADD (MULTI-OP) ====================
 
 socket.on('group_add_stats', (data) => {
-    if (!_gaRunning) {
-        // Another user started operation — auto-sync
+    const opId = data.operationId;
+    if (!opId) return;
+
+    // Auto-create card if we don't know about this operation yet (another user started it)
+    if (!_gaActiveOps.has(opId)) {
+        _gaActiveOps.set(opId, { paused: false, adminName: '?', totalItems: data.total });
         _gaRunning = true;
-        _gaCurrentOpId = data.operationId;
-        if (document.getElementById('ga-execution')?.style.display === 'none') {
-            showExecutionUI(data.total);
-        }
+        _gaCurrentOpId = opId;
+        createOpCard(opId, 'Operacao remota', data.total);
     }
-    document.getElementById('ga-progress-text').textContent =
-        data.processed + '/' + data.total + ' adicoes (' + data.percent + '%)';
-    document.getElementById('ga-progress-fill').style.width = data.percent + '%';
-    document.getElementById('ga-progress-stats').innerHTML = `
-        <span class="ga-stat-item ga-stat-success">✅ ${data.success}</span>
-        <span class="ga-stat-item ga-stat-admin">👑 ${data.adminOk} admins</span>
-        <span class="ga-stat-item ga-stat-skip">⏭️ ${data.skip}</span>
-        <span class="ga-stat-item ga-stat-fail">❌ ${data.fail}</span>
-        ${data.adminFail > 0 ? '<span class="ga-stat-item ga-stat-warn">⚠️ ' + data.adminFail + ' sem admin</span>' : ''}
-        ${data.currentGroup ? '<span class="ga-stat-item ga-stat-group">📂 ' + data.currentGroup + '</span>' : ''}
-    `;
+
+    updateOpCardProgress(opId, data);
 });
 
 socket.on('group_add_log', (data) => {
-    if (!document.getElementById('ga-log')) return;
-    const icons = {
-        'success': '✅', 'admin': '👑', 'admin_fail': '⚠️',
-        'skip': '⏭️', 'error': '❌', 'warning': '⚠️',
-        'info': 'ℹ️', 'system': '🔄'
-    };
-    const icon = icons[data.type] || '📝';
-    const time = new Date(data.timestamp || Date.now()).toLocaleTimeString('pt-BR');
-    const cls = data.type === 'error' ? 'ga-log-error' : data.type === 'admin' ? 'ga-log-admin' : data.type === 'success' ? 'ga-log-success' : data.type === 'warning' || data.type === 'admin_fail' ? 'ga-log-warn' : 'ga-log-info';
-
-    const logEl = document.getElementById('ga-log');
-    const item = document.createElement('div');
-    item.className = 'ga-log-item ' + cls;
-    item.innerHTML = '<span class="ga-log-icon">' + icon + '</span><span class="ga-log-msg">' + data.message + '</span><span class="ga-log-time">' + time + '</span>';
-    logEl.appendChild(item);
-    logEl.scrollTop = logEl.scrollHeight;
+    const opId = data.operationId;
+    if (opId) {
+        appendOpLog(opId, data);
+    }
 });
 
 socket.on('group_add_status', (data) => {
+    const opId = data.operationId;
     if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed' || data.status === 'paused_daily') {
-        _gaRunning = false;
-        _gaPaused = false;
+        if (opId) {
+            _gaActiveOps.delete(opId);
+            markOpCardDone(opId, data.status);
+        }
+        if (_gaActiveOps.size === 0) {
+            _gaRunning = false;
+            _gaPaused = false;
+        }
     }
 });
 
 socket.on('group_add_complete', (summary) => {
-    _gaRunning = false;
-    document.getElementById('ga-execution').style.display = 'none';
-    showGAReport(summary);
-
-    if (summary.status === 'paused_daily') {
-        showToast('Limite diario atingido — ' + (summary.pending || 0) + ' restantes para amanha', 'warning');
-    } else {
-        showToast('Operacao concluida! ' + summary.success + ' adicionados', 'success');
+    const opId = summary.operationId;
+    if (opId) {
+        _gaActiveOps.delete(opId);
+        markOpCardDone(opId, summary.status || 'completed');
+        // Update final stats on card
+        updateOpCardProgress(opId, {
+            processed: (summary.success || 0) + (summary.fail || 0) + (summary.skip || 0),
+            total: summary.total, success: summary.success, fail: summary.fail,
+            skip: summary.skip, adminOk: summary.adminPromoted, adminFail: summary.adminFailed,
+            percent: 100
+        });
     }
 
-    const btn = document.getElementById('ga-btn-start');
-    if (btn) { btn.disabled = false; btn.textContent = 'Iniciar Adicao'; }
+    if (_gaActiveOps.size === 0) {
+        _gaRunning = false;
+    }
+
+    if (summary.status === 'paused_daily') {
+        showToast('Op #' + opId + ': Limite diario — ' + (summary.pending || 0) + ' restantes', 'warning');
+    } else {
+        showToast('Op #' + opId + ' concluida! ' + summary.success + ' adicionados', 'success');
+    }
 });
 
 socket.on('invite_codes_progress', (data) => {
-    const logEl = document.getElementById('ga-log');
-    if (!logEl) return;
-    if (data.status === 'running') {
-        const existing = document.getElementById('ga-invite-progress');
-        const text = '🔗 Buscando links de convite: ' + data.done + '/' + data.total;
-        if (existing) { existing.querySelector('.ga-log-msg').textContent = text; }
-        else {
-            const item = document.createElement('div');
-            item.className = 'ga-log-item ga-log-info';
-            item.id = 'ga-invite-progress';
-            item.innerHTML = '<span class="ga-log-icon">🔗</span><span class="ga-log-msg">' + text + '</span>';
-            logEl.appendChild(item);
-        }
+    // Show in all running ops (invite code fetch is per-operation but pre-card-creation)
+    for (const [opId] of _gaActiveOps) {
+        appendOpLog(opId, {
+            type: 'info',
+            message: 'Buscando links: ' + data.done + '/' + data.total,
+            timestamp: new Date().toISOString()
+        });
     }
 });
 
 socket.on('group_add_paused_daily', (data) => {
-    showToast('Limite diario atingido — ' + data.pendingCount + ' adicoes restantes', 'warning');
+    showToast('Op #' + (data.operationId || '?') + ': Limite diario — ' + data.pendingCount + ' restantes', 'warning');
 });
 
 socket.on('group_add_daily_limit', (data) => {
-    // Already logged via group_add_log, no extra action needed
+    // Already logged via group_add_log
 });
 
 socket.on('group_add_countdown', (data) => {
-    const logEl = document.getElementById('ga-log');
+    const opId = data.operationId;
+    const logEl = document.getElementById('ga-op-log-' + opId);
     if (!logEl) return;
 
     const id = 'ga-cd-' + data.logId;
@@ -3358,65 +3551,16 @@ socket.on('group_add_countdown', (data) => {
     }
 
     el.innerHTML = `<span class="ga-log-icon">⏳</span><span class="ga-log-msg">${text}</span><span class="ga-cd-bar"><span class="ga-cd-fill" style="width:${pct}%"></span></span><span class="ga-log-time">${timeStr}</span>`;
-    logEl.scrollTop = logEl.scrollHeight;
+    if (logEl.style.display !== 'none') logEl.scrollTop = logEl.scrollHeight;
 });
 
 // ==================== REPORT ====================
 
 function showGAReport(summary) {
-    const el = document.getElementById('ga-report');
-    el.style.display = 'block';
-
-    const durationMin = Math.floor(summary.duration / 60);
-    const durationSec = summary.duration % 60;
-    const durationText = durationMin > 0 ? durationMin + 'min ' + durationSec + 's' : durationSec + 's';
-
-    const statusHeaders = {
-        'completed': '✅ Operacao Concluida',
-        'stopped': '⏹ Operacao Parada',
-        'paused_daily': '⏸ Pausado — Limite Diario',
-        'failed': '❌ Operacao Falhou'
-    };
-    const headerText = statusHeaders[summary.status] || '📋 Resultado';
-
-    el.innerHTML = `
-        <div class="ga-report-card">
-            <div class="ga-report-header">${headerText}</div>
-            <div class="ga-report-grid">
-                <div class="ga-report-stat">
-                    <div class="ga-report-value">${summary.total}</div>
-                    <div class="ga-report-label">Total</div>
-                </div>
-                <div class="ga-report-stat success">
-                    <div class="ga-report-value">${summary.success}</div>
-                    <div class="ga-report-label">Adicionados</div>
-                </div>
-                <div class="ga-report-stat admin">
-                    <div class="ga-report-value">${summary.adminPromoted}</div>
-                    <div class="ga-report-label">Admins ✅</div>
-                </div>
-                <div class="ga-report-stat skip">
-                    <div class="ga-report-value">${summary.skip}</div>
-                    <div class="ga-report-label">Ja membros</div>
-                </div>
-                <div class="ga-report-stat fail">
-                    <div class="ga-report-value">${summary.fail}</div>
-                    <div class="ga-report-label">Falhas</div>
-                </div>
-                <div class="ga-report-stat warn">
-                    <div class="ga-report-value">${summary.adminFailed || 0}</div>
-                    <div class="ga-report-label">Sem admin ⚠️</div>
-                </div>
-            </div>
-            <div class="ga-report-duration">Duracao: ${durationText}</div>
-            ${summary.pending > 0 ? '<div class="ga-report-pending">⏳ ' + summary.pending + ' adicoes restantes (retomar amanha)</div>' : ''}
-            <div class="ga-report-actions">
-                <button class="btn btn-outline btn-sm" onclick="gaExportCSV(${summary.operationId})">Exportar CSV</button>
-                ${summary.fail > 0 ? '<button class="btn btn-warning btn-sm" onclick="gaRetry(' + summary.operationId + ')">Reexecutar falhas (' + summary.fail + ')</button>' : ''}
-                ${summary.status === 'paused_daily' || summary.pending > 0 ? '<button class="btn btn-success btn-sm" onclick="gaResumeOperation(' + summary.operationId + ')">▶ Retomar Operacao</button>' : ''}
-                <button class="btn btn-primary btn-sm" onclick="gaNewOperation()">Nova Operacao</button>
-            </div>
-        </div>`;
+    // Legacy — now handled by markOpCardDone via socket events
+    if (summary && summary.operationId) {
+        markOpCardDone(summary.operationId, summary.status || 'completed');
+    }
 }
 
 function gaExportCSV(opId) {
@@ -3424,47 +3568,14 @@ function gaExportCSV(opId) {
 }
 
 function gaRetry(opId) {
-    openConfirmModal('Reexecutar Falhas', 'Reexecutar apenas os itens que falharam?', 'Reexecutar', () => {
-        fetch('/api/group-add/retry/' + opId, { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                _gaCurrentOpId = data.operationId;
-                _gaRunning = true;
-                _gaPaused = false;
-                _gaLogItems = [];
-                showExecutionUI(data.retrying);
-                showToast('Reexecutando ' + data.retrying + ' itens', 'success');
-            } else {
-                showToast(data.error || 'Erro', 'danger');
-            }
-        });
-    });
+    gaRetryOp(opId);
 }
 
 function gaResumeOperation(opId) {
-    openConfirmModal('Retomar Operacao', 'Retomar adicao dos itens pendentes? (limites diarios serao resetados)', 'Retomar', () => {
-        fetch('/api/group-add/resume-operation/' + opId, { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                _gaCurrentOpId = data.operationId;
-                _gaRunning = true;
-                _gaPaused = false;
-                _gaLogItems = [];
-                document.getElementById('ga-report').style.display = 'none';
-                showExecutionUI(data.pendingItems);
-                showToast('Retomando operacao — ' + data.pendingItems + ' itens pendentes', 'success');
-            } else {
-                showToast(data.error || 'Erro ao retomar', 'danger');
-            }
-        });
-    });
+    gaResumeOperationOp(opId);
 }
 
 function gaNewOperation() {
-    document.getElementById('ga-report').style.display = 'none';
-    document.getElementById('ga-execution').style.display = 'none';
     document.getElementById('ga-summary').style.display = 'none';
     _gaSelectedGroups.clear();
     _gaSelectedChips.clear();
