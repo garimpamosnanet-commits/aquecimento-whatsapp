@@ -3266,22 +3266,23 @@ function createOpCard(operationId, adminName, totalItems) {
     card.innerHTML = `
         <div class="ga-op-header">
             <div class="ga-op-title">
-                <span>Op #${operationId} — ${escapeHtml(adminName)}</span>
-                <span class="op-badge running" id="ga-op-badge-${operationId}">Executando</span>
+                <span class="ga-op-name">🟢 ${escapeHtml(adminName)}</span>
+                <span class="op-badge running ga-op-badge">Executando</span>
             </div>
             <div class="ga-controls">
-                <button class="btn btn-warning btn-xs" id="ga-op-pause-${operationId}" onclick="gaTogglePauseOp(${operationId})">Pausar</button>
-                <button class="btn btn-danger btn-xs" onclick="gaStopOp(${operationId})">Parar</button>
+                <button class="btn btn-warning btn-xs ga-op-pause-btn" onclick="gaTogglePauseOp(${operationId})">⏸ Pausar</button>
+                <button class="btn btn-danger btn-xs" onclick="gaStopOp(${operationId})">⏹ Parar</button>
             </div>
         </div>
-        <div class="ga-progress-section">
-            <span id="ga-op-text-${operationId}" style="font-size:13px;font-weight:600">0/${totalItems} (0%)</span>
-            <div class="ga-progress-bar" style="margin:8px 0">
-                <div class="ga-progress-fill" id="ga-op-fill-${operationId}" style="width:0%"></div>
+        <div class="ga-op-progress">
+            <div class="ga-op-progress-row">
+                <span class="ga-op-progress-text">0/${totalItems} (0%)</span>
+                <span class="ga-op-id">#${operationId}</span>
             </div>
-            <div id="ga-op-stats-${operationId}" class="ga-progress-stats"></div>
+            <div class="ga-progress-bar"><div class="ga-progress-fill ga-op-progress-fill" style="width:0%"></div></div>
+            <div class="ga-op-stats ga-progress-stats"></div>
         </div>
-        <div id="ga-op-log-${operationId}" class="ga-op-log"></div>
+        <div class="ga-op-log"></div>
     `;
     container.prepend(card);
 }
@@ -3330,7 +3331,8 @@ function updateOpCardProgress(operationId, data) {
 }
 
 function appendOpLog(operationId, data) {
-    const logEl = document.getElementById('ga-op-log-' + operationId);
+    const card = document.getElementById('ga-op-' + operationId);
+    const logEl = card ? card.querySelector('.ga-op-log') : null;
     if (!logEl) return;
     const icons = {
         'success': '✅', 'admin': '👑', 'admin_fail': '⚠️',
@@ -3351,18 +3353,19 @@ function markOpCardDone(operationId, status) {
     const card = document.getElementById('ga-op-' + operationId);
     if (!card) return;
     card.className = 'ga-op-card ' + status;
-    const badge = document.getElementById('ga-op-badge-' + operationId);
+    const badge = card.querySelector('.ga-op-badge');
     if (badge) {
-        const labels = { completed: 'Concluido', stopped: 'Parado', failed: 'Falhou', paused_daily: 'Limite diario' };
+        const labels = { completed: '✅ Concluido', stopped: '⏹ Parado', failed: '❌ Falhou', paused_daily: '⏸ Limite diario' };
         badge.textContent = labels[status] || status;
         badge.className = 'op-badge ' + (status === 'paused_daily' ? 'paused' : status);
     }
-    // Replace controls with report actions
+    const nameEl = card.querySelector('.ga-op-name');
+    if (nameEl) nameEl.textContent = nameEl.textContent.replace('🟢', status === 'completed' ? '✅' : status === 'failed' ? '❌' : '⏹');
     const controls = card.querySelector('.ga-controls');
     if (controls) {
         controls.innerHTML = `
-            <button class="btn btn-outline btn-xs" onclick="gaExportCSV(${operationId})">CSV</button>
-            <button class="btn btn-outline btn-xs" onclick="gaRetryOp(${operationId})">Reexecutar falhas</button>
+            <button class="btn btn-outline btn-xs" onclick="gaExportCSV(${operationId})">📄 CSV</button>
+            <button class="btn btn-outline btn-xs" onclick="gaRetryOp(${operationId})">🔄 Reexecutar</button>
             ${status === 'paused_daily' ? '<button class="btn btn-success btn-xs" onclick="gaResumeOperationOp(' + operationId + ')">▶ Retomar</button>' : ''}
         `;
     }
@@ -3392,30 +3395,23 @@ function gaToggleOpLog(operationId) {
 function gaTogglePauseOp(operationId) {
     const opState = _gaActiveOps.get(operationId);
     if (!opState) return;
+    const card = document.getElementById('ga-op-' + operationId);
+    if (!card) return;
+    const btn = card.querySelector('.ga-op-pause-btn');
+    const badge = card.querySelector('.ga-op-badge');
+
     if (opState.paused) {
-        fetch('/api/group-add/resume', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ operationId })
-        });
+        fetch('/api/group-add/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operationId }) });
         opState.paused = false;
-        const btn = document.getElementById('ga-op-pause-' + operationId);
-        if (btn) btn.textContent = 'Pausar';
-        const badge = document.getElementById('ga-op-badge-' + operationId);
-        if (badge) { badge.textContent = 'Executando'; badge.className = 'op-badge running'; }
-        const card = document.getElementById('ga-op-' + operationId);
-        if (card) card.className = 'ga-op-card running';
+        if (btn) btn.textContent = '⏸ Pausar';
+        if (badge) { badge.textContent = 'Executando'; badge.className = 'op-badge running ga-op-badge'; }
+        card.className = 'ga-op-card running';
     } else {
-        fetch('/api/group-add/pause', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ operationId })
-        });
+        fetch('/api/group-add/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operationId }) });
         opState.paused = true;
-        const btn = document.getElementById('ga-op-pause-' + operationId);
-        if (btn) btn.textContent = 'Retomar';
-        const badge = document.getElementById('ga-op-badge-' + operationId);
-        if (badge) { badge.textContent = 'Pausado'; badge.className = 'op-badge paused'; }
-        const card = document.getElementById('ga-op-' + operationId);
-        if (card) card.className = 'ga-op-card paused';
+        if (btn) btn.textContent = '▶ Retomar';
+        if (badge) { badge.textContent = 'Pausado'; badge.className = 'op-badge paused ga-op-badge'; }
+        card.className = 'ga-op-card paused';
     }
 }
 
@@ -3592,7 +3588,7 @@ socket.on('group_add_stats', (data) => {
     const opId = data.operationId;
     if (!opId) return;
 
-    // Auto-create card if we don't know about this operation yet (another user started it)
+    // Auto-create card if we don't know about this operation yet
     if (!_gaActiveOps.has(opId)) {
         _gaActiveOps.set(opId, { paused: false, adminName: '?', totalItems: data.total });
         _gaRunning = true;
@@ -3600,14 +3596,39 @@ socket.on('group_add_stats', (data) => {
         createOpCard(opId, 'Operacao remota', data.total);
     }
 
-    updateOpCardProgress(opId, data);
+    // Update progress directly in DOM (robust — no dependency on element IDs)
+    const card = document.getElementById('ga-op-' + opId);
+    if (card) {
+        const pct = data.percent || 0;
+        const textEl = card.querySelector('.ga-op-progress-text');
+        const fillEl = card.querySelector('.ga-op-progress-fill');
+        const statsEl = card.querySelector('.ga-op-stats');
+        if (textEl) textEl.textContent = (data.processed || 0) + '/' + (data.total || 0) + ' (' + pct + '%)';
+        if (fillEl) fillEl.style.width = pct + '%';
+        if (statsEl) {
+            statsEl.innerHTML =
+                '<span class="ga-stat-item ga-stat-success">✅ ' + (data.success || 0) + '</span>' +
+                '<span class="ga-stat-item ga-stat-admin">👑 ' + (data.adminOk || 0) + '</span>' +
+                '<span class="ga-stat-item ga-stat-skip">⏭️ ' + (data.skip || 0) + '</span>' +
+                '<span class="ga-stat-item ga-stat-fail">❌ ' + (data.fail || 0) + '</span>' +
+                ((data.adminFail || 0) > 0 ? '<span class="ga-stat-item ga-stat-warn">⚠️ ' + data.adminFail + '</span>' : '') +
+                (data.currentGroup ? '<span class="ga-stat-item ga-stat-group">📂 ' + escapeHtml(data.currentGroup) + '</span>' : '');
+        }
+    }
 });
 
 socket.on('group_add_log', (data) => {
     const opId = data.operationId;
-    if (opId) {
-        appendOpLog(opId, data);
+    if (!opId) return;
+    // Ensure card exists
+    if (!document.getElementById('ga-op-' + opId)) {
+        if (!_gaActiveOps.has(opId)) {
+            _gaActiveOps.set(opId, { paused: false, adminName: '?', totalItems: 0 });
+            _gaRunning = true;
+            createOpCard(opId, 'Operacao', 0);
+        }
     }
+    appendOpLog(opId, data);
 });
 
 socket.on('group_add_status', (data) => {
@@ -3629,34 +3650,19 @@ socket.on('group_add_complete', (summary) => {
     if (opId) {
         _gaActiveOps.delete(opId);
         markOpCardDone(opId, summary.status || 'completed');
-        // Update final stats on card
-        updateOpCardProgress(opId, {
-            processed: (summary.success || 0) + (summary.fail || 0) + (summary.skip || 0),
-            total: summary.total, success: summary.success, fail: summary.fail,
-            skip: summary.skip, adminOk: summary.adminPromoted, adminFail: summary.adminFailed,
-            percent: 100
-        });
     }
-
-    if (_gaActiveOps.size === 0) {
-        _gaRunning = false;
-    }
+    if (_gaActiveOps.size === 0) _gaRunning = false;
 
     if (summary.status === 'paused_daily') {
         showToast('Op #' + opId + ': Limite diario — ' + (summary.pending || 0) + ' restantes', 'warning');
     } else {
-        showToast('Op #' + opId + ' concluida! ' + summary.success + ' adicionados', 'success');
+        showToast('Op #' + opId + ' concluida! ' + (summary.success || 0) + ' adicionados', 'success');
     }
 });
 
 socket.on('invite_codes_progress', (data) => {
-    // Show in all running ops (invite code fetch is per-operation but pre-card-creation)
     for (const [opId] of _gaActiveOps) {
-        appendOpLog(opId, {
-            type: 'info',
-            message: 'Buscando links: ' + data.done + '/' + data.total,
-            timestamp: new Date().toISOString()
-        });
+        appendOpLog(opId, { type: 'info', message: 'Buscando links: ' + data.done + '/' + data.total, timestamp: new Date().toISOString() });
     }
 });
 
@@ -3664,28 +3670,23 @@ socket.on('group_add_paused_daily', (data) => {
     showToast('Op #' + (data.operationId || '?') + ': Limite diario — ' + data.pendingCount + ' restantes', 'warning');
 });
 
-socket.on('group_add_daily_limit', (data) => {
-    // Already logged via group_add_log
-});
+socket.on('group_add_daily_limit', () => {});
 
 socket.on('group_add_countdown', (data) => {
     const opId = data.operationId;
-    const logEl = document.getElementById('ga-op-log-' + opId);
+    const card = document.getElementById('ga-op-' + opId);
+    const logEl = card ? card.querySelector('.ga-op-log') : null;
     if (!logEl) return;
 
     const id = 'ga-cd-' + data.logId;
     let el = document.getElementById(id);
 
-    if (data.done) {
-        if (el) el.remove();
-        return;
-    }
+    if (data.done) { if (el) el.remove(); return; }
 
     const mins = Math.floor(data.remaining / 60);
     const secs = data.remaining % 60;
-    const timeStr = mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
+    const timeStr = mins > 0 ? mins + ':' + secs.toString().padStart(2, '0') : secs + 's';
     const pct = Math.round(((data.total - data.remaining) / data.total) * 100);
-    const text = `⏳ ${data.label} em ${timeStr}`;
 
     if (!el) {
         el = document.createElement('div');
@@ -3693,10 +3694,27 @@ socket.on('group_add_countdown', (data) => {
         el.id = id;
         logEl.appendChild(el);
     }
-
-    el.innerHTML = `<span class="ga-log-icon">⏳</span><span class="ga-log-msg">${text}</span><span class="ga-cd-bar"><span class="ga-cd-fill" style="width:${pct}%"></span></span><span class="ga-log-time">${timeStr}</span>`;
-    if (logEl.style.display !== 'none') logEl.scrollTop = logEl.scrollHeight;
+    el.innerHTML = '<span class="ga-log-icon">⏳</span><span class="ga-log-msg">⏳ ' + (data.label || '') + ' em ' + timeStr + '</span><span class="ga-cd-bar"><span class="ga-cd-fill" style="width:' + pct + '%"></span></span><span class="ga-log-time">' + timeStr + '</span>';
+    logEl.scrollTop = logEl.scrollHeight;
 });
+
+// Polling fallback: sync running operations every 5s
+setInterval(() => {
+    if (_gaActiveOps.size === 0) return;
+    fetch('/api/group-add/current').then(r => r.json()).then(data => {
+        if (!data.running || !data.operations) return;
+        for (const op of data.operations) {
+            const card = document.getElementById('ga-op-' + op.operationId);
+            if (card) {
+                const pct = op.totalItems > 0 ? Math.round(op.processed / op.totalItems * 100) : 0;
+                const textEl = card.querySelector('.ga-op-progress-text');
+                const fillEl = card.querySelector('.ga-op-progress-fill');
+                if (textEl) textEl.textContent = op.processed + '/' + op.totalItems + ' (' + pct + '%)';
+                if (fillEl) fillEl.style.width = pct + '%';
+            }
+        }
+    }).catch(() => {});
+}, 5000);
 
 // ==================== REPORT ====================
 

@@ -2369,62 +2369,108 @@ body::before {
 
 /* Execution */
 /* Multi-operation container */
-#ga-operations-container { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
+.ga-ops-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 0 2px;
+}
+.ga-ops-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ga-ops-icon { font-size: 18px; }
+.ga-ops-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.ga-ops-badge {
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--success);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+.ga-ops-badge-done {
+    background: var(--accent);
+}
+.ga-ops-header-done { margin-top: 16px; }
+.ga-ops-header-done .ga-ops-title { color: var(--text-secondary); }
+
+#ga-operations-container { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+#ga-done-container { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
 
 .ga-op-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 16px;
+    padding: 20px;
     position: relative;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
 }
-.ga-op-card.running { border-left: 3px solid var(--success); }
-.ga-op-card.paused { border-left: 3px solid var(--warming); }
-.ga-op-card.stopped { border-left: 3px solid var(--text-muted); }
-.ga-op-card.completed { border-left: 3px solid var(--accent); }
-.ga-op-card.failed { border-left: 3px solid var(--danger); }
+.ga-op-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.ga-op-card.running { border-left: 4px solid var(--success); }
+.ga-op-card.paused { border-left: 4px solid var(--warming); }
+.ga-op-card.stopped { border-left: 4px solid var(--text-muted); }
+.ga-op-card.completed { border-left: 4px solid var(--accent); }
+.ga-op-card.failed { border-left: 4px solid var(--danger); }
+.ga-op-card.paused_daily { border-left: 4px solid var(--warming); }
 
 .ga-op-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
 }
 .ga-op-title {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
-.ga-op-title .op-badge {
-    font-size: 10px;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-}
-.ga-op-title .op-badge.running { background: rgba(34,197,94,0.15); color: var(--success); }
-.ga-op-title .op-badge.paused { background: rgba(245,158,11,0.15); color: var(--warming); }
-.ga-op-title .op-badge.completed { background: rgba(99,102,241,0.15); color: var(--accent); }
-.ga-op-title .op-badge.failed { background: rgba(239,68,68,0.15); color: var(--danger); }
+.ga-op-name { letter-spacing: -0.2px; }
+.ga-op-id { font-size: 11px; color: var(--text-muted); font-weight: 400; }
 
-.ga-op-log-toggle {
-    font-size: 12px;
-    color: var(--text-muted);
-    cursor: pointer;
-    user-select: none;
+.op-badge {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
-.ga-op-log-toggle:hover { color: var(--text-primary); }
+.op-badge.running { background: rgba(34,197,94,0.12); color: var(--success); }
+.op-badge.paused { background: rgba(245,158,11,0.12); color: var(--warming); }
+.op-badge.completed { background: rgba(99,102,241,0.12); color: var(--accent); }
+.op-badge.failed { background: rgba(239,68,68,0.12); color: var(--danger); }
+
+.ga-op-progress { margin-bottom: 12px; }
+.ga-op-progress-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.ga-op-progress-text {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
 
 .ga-op-log {
-    max-height: 250px;
+    max-height: 300px;
     overflow-y: auto;
     background: var(--bg-secondary);
     border-radius: var(--radius-sm);
-    padding: 8px;
-    font-size: 11px;
-    margin-top: 12px;
+    padding: 10px;
+    font-size: 12px;
+    font-family: 'Inter', monospace;
+    border: 1px solid var(--border);
 }
 
 .ga-execution {
