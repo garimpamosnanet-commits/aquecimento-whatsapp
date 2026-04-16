@@ -351,14 +351,25 @@ function deleteChip(id) {
 }
 
 function getChipStats() {
-    const chips = loadDb().chips;
+    const data = loadDb();
+    const chips = data.chips;
+    const proxies = data.proxies || [];
+    const folders = data.folders || [];
+    const connected = chips.filter(c => c.status === 'connected' || c.status === 'warming' || c.status === 'rehabilitation');
+    const withProxy = chips.filter(c => c.proxy_id);
     return {
         total: chips.length,
-        connected: chips.filter(c => c.status === 'connected' || c.status === 'warming' || c.status === 'rehabilitation').length,
+        connected: connected.length,
         warming: chips.filter(c => c.status === 'warming').length,
         rehabilitation: chips.filter(c => c.status === 'rehabilitation').length,
+        disconnected: chips.filter(c => c.status === 'disconnected').length,
         discarded: chips.filter(c => c.status === 'discarded').length,
-        totalMessages: chips.reduce((sum, c) => sum + c.messages_sent, 0)
+        totalMessages: chips.reduce((sum, c) => sum + c.messages_sent, 0),
+        proxiesActive: withProxy.filter(c => connected.find(cc => cc.id === c.id)).length,
+        proxiesTotal: proxies.length,
+        folders: folders.length,
+        qrPending: chips.filter(c => c.status === 'qr_pending').length,
+        phase4plus: chips.filter(c => c.phase >= 4 && c.status !== 'discarded').length
     };
 }
 

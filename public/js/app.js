@@ -91,6 +91,13 @@ socket.on('stats', (stats) => {
     updateStat('stat-connected', stats.connected);
     updateStat('stat-warming', stats.warming);
     updateStat('stat-messages', stats.totalMessages);
+    updateStat('stat-disconnected', stats.disconnected || 0);
+    updateStat('stat-proxies', stats.proxiesActive || 0);
+    updateStat('stat-ready', stats.phase4plus || 0);
+    updateStat('stat-folders', stats.folders || 0);
+    // Proxies sub text
+    const proxSub = document.getElementById('stat-proxies-sub');
+    if (proxSub) proxSub.textContent = (stats.proxiesActive || 0) + '/' + (stats.proxiesTotal || 0) + ' em uso';
 });
 
 socket.on('chips_list', (list) => {

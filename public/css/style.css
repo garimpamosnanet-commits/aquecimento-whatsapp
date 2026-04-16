@@ -399,6 +399,22 @@ body::before {
 .stat-card.neutral .stat-icon { background: rgba(107, 114, 128, 0.08); color: var(--text-secondary); }
 .stat-card.neutral .stat-value { color: var(--text-primary); }
 
+.stat-card.danger .stat-icon { background: rgba(239, 68, 68, 0.08); color: var(--danger); }
+.stat-card.danger .stat-value { color: var(--danger); }
+.stat-card.danger:hover { border-color: rgba(239, 68, 68, 0.2); }
+
+.stat-card.proxy .stat-icon { background: rgba(99, 102, 241, 0.08); color: #6366F1; }
+.stat-card.proxy .stat-value { color: #6366F1; }
+.stat-card.proxy:hover { border-color: rgba(99, 102, 241, 0.2); }
+
+.stat-card.ready .stat-icon { background: rgba(16, 185, 129, 0.08); color: #10B981; }
+.stat-card.ready .stat-value { color: #10B981; }
+.stat-card.ready:hover { border-color: rgba(16, 185, 129, 0.2); }
+
+.stat-card.folders .stat-icon { background: rgba(245, 158, 11, 0.08); color: #F59E0B; }
+.stat-card.folders .stat-value { color: #F59E0B; }
+.stat-card.folders:hover { border-color: rgba(245, 158, 11, 0.2); }
+
 /* ==================== TABS ==================== */
 .tabs {
     display: flex;
