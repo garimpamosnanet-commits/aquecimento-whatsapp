@@ -1187,148 +1187,159 @@ body::before {
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.18); }
 
-/* ==================== FOLDERS & DRAG-DROP ==================== */
-.folder-section {
-    margin-bottom: 12px;
-    border-radius: var(--radius);
-    overflow: hidden;
-    border: 1px solid var(--border);
-    background: var(--bg-card);
-    transition: box-shadow 0.2s;
-}
-.folder-section:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-.folder-section.folder-open {
-    border-color: var(--border-hover);
+/* ==================== FOLDERS GRID (top bar) ==================== */
+.folders-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
 }
 
-.folder-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 18px;
+.folder-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
     cursor: pointer;
     user-select: none;
-    transition: background 0.15s;
-    flex-wrap: nowrap;
-    gap: 12px;
-    background: transparent;
-    border: none;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+}
+.folder-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.folder-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
 }
 
-.folder-header:hover {
-    background: var(--bg-hover);
-}
-
-.folder-header-left {
+.folder-card-top {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-width: 0;
-    flex: 1;
-}
-
-.folder-toggle {
-    font-size: 11px;
-    color: var(--text-muted);
-    transition: transform 0.25s ease;
-    display: inline-block;
-    width: 16px;
-    text-align: center;
-}
-.folder-section.folder-open .folder-toggle {
-    transform: rotate(90deg);
+    margin-bottom: 8px;
 }
 
 .folder-icon {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    font-size: 17px;
     flex-shrink: 0;
 }
 .folder-icon.unassigned { background: var(--bg-secondary); }
 .folder-icon.client { background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(59,130,246,0.12)); }
 
-.folder-name-block {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-.folder-title {
-    font-size: 14px;
+.folder-card-title {
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
-    letter-spacing: -0.2px;
-    white-space: nowrap;
-}
-
-.folder-subtitle {
-    font-size: 11px;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
 }
-.folder-name-block { overflow: hidden; }
-.folder-subtitle .fs-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
-.folder-subtitle .fs-connected { color: var(--success); font-weight: 500; }
-.folder-subtitle .fs-warming { color: var(--warming); }
 
-.folder-chip-count {
-    font-size: 12px;
+.folder-card-count {
+    font-size: 11px;
     font-weight: 600;
     color: var(--text-secondary);
     background: var(--bg-secondary);
-    padding: 3px 10px;
-    border-radius: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
     white-space: nowrap;
     flex-shrink: 0;
 }
 
-.folder-actions {
+.folder-card-stats {
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.folder-card-stats .fcs-item { display: flex; align-items: center; gap: 3px; }
+.folder-card-stats .fcs-ok { color: var(--success); }
+.folder-card-stats .fcs-warm { color: var(--warming); }
+.folder-card-stats .fcs-off { color: var(--text-muted); }
+
+.folder-card-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    display: flex;
+}
+.folder-card-bar .fcb-seg { height: 100%; }
+.folder-card-bar .fcb-connected { background: var(--success); }
+.folder-card-bar .fcb-warming { background: var(--warming); }
+.folder-card-bar .fcb-off { background: var(--text-muted); opacity: 0.2; }
+
+.folder-card-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 2px;
     opacity: 0;
     transition: opacity 0.15s;
 }
-.folder-header:hover .folder-actions { opacity: 1; }
+.folder-card:hover .folder-card-actions { opacity: 1; }
 
-.folder-drop-zone {
-    min-height: 60px;
-    border-radius: 0;
-    transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease;
-    border: none;
-    border-top: 1px solid var(--border);
-    padding: 8px;
-    background: var(--bg-secondary);
-}
-
-.folder-drop-zone.drag-over {
-    background: rgba(59, 130, 246, 0.06);
-}
-
-.folder-drop-zone[style*="display: none"] + .folder-status-bar,
-.folder-drop-zone:not([style*="display: none"]) { /* visible */ }
-
-.folder-status-bar {
-    height: 3px;
-    background: var(--bg-secondary);
-    display: flex;
+/* ==================== FOLDER CONTENT (below grid) ==================== */
+.folder-content-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
     overflow: hidden;
+    animation: feedFadeIn 0.2s ease;
 }
-.folder-status-bar .fsb-segment { height: 100%; transition: width 0.3s; }
-.folder-status-bar .fsb-connected { background: var(--success); }
-.folder-status-bar .fsb-warming { background: var(--warming); }
-.folder-status-bar .fsb-disconnected { background: var(--text-muted); opacity: 0.3; }
+.folder-content-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, rgba(99,102,241,0.04), rgba(59,130,246,0.04));
+    border-bottom: 1px solid var(--border);
+}
+.folder-content-title {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.folder-content-close {
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+.folder-content-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
+
+.folder-content-chips {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+    padding: 12px;
+    min-height: 60px;
+    border: 2px dashed transparent;
+    transition: background 0.2s, border-color 0.2s;
+}
+.folder-content-chips.drag-over {
+    background: rgba(59, 130, 246, 0.04);
+    border-color: var(--accent);
+}
 
 .empty-folder-hint {
     text-align: center;

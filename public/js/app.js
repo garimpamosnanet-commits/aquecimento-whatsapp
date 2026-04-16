@@ -347,53 +347,59 @@ function renderChipCard(chip) {
     </div>`;
 }
 
-function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
+function renderFolderCard(folderId, folderName, folderChips, isUnassigned) {
     const count = folderChips.length;
     const dropId = isUnassigned ? 'drop-none' : `drop-folder-${folderId}`;
-    const dataFolder = isUnassigned ? 'null' : folderId;
-    const folderKey = isUnassigned ? 'none' : folderId;
-
-    // Compute stats for subtitle
     const connected = folderChips.filter(c => c.status === 'connected' || c.status === 'warming').length;
     const warming = folderChips.filter(c => c.status === 'warming').length;
     const disconnected = count - connected;
-    const title = isUnassigned ? 'Conexoes Sem Pasta' : escapeHtml(folderName);
+    const title = isUnassigned ? 'Sem Pasta' : escapeHtml(folderName);
     const icon = isUnassigned ? '📂' : '📁';
     const iconClass = isUnassigned ? 'unassigned' : 'client';
+    const isActive = _openFolders.has(dropId);
 
-    // Status bar widths
     const connPct = count > 0 ? Math.round((connected - warming) / count * 100) : 0;
     const warmPct = count > 0 ? Math.round(warming / count * 100) : 0;
-    const discPct = count > 0 ? (100 - connPct - warmPct) : 100;
+    const offPct = count > 0 ? (100 - connPct - warmPct) : 100;
 
     return `
-    <div class="folder-section" id="${dropId}">
-        <div class="folder-status-bar">
-            <div class="fsb-segment fsb-connected" style="width:${connPct}%"></div>
-            <div class="fsb-segment fsb-warming" style="width:${warmPct}%"></div>
-            <div class="fsb-segment fsb-disconnected" style="width:${discPct}%"></div>
+    <div class="folder-card ${isActive ? 'active' : ''}" id="fc-${dropId}" onclick="toggleFolder('${dropId}')">
+        <div class="folder-card-top">
+            <div class="folder-icon ${iconClass}">${icon}</div>
+            <span class="folder-card-title">${title}</span>
+            <span class="folder-card-count">${count}</span>
         </div>
-        <div class="folder-header" onclick="toggleFolder('${dropId}')">
-            <div class="folder-header-left">
-                <span class="folder-toggle" id="toggle-${dropId}">▶</span>
-                <div class="folder-icon ${iconClass}">${icon}</div>
-                <div class="folder-name-block">
-                    <span class="folder-title">${title}</span>
-                    <div class="folder-subtitle">
-                        <span class="fs-connected">🟢 ${connected} conectados</span>
-                        ${warming > 0 ? '<span class="fs-dot"></span><span class="fs-warming">🔥 ' + warming + ' aquecendo</span>' : ''}
-                        ${disconnected > 0 ? '<span class="fs-dot"></span><span>🔴 ' + disconnected + ' offline</span>' : ''}
-                    </div>
-                </div>
-            </div>
-            <span class="folder-chip-count">${count} chip${count !== 1 ? 's' : ''}</span>
-            ${!isUnassigned ? `
-            <div class="folder-actions" onclick="event.stopPropagation()">
-                <button class="btn-icon" onclick="renameFolder(${folderId}, '${folderName.replace(/'/g, "\\'")}')" title="Renomear">✏️</button>
-                <button class="btn-icon danger" onclick="deleteFolderConfirm(${folderId})" title="Excluir pasta">🗑️</button>
-            </div>` : ''}
+        <div class="folder-card-stats">
+            ${connected > 0 ? '<span class="fcs-item fcs-ok">🟢 ' + connected + '</span>' : ''}
+            ${warming > 0 ? '<span class="fcs-item fcs-warm">🔥 ' + warming + '</span>' : ''}
+            ${disconnected > 0 ? '<span class="fcs-item fcs-off">🔴 ' + disconnected + '</span>' : ''}
         </div>
-        <div class="folder-drop-zone chips-grid" data-folder="${dataFolder}" style="display:none"
+        ${!isUnassigned ? `
+        <div class="folder-card-actions" onclick="event.stopPropagation()">
+            <button class="btn-icon" onclick="renameFolder(${folderId}, '${folderName.replace(/'/g, "\\'")}')" title="Renomear">✏️</button>
+            <button class="btn-icon danger" onclick="deleteFolderConfirm(${folderId})" title="Excluir">🗑️</button>
+        </div>` : ''}
+        <div class="folder-card-bar">
+            <div class="fcb-seg fcb-connected" style="width:${connPct}%"></div>
+            <div class="fcb-seg fcb-warming" style="width:${warmPct}%"></div>
+            <div class="fcb-seg fcb-off" style="width:${offPct}%"></div>
+        </div>
+    </div>`;
+}
+
+function renderFolderContent(folderId, folderName, folderChips, isUnassigned) {
+    const dropId = isUnassigned ? 'drop-none' : `drop-folder-${folderId}`;
+    const dataFolder = isUnassigned ? 'null' : folderId;
+    const title = isUnassigned ? 'Conexoes Sem Pasta' : escapeHtml(folderName);
+    const count = folderChips.length;
+
+    return `
+    <div class="folder-content-panel" id="panel-${dropId}">
+        <div class="folder-content-header">
+            <span class="folder-content-title">${isUnassigned ? '📂' : '📁'} ${title} (${count})</span>
+            <span class="folder-content-close" onclick="toggleFolder('${dropId}')" title="Fechar">✕</span>
+        </div>
+        <div class="folder-content-chips" data-folder="${dataFolder}"
              ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
             ${folderChips.length > 0 ? folderChips.map(c => renderChipCard(c)).join('') : `
             <div class="empty-folder-hint">Arraste chips para esta pasta</div>`}
@@ -402,39 +408,44 @@ function renderFolderSection(folderId, folderName, folderChips, isUnassigned) {
 }
 
 function renderChips() {
-    const grid = document.getElementById('chips-grid');
+    const foldersGrid = document.getElementById('folders-grid');
+    const contentArea = document.getElementById('folder-content-area');
+
+    if (!foldersGrid || !contentArea) return;
 
     if (chips.length === 0 && folders.length === 0) {
-        grid.innerHTML = `
-            <div class="empty-state">
+        foldersGrid.innerHTML = `
+            <div class="empty-state" style="grid-column:1/-1">
                 <div class="empty-icon">📱</div>
                 <h3>Nenhum chip cadastrado</h3>
                 <p>Clique em "+ Chip" para conectar o primeiro</p>
             </div>`;
+        contentArea.innerHTML = '';
         return;
     }
 
-    let html = '';
-
-    // Unassigned chips (no folder)
+    // Build folder data
+    const folderData = [];
     const unassigned = chips.filter(c => !c.folder_id);
     if (unassigned.length > 0 || folders.length > 0) {
-        html += renderFolderSection(null, null, unassigned, true);
+        folderData.push({ id: null, name: null, chips: unassigned, isUnassigned: true });
     }
-
-    // Each folder
     for (const folder of folders) {
-        const folderChips = chips.filter(c => c.folder_id === folder.id);
-        html += renderFolderSection(folder.id, folder.name, folderChips, false);
+        folderData.push({ id: folder.id, name: folder.name, chips: chips.filter(c => c.folder_id === folder.id), isUnassigned: false });
     }
 
-    // If no folders and has chips, just render unassigned
-    if (folders.length === 0 && unassigned.length > 0) {
-        // Already rendered above
-    }
+    // Render folder cards (top grid)
+    foldersGrid.innerHTML = folderData.map(f => renderFolderCard(f.id, f.name, f.chips, f.isUnassigned)).join('');
 
-    grid.innerHTML = html;
-    restoreOpenFolders();
+    // Render open folder content panels (below)
+    let contentHtml = '';
+    for (const f of folderData) {
+        const dropId = f.isUnassigned ? 'drop-none' : `drop-folder-${f.id}`;
+        if (_openFolders.has(dropId)) {
+            contentHtml += renderFolderContent(f.id, f.name, f.chips, f.isUnassigned);
+        }
+    }
+    contentArea.innerHTML = contentHtml;
 }
 
 // ==================== FOLDER CRUD ====================
@@ -623,29 +634,16 @@ document.addEventListener('dragend', () => {
 const _openFolders = new Set();
 
 function toggleFolder(dropId) {
-    const section = document.getElementById(dropId);
-    const zone = section?.querySelector('.folder-drop-zone');
-    if (!zone) return;
-    if (zone.style.display === 'none') {
-        zone.style.display = '';
-        section.classList.add('folder-open');
-        _openFolders.add(dropId);
-    } else {
-        zone.style.display = 'none';
-        section.classList.remove('folder-open');
+    if (_openFolders.has(dropId)) {
         _openFolders.delete(dropId);
+    } else {
+        _openFolders.add(dropId);
     }
+    renderChips();
 }
 
 function restoreOpenFolders() {
-    for (const dropId of _openFolders) {
-        const section = document.getElementById(dropId);
-        const zone = section?.querySelector('.folder-drop-zone');
-        if (zone) {
-            zone.style.display = '';
-            section?.classList.add('folder-open');
-        }
-    }
+    // No-op — renderChips now handles open state directly
 }
 
 function getStatusLabel(status) {
