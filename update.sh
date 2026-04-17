@@ -29,6 +29,7 @@ wget -q -O /app/src/notifier.js "$REPO/src/notifier.js"
 wget -q -O /app/src/scheduler.js "$REPO/src/scheduler.js"
 wget -q -O /app/src/backup.js "$REPO/src/backup.js"
 wget -q -O /app/src/proxy-rotator.js "$REPO/src/proxy-rotator.js"
+wget -q -O /app/src/chip-reconnector.js "$REPO/src/chip-reconnector.js"
 
 # Frontend
 wget -q -O /app/public/index.html "$REPO/public/index.html"

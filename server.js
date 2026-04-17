@@ -1,4 +1,4 @@
-const BUILD_VERSION = '1.4.1-20260417';
+const BUILD_VERSION = '1.4.2-20260417b';
 console.log(`\n========================================`);
 console.log(`  KS Digital Aquecimento v${BUILD_VERSION}`);
 console.log(`  Started at: ${new Date().toISOString()}`);
@@ -243,6 +243,11 @@ server.listen(PORT, async () => {
     const proxyRotator = new ProxyRotator(sessionManager);
     proxyRotator.start();
     app.set('proxyRotator', proxyRotator);
+
+    // Start chip reconnector (auto-recovery for chips that drop mid-session)
+    const ChipReconnector = require('./src/chip-reconnector');
+    const chipReconnector = new ChipReconnector(sessionManager, io);
+    chipReconnector.start();
     console.log('');
 });
 
