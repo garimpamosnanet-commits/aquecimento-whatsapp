@@ -78,7 +78,7 @@ class GroupManager {
         const sock = this.sessionManager.getSocket(adminSessionId);
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
-        const groups = await sock.groupFetchAllParticipating();
+        const groups = await this._withTimeout(sock.groupFetchAllParticipating(), 30000, 'groupFetchAllParticipating');
         console.log(`[GroupManager] Total groups: ${Object.keys(groups).length}`);
 
         const result = [];
@@ -100,7 +100,7 @@ class GroupManager {
     async getGroupParticipants(adminSessionId, groupId) {
         const sock = await this.getAdmSocket(adminSessionId, 'getGroupParticipants');
 
-        const meta = await sock.groupMetadata(groupId);
+        const meta = await this._withTimeout(sock.groupMetadata(groupId), 20000, 'groupMetadata');
         return (meta.participants || []).map(p => ({
             jid: p.id,
             isAdmin: p.admin === 'admin' || p.admin === 'superadmin'
@@ -113,7 +113,7 @@ class GroupManager {
         if (!sock) return false;
         try {
             const jid = phoneNumber.replace(/\D/g, '') + '@s.whatsapp.net';
-            const [result] = await sock.onWhatsApp(jid);
+            const [result] = await this._withTimeout(sock.onWhatsApp(jid), 15000, 'onWhatsApp');
             return result?.exists || false;
         } catch (e) {
             console.log(`[GroupManager] Erro ao verificar numero ${phoneNumber}: ${e.message}`);
@@ -126,7 +126,7 @@ class GroupManager {
 
         try {
             console.log(`[GroupManager] addToGroup: group=${groupId}, jid=${jid}`);
-            const result = await sock.groupParticipantsUpdate(groupId, [jid], 'add');
+            const result = await this._withTimeout(sock.groupParticipantsUpdate(groupId, [jid], 'add'), 30000, 'groupParticipantsUpdate(add)');
             console.log(`[GroupManager] addToGroup result:`, JSON.stringify(result));
 
             const entry = result?.[0];
@@ -179,7 +179,7 @@ class GroupManager {
     async promoteToAdmin(adminSessionId, groupId, jid) {
         const sock = await this.getAdmSocket(adminSessionId, 'promote');
         try {
-            await sock.groupParticipantsUpdate(groupId, [jid], 'promote');
+            await this._withTimeout(sock.groupParticipantsUpdate(groupId, [jid], 'promote'), 30000, 'groupParticipantsUpdate(promote)');
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };
@@ -195,7 +195,7 @@ class GroupManager {
         }
         try {
             console.log(`[GroupManager] joinViaInviteLink: chip=${chipSessionId}, code=${inviteCode}`);
-            const groupJid = await sock.groupAcceptInvite(inviteCode);
+            const groupJid = await this._withTimeout(sock.groupAcceptInvite(inviteCode), 30000, 'groupAcceptInvite');
             if (groupJid) {
                 console.log(`[GroupManager] Chip entrou no grupo ${groupName} (${groupJid})`);
                 return { success: true, groupJid, alreadyMember: false };
@@ -225,7 +225,7 @@ class GroupManager {
         }
         // Fetch fresh
         const sock = await this.getAdmSocket(adminSessionId, 'getInviteCode');
-        const code = await sock.groupInviteCode(groupId);
+        const code = await this._withTimeout(sock.groupInviteCode(groupId), 20000, 'groupInviteCode');
         if (!code) throw new Error('Nao obteve codigo de convite');
         db.setGroupInviteLink(groupId, `https://chat.whatsapp.com/${code}`);
         return code;
@@ -305,7 +305,7 @@ class GroupManager {
             try {
                 const chipSock = this.sessionManager.getSocket(options.chipSessionId);
                 if (chipSock?.user) {
-                    const myGroups = await chipSock.groupFetchAllParticipating();
+                    const myGroups = await this._withTimeout(chipSock.groupFetchAllParticipating(), 30000, 'chip.groupFetchAllParticipating');
                     if (myGroups[groupId]) {
                         // Check if already admin in this group
                         const myId = chipSock.user.id.split(':')[0];
@@ -954,6 +954,21 @@ class GroupManager {
 
     _random(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // Wraps a Baileys call so it never hangs indefinitely. WhatsApp sometimes
+    // accepts a request but never replies, which used to freeze the whole
+    // group-add loop. Default 30s is generous enough for normal operations.
+    async _withTimeout(promise, ms, label) {
+        let timer;
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`Timeout (${ms}ms) em ${label || 'chamada Baileys'}`)), ms);
+        });
+        try {
+            return await Promise.race([promise, timeout]);
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     _waitForResume(operationId) {

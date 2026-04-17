@@ -674,6 +674,23 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true, message: 'Operacao resetada', operationId: opId || 'all' });
     });
 
+    // Mark stuck DB operations (running but not in memory map) as stopped.
+    // Used to clean zombie ops that got stuck in a Baileys hang before the
+    // timeout fix landed. Safe to run anytime — only touches ops whose
+    // in-memory worker is already gone.
+    router.post('/group-add/cleanup-zombies', (req, res) => {
+        const dbOps = db.getAddOperations(100);
+        const live = new Set(groupManager.getRunningOperations());
+        const cleaned = [];
+        for (const op of dbOps) {
+            if (op.status === 'running' && !live.has(op.id)) {
+                db.updateAddOperation(op.id, { status: 'stopped' });
+                cleaned.push(op.id);
+            }
+        }
+        res.json({ success: true, cleaned, count: cleaned.length });
+    });
+
     // Check running operations (multi-user sync, multi-operation support)
     router.get('/group-add/current', (req, res) => {
         const runningIds = groupManager.getRunningOperations();
