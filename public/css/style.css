@@ -596,16 +596,24 @@ body::before {
 
 .btn-edit-name {
     cursor: pointer;
-    font-size: 11px;
-    opacity: 0;
-    transition: opacity 0.2s;
+    font-size: 14px;
+    opacity: 0.55;
+    transition: opacity 0.2s, transform 0.1s;
     flex-shrink: 0;
+    padding: 2px 4px;
+    border-radius: 4px;
+    user-select: none;
 }
 .chip-card:hover .btn-edit-name {
-    opacity: 0.4;
+    opacity: 0.85;
 }
 .btn-edit-name:hover {
     opacity: 1 !important;
+    background: rgba(0, 0, 0, 0.06);
+    transform: scale(1.15);
+}
+@media (hover: none) {
+    .btn-edit-name { opacity: 1; }
 }
 
 /* Badges row: proxy + health + last activity */
@@ -2031,10 +2039,12 @@ body::before {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .aq-chip-name .aq-edit-btn {
-    opacity: 0; cursor: pointer; font-size: 12px; transition: opacity 0.15s;
+    opacity: 0.55; cursor: pointer; font-size: 14px; transition: opacity 0.15s;
+    padding: 2px 4px; border-radius: 4px; user-select: none;
 }
-.aq-chip-row:hover .aq-edit-btn { opacity: 0.6; }
-.aq-edit-btn:hover { opacity: 1 !important; }
+.aq-chip-row:hover .aq-edit-btn { opacity: 0.85; }
+.aq-edit-btn:hover { opacity: 1 !important; background: rgba(0,0,0,0.06); }
+@media (hover: none) { .aq-edit-btn { opacity: 1; } }
 .aq-chip-phone-col {
     font-size: 12px; font-weight: 500; color: var(--text-secondary);
     font-family: 'JetBrains Mono', monospace;

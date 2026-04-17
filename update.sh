@@ -35,6 +35,6 @@ wget -q -O /app/src/chip-reconnector.js "$REPO/src/chip-reconnector.js"
 wget -q -O /app/public/index.html "$REPO/public/index.html"
 wget -q -O /app/public/login.html "$REPO/public/login.html"
 wget -q -O /app/public/js/app.js "$REPO/public/js/app.js"
-wget -q -O /app/public/css/style.css "$REPO/public/css/style.css"
+wget -q -O /app/public/css/style.css "$REPO/public/css/style.css?v=$(date +%s)"
 
 echo "[Update] Todos os arquivos atualizados!"
