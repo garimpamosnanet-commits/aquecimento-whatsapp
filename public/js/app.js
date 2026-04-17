@@ -287,7 +287,7 @@ function renderChipCard(chip) {
             <div class="chip-info">
                 <div class="chip-avatar ${avatarClass}">${avatarContent}</div>
                 <div class="chip-identity">
-                    <div class="chip-name">${chip.name || 'Chip ' + chip.id} ${instanceBadge}${readyBadge} <span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
+                    <div class="chip-name"><span class="chip-name-text">${chip.name || 'Chip ' + chip.id}</span>${instanceBadge}${readyBadge}<span class="btn-edit-name" onclick="editChipName(${chip.id}, '${(chip.name || '').replace(/'/g, "\\'")}')" title="Editar nome">✏️</span></div>
                     <div class="chip-phone">${chip.phone || 'Aguardando conexao...'}</div>
                 </div>
             </div>
