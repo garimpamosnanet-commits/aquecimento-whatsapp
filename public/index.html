@@ -921,10 +921,28 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
     </div>
 </div>
 
+<!-- MODAL: CHIP PICKER (multi-select chip list with search) -->
+<div class="modal-overlay" id="chip-picker-modal">
+    <div class="modal chip-picker-modal">
+        <h3 id="chip-picker-title">Selecionar Chips</h3>
+        <p id="chip-picker-desc" class="muted" style="margin-top:-4px;font-size:13px"></p>
+        <div class="chip-picker-controls">
+            <input type="text" id="chip-picker-search" placeholder="Buscar por nome, numero ou fase..." autocomplete="off">
+            <label class="chip-picker-checkall"><input type="checkbox" id="chip-picker-selectall"> Selecionar todos</label>
+        </div>
+        <div class="chip-picker-list" id="chip-picker-list"></div>
+        <div class="chip-picker-summary" id="chip-picker-summary">0 selecionados</div>
+        <div class="modal-actions" style="margin-top:12px">
+            <button class="btn btn-outline" onclick="closeChipPicker()">Cancelar</button>
+            <button class="btn btn-primary" id="chip-picker-confirm" onclick="confirmChipPicker()">Confirmar</button>
+        </div>
+    </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js?v=20260415b"></script>
+<script src="/js/app.js?v=20260418a"></script>
 </body>
 </html>

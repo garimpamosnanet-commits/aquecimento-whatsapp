@@ -2584,22 +2584,22 @@ function connectAquecido(chipId, phone, mode) {
 }
 
 function renameClient(currentName) {
-    const newName = prompt('Novo nome do cliente:', currentName);
-    if (!newName || newName === currentName) return;
-    // Update client_tag on all chips with this client
-    const chipsToUpdate = _aqAllWarmed.filter(c => c.client_tag === currentName);
-    if (chipsToUpdate.length === 0) return;
-    fetch('/api/chips/bulk-client-tag', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chipIds: chipsToUpdate.map(c => c.id), clientTag: newName })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            showToast(`Cliente renomeado: "${currentName}" → "${newName}"`, 'success');
-            loadChipsAquecidos();
-        }
+    openInputModal('Renomear cliente', 'Novo nome do cliente:', currentName, (newName) => {
+        if (!newName || newName === currentName) return;
+        const chipsToUpdate = _aqAllWarmed.filter(c => c.client_tag === currentName);
+        if (chipsToUpdate.length === 0) return;
+        fetch('/api/chips/bulk-client-tag', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chipIds: chipsToUpdate.map(c => c.id), clientTag: newName })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`Cliente renomeado: "${currentName}" → "${newName}"`, 'success');
+                loadChipsAquecidos();
+            }
+        });
     });
 }
 
@@ -2652,42 +2652,125 @@ function importFromWarming() {
         );
         if (ready.length === 0) return showToast('Nenhum chip conectado pra importar', 'warning');
 
-        const list = ready.map((c, i) => `${i + 1}. ${c.name || c.phone} (Fase ${c.phase})`).join('\n');
-        const selection = prompt(`${ready.length} chips disponiveis:\n\n${list}\n\nDigite os numeros separados por virgula (ex: 1,3,5)\nOu "todos" pra importar todos:`);
-        if (!selection) return;
-
-        let selectedChips;
-        if (selection.toLowerCase() === 'todos') {
-            selectedChips = ready;
-        } else {
-            const indices = selection.split(',').map(s => parseInt(s.trim()) - 1).filter(i => i >= 0 && i < ready.length);
-            if (indices.length === 0) return showToast('Nenhum chip selecionado', 'warning');
-            selectedChips = indices.map(i => ready[i]);
-        }
-
-        const clientTag = prompt(`${selectedChips.length} chip(s) selecionado(s).\n\nNome do cliente:`);
-        if (!clientTag) return;
-
-        fetch('/api/chips/import-warmed', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chipIds: selectedChips.map(c => c.id), clientTag })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                showToast(`${data.imported} chips importados para "${clientTag}"!`, 'success');
-                loadChipsAquecidos();
-            } else {
-                showToast(data.error || 'Erro', 'danger');
+        openChipPicker({
+            title: 'Importar chips aquecidos',
+            desc: `${ready.length} chips conectados disponiveis — selecione quais importar:`,
+            chips: ready,
+            onConfirm: (selectedChips) => {
+                if (selectedChips.length === 0) return showToast('Nenhum chip selecionado', 'warning');
+                openInputModal('Nome do cliente', `${selectedChips.length} chip(s) serao importados. Informe o nome do cliente:`, '', (clientTag) => {
+                    fetch('/api/chips/import-warmed', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chipIds: selectedChips.map(c => c.id), clientTag })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast(`${data.imported} chips importados para "${clientTag}"!`, 'success');
+                            loadChipsAquecidos();
+                        } else {
+                            showToast(data.error || 'Erro', 'danger');
+                        }
+                    });
+                });
             }
         });
     });
 }
 
+// ==================== CHIP PICKER MODAL ====================
+let _chipPickerState = { chips: [], selected: new Set(), onConfirm: null, filter: '' };
+
+function openChipPicker({ title, desc, chips, onConfirm, preselect }) {
+    _chipPickerState = {
+        chips: chips.slice(),
+        selected: new Set(preselect || []),
+        onConfirm,
+        filter: ''
+    };
+    document.getElementById('chip-picker-title').textContent = title || 'Selecionar Chips';
+    document.getElementById('chip-picker-desc').textContent = desc || '';
+    const searchEl = document.getElementById('chip-picker-search');
+    const allEl = document.getElementById('chip-picker-selectall');
+    searchEl.value = '';
+    allEl.checked = false;
+    searchEl.oninput = () => {
+        _chipPickerState.filter = searchEl.value.trim().toLowerCase();
+        renderChipPickerList();
+    };
+    allEl.onchange = () => {
+        const visible = getVisibleChipPickerChips();
+        if (allEl.checked) visible.forEach(c => _chipPickerState.selected.add(c.id));
+        else visible.forEach(c => _chipPickerState.selected.delete(c.id));
+        renderChipPickerList();
+    };
+    renderChipPickerList();
+    document.getElementById('chip-picker-modal').classList.add('active');
+    setTimeout(() => searchEl.focus(), 50);
+}
+
+function getVisibleChipPickerChips() {
+    const f = _chipPickerState.filter;
+    if (!f) return _chipPickerState.chips;
+    return _chipPickerState.chips.filter(c =>
+        (c.name || '').toLowerCase().includes(f) ||
+        (c.phone || '').toLowerCase().includes(f) ||
+        ('fase ' + c.phase).includes(f)
+    );
+}
+
+function renderChipPickerList() {
+    const list = document.getElementById('chip-picker-list');
+    const visible = getVisibleChipPickerChips();
+    list.innerHTML = visible.map(c => {
+        const checked = _chipPickerState.selected.has(c.id);
+        return `<div class="chip-picker-row ${checked ? 'selected' : ''}" onclick="toggleChipPickerRow(${c.id})">
+            <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation(); toggleChipPickerRow(${c.id})">
+            <span class="cp-name">${escapeHtml(c.name || 'Sem nome')}</span>
+            <span class="cp-phone">${escapeHtml(c.phone || '')}</span>
+            <span class="cp-phase">Fase ${c.phase || 1}</span>
+        </div>`;
+    }).join('') || '<div style="padding:16px;text-align:center;color:#999">Nenhum chip encontrado</div>';
+    updateChipPickerSummary();
+    // Reflect "Selecionar todos" state
+    const allEl = document.getElementById('chip-picker-selectall');
+    if (allEl) {
+        const allSelected = visible.length > 0 && visible.every(c => _chipPickerState.selected.has(c.id));
+        allEl.checked = allSelected;
+    }
+}
+
+function toggleChipPickerRow(chipId) {
+    if (_chipPickerState.selected.has(chipId)) _chipPickerState.selected.delete(chipId);
+    else _chipPickerState.selected.add(chipId);
+    renderChipPickerList();
+}
+
+function updateChipPickerSummary() {
+    const n = _chipPickerState.selected.size;
+    const total = _chipPickerState.chips.length;
+    document.getElementById('chip-picker-summary').textContent = `${n} de ${total} selecionado${n === 1 ? '' : 's'}`;
+}
+
+function closeChipPicker() {
+    document.getElementById('chip-picker-modal').classList.remove('active');
+    _chipPickerState = { chips: [], selected: new Set(), onConfirm: null, filter: '' };
+}
+
+function confirmChipPicker() {
+    const cb = _chipPickerState.onConfirm;
+    const picked = _chipPickerState.chips.filter(c => _chipPickerState.selected.has(c.id));
+    closeChipPicker();
+    if (cb) cb(picked);
+}
+
 function editOrigem(chipId, currentFornecedor) {
-    const resp = prompt('Origem do chip:\n\n- Deixe VAZIO = Próprio (aquecemos nós)\n- Digite o nome = Fornecedor (ex: Mario, Ze Chips)', currentFornecedor || '');
-    if (resp === null) return;
+    openInputModal('Origem do chip', 'Vazio = proprio (aquecemos nos). Nome = fornecedor (ex: Mario, Ze Chips).', currentFornecedor || '', (resp) => {
+        _editOrigemSubmit(chipId, resp);
+    });
+}
+function _editOrigemSubmit(chipId, resp) {
     fetch('/api/chips/' + chipId + '/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2699,48 +2782,51 @@ function editOrigem(chipId, currentFornecedor) {
 }
 
 function tagAquecido(chipId, currentTag) {
-    const newTag = prompt('Tag (ex: Contingencia, Achadinhos, Bot):', currentTag || '');
-    if (newTag === null) return;
-    fetch('/api/chips/' + chipId + '/tag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tag: newTag })
-    })
-    .then(r => r.json())
-    .then(() => { showToast('Tag atualizada', 'success'); loadChipsAquecidos(); })
-    .catch(err => showToast('Erro: ' + err.message, 'danger'));
+    openInputModal('Tag do chip', 'Ex: Contingencia, Achadinhos, Bot', currentTag || '', (newTag) => {
+        fetch('/api/chips/' + chipId + '/tag', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag: newTag })
+        })
+        .then(r => r.json())
+        .then(() => { showToast('Tag atualizada', 'success'); loadChipsAquecidos(); })
+        .catch(err => showToast('Erro: ' + err.message, 'danger'));
+    });
 }
 
 function disconnectAquecido(chipId) {
-    if (!confirm('Desconectar este chip?')) return;
-    fetch('/api/chips/' + chipId + '/disconnect', { method: 'POST' })
-    .then(r => r.json())
-    .then(() => { showToast('Chip desconectado', 'success'); loadChipsAquecidos(); })
-    .catch(err => showToast('Erro: ' + err.message, 'danger'));
+    openConfirmModal('Desconectar chip', 'Deseja desconectar este chip?', 'Desconectar', () => {
+        fetch('/api/chips/' + chipId + '/disconnect', { method: 'POST' })
+        .then(r => r.json())
+        .then(() => { showToast('Chip desconectado', 'success'); loadChipsAquecidos(); })
+        .catch(err => showToast('Erro: ' + err.message, 'danger'));
+    });
 }
 
 function renameAquecido(chipId, currentName) {
-    const newName = prompt('Novo nome:', currentName || '');
-    if (newName === null || newName === currentName) return;
-    fetch('/api/chips/' + chipId + '/rename', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName })
-    })
-    .then(r => r.json())
-    .then(() => { showToast('Nome atualizado', 'success'); loadChipsAquecidos(); })
-    .catch(err => showToast('Erro: ' + err.message, 'danger'));
+    openInputModal('Renomear chip', 'Novo nome:', currentName || '', (newName) => {
+        if (newName === currentName) return;
+        fetch('/api/chips/' + chipId + '/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+        })
+        .then(r => r.json())
+        .then(() => { showToast('Nome atualizado', 'success'); loadChipsAquecidos(); })
+        .catch(err => showToast('Erro: ' + err.message, 'danger'));
+    });
 }
 
 function deleteAquecido(chipId) {
-    if (!confirm('Remover este chip aquecido?')) return;
-    fetch('/api/chips/' + chipId, { method: 'DELETE' })
-    .then(r => r.json())
-    .then(() => {
-        _aqAllWarmed = _aqAllWarmed.filter(c => c.id !== chipId);
-        renderAqStats();
-        renderAqList();
-        showToast('Chip removido', 'success');
+    openConfirmModal('Remover chip aquecido', 'Remover este chip aquecido da lista?', 'Remover', () => {
+        fetch('/api/chips/' + chipId, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(() => {
+            _aqAllWarmed = _aqAllWarmed.filter(c => c.id !== chipId);
+            renderAqStats();
+            renderAqList();
+            showToast('Chip removido', 'success');
+        });
     });
 }
 
@@ -3243,7 +3329,48 @@ document.addEventListener('DOMContentLoaded', () => {
     if (manualEl) {
         manualEl.addEventListener('input', () => updateGASummary());
     }
+    // Initial sync: pull any operations already running on the server so
+    // cards and progress bars appear immediately instead of waiting for the
+    // next socket event (can be minutes during countdowns).
+    gaSyncRunningOps();
 });
+
+// Sync running operations from the server, creating cards and seeding
+// progress for anything that was already in flight.
+function gaSyncRunningOps() {
+    fetch('/api/group-add/current').then(r => r.json()).then(data => {
+        if (!data || !data.operations) return;
+        for (const op of data.operations) {
+            const opId = op.operationId;
+            if (!_gaActiveOps.has(opId)) {
+                _gaActiveOps.set(opId, { paused: false, adminName: op.admin_name || '?', totalItems: op.totalItems });
+                _gaRunning = true;
+                _gaCurrentOpId = opId;
+                createOpCard(opId, op.admin_name || 'Operacao', op.totalItems);
+            }
+            const card = document.getElementById('ga-op-' + opId);
+            if (!card) continue;
+            const pct = op.totalItems > 0 ? Math.round((op.processed || 0) / op.totalItems * 100) : 0;
+            const textEl = card.querySelector('.ga-op-progress-text');
+            const fillEl = card.querySelector('.ga-op-progress-fill');
+            const statsEl = card.querySelector('.ga-op-stats');
+            if (textEl) textEl.textContent = (op.processed || 0) + '/' + op.totalItems + ' (' + pct + '%)';
+            if (fillEl) fillEl.style.width = pct + '%';
+            if (statsEl) {
+                statsEl.innerHTML =
+                    '<span class="ga-stat-item ga-stat-success">✅ ' + (op.success || 0) + '</span>' +
+                    '<span class="ga-stat-item ga-stat-admin">👑 ' + (op.adminOk || 0) + '</span>' +
+                    '<span class="ga-stat-item ga-stat-skip">⏭️ ' + (op.skip || 0) + '</span>' +
+                    '<span class="ga-stat-item ga-stat-fail">❌ ' + (op.fail || 0) + '</span>';
+            }
+        }
+    }).catch(() => {});
+}
+
+// Re-sync whenever the socket reconnects (page was backgrounded, network blip, etc).
+if (typeof socket !== 'undefined' && socket.on) {
+    socket.on('connect', () => setTimeout(gaSyncRunningOps, 500));
+}
 
 // ==================== MULTI-OP CARD MANAGEMENT ====================
 
@@ -3698,23 +3825,10 @@ socket.on('group_add_countdown', (data) => {
     logEl.scrollTop = logEl.scrollHeight;
 });
 
-// Polling fallback: sync running operations every 5s
-setInterval(() => {
-    if (_gaActiveOps.size === 0) return;
-    fetch('/api/group-add/current').then(r => r.json()).then(data => {
-        if (!data.running || !data.operations) return;
-        for (const op of data.operations) {
-            const card = document.getElementById('ga-op-' + op.operationId);
-            if (card) {
-                const pct = op.totalItems > 0 ? Math.round(op.processed / op.totalItems * 100) : 0;
-                const textEl = card.querySelector('.ga-op-progress-text');
-                const fillEl = card.querySelector('.ga-op-progress-fill');
-                if (textEl) textEl.textContent = op.processed + '/' + op.totalItems + ' (' + pct + '%)';
-                if (fillEl) fillEl.style.width = pct + '%';
-            }
-        }
-    }).catch(() => {});
-}, 5000);
+// Polling fallback: sync running operations every 5s. Runs unconditionally so
+// we pick up ops started in other tabs / by other users, and so the bar keeps
+// moving even if a socket event was missed.
+setInterval(() => { gaSyncRunningOps(); }, 5000);
 
 // ==================== REPORT ====================
 

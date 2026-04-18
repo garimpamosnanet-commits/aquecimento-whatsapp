@@ -325,7 +325,7 @@ class GroupManager {
                         } else {
                             callbacks.onLog({ type: 'info', message: `${phone} ja esta no grupo "${groupName}" mas NAO e admin — promovendo` });
                             const pDelay = this._random(promoteDelayMin, promoteDelayMax);
-                            if (pDelay > 5000) await this._delayWithCountdown(pDelay, 'Promovendo a admin', opId);
+                            if (pDelay > 5000) await this._delayWithCountdown(pDelay, `Promovendo ${phone} a admin`, opId);
                             else await this._delay(pDelay);
                             const pr = await this.promoteToAdmin(adminSessionId, groupId, jid);
                             if (pr.success) {
@@ -347,7 +347,7 @@ class GroupManager {
 
             // Fallback: if invite link forbidden, try admin add
             if (!addResult.success && !addResult.alreadyMember && addResult.error && (addResult.error.includes('forbidden') || addResult.error.includes('restrito') || addResult.error.includes('not-authorized'))) {
-                callbacks.onLog({ type: 'warning', message: `Link bloqueado em "${groupName}" — tentando via admin...` });
+                callbacks.onLog({ type: 'warning', message: `${phone}: link bloqueado em "${groupName}" — tentando via admin...` });
                 addResult = await this.addToGroup(adminSessionId, groupId, jid);
             }
         } else {
@@ -391,7 +391,7 @@ class GroupManager {
         // STEP 3 — Delay before promote (configurable)
         const promoteDelay = this._random(promoteDelayMin, promoteDelayMax);
         if (promoteDelay > 5000) {
-            await this._delayWithCountdown(promoteDelay, 'Promovendo a admin', opId);
+            await this._delayWithCountdown(promoteDelay, `Promovendo ${phone} a admin`, opId);
         } else {
             await this._delay(promoteDelay);
         }
@@ -452,8 +452,14 @@ class GroupManager {
         const dailyLimit = config.dailyLimitPerChip || 0;
 
         // Update operation status
+        const admLabel = `${adminChip.name || 'Sem nome'} (${adminChip.phone || 'sem numero'})`;
         db.updateAddOperation(operationId, { status: 'running', started_at: new Date().toISOString() });
-        this.io.emit('group_add_status', { operationId, status: 'running', message: 'Iniciando adicao...' });
+        this.io.emit('group_add_status', { operationId, status: 'running', message: `Iniciando adicao — ADM ${admLabel}` });
+        this.io.emit('group_add_log', {
+            operationId, type: 'system',
+            message: `ADM: ${admLabel} | modo: ${mode} | itens: ${items.length}`,
+            timestamp: new Date().toISOString()
+        });
 
         // ==================== PHASE 0: PRE-FETCH INVITE CODES ====================
         const inviteCodes = {};
@@ -566,7 +572,7 @@ class GroupManager {
 
                 this.io.emit('group_add_log', {
                     operationId, type: 'system',
-                    message: `Processando grupo "${groupName}" (${gi + 1}/${groupIds.length})`,
+                    message: `Processando grupo "${groupName}" (${gi + 1}/${groupIds.length}) — ADM ${admLabel}`,
                     timestamp: new Date().toISOString()
                 });
 
@@ -923,6 +929,19 @@ class GroupManager {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    // Sleep that wakes up early when the operation is stopped. Pass operationId
+    // so stop() can short-circuit long waits instead of letting the loop finish
+    // them before reacting.
+    async _cancellableDelay(ms, operationId) {
+        const start = Date.now();
+        const step = 500;
+        while (Date.now() - start < ms) {
+            const state = operationId ? this._operations.get(operationId) : null;
+            if (state && state.stopped) return;
+            await new Promise(r => setTimeout(r, Math.min(step, ms - (Date.now() - start))));
+        }
+    }
+
     _delayWithCountdown(ms, label, operationId) {
         const opId = operationId || Array.from(this._operations.keys())[0] || null;
         return new Promise(resolve => {
@@ -936,6 +955,15 @@ class GroupManager {
             });
 
             const interval = setInterval(() => {
+                // Cancel the countdown if the user pressed Parar
+                const state = opId ? this._operations.get(opId) : null;
+                if (state && state.stopped) {
+                    clearInterval(interval);
+                    this.io.emit('group_add_countdown', {
+                        operationId: opId, logId, remaining: 0, total, label, done: true, cancelled: true
+                    });
+                    return resolve();
+                }
                 remaining--;
                 if (remaining <= 0) {
                     clearInterval(interval);

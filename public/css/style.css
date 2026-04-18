@@ -2049,6 +2049,92 @@ body::before {
 .aq-chip-row:hover .aq-edit-btn { opacity: 0.85; }
 .aq-edit-btn:hover { opacity: 1 !important; background: rgba(0,0,0,0.06); }
 @media (hover: none) { .aq-edit-btn { opacity: 1; } }
+
+/* Chip picker modal */
+.chip-picker-modal {
+    max-width: 520px;
+    width: 92vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+.chip-picker-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0 6px;
+    flex-wrap: wrap;
+}
+.chip-picker-controls input[type=text] {
+    flex: 1;
+    min-width: 180px;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+}
+.chip-picker-checkall {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+}
+.chip-picker-list {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 4px;
+    min-height: 260px;
+    max-height: 50vh;
+    background: #fafafa;
+}
+.chip-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s;
+}
+.chip-picker-row:hover { background: #eef2ff; }
+.chip-picker-row.selected { background: #e0e7ff; }
+.chip-picker-row .cp-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 13.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chip-picker-row .cp-phone {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #6b7280;
+}
+.chip-picker-row .cp-phase {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(59,130,246,0.1);
+    color: #2563eb;
+    font-weight: 600;
+}
+.chip-picker-summary {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 6px;
+    text-align: right;
+}
+@media (max-width: 520px) {
+    .chip-picker-controls { flex-direction: column; align-items: stretch; }
+    .chip-picker-row .cp-phone { display: none; }
+}
 .aq-chip-phone-col {
     font-size: 12px; font-weight: 500; color: var(--text-secondary);
     font-family: 'JetBrains Mono', monospace;
