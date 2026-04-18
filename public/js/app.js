@@ -2652,27 +2652,29 @@ function importFromWarming() {
         );
         if (ready.length === 0) return showToast('Nenhum chip conectado pra importar', 'warning');
 
+        const existingClients = Array.from(new Set((_aqAllWarmed || []).map(c => c.client_tag).filter(Boolean))).sort();
         openChipPicker({
             title: 'Importar chips aquecidos',
-            desc: `${ready.length} chips conectados disponiveis — selecione quais importar:`,
+            desc: `${ready.length} chips conectados disponiveis — selecione quais importar e o cliente:`,
             chips: ready,
-            onConfirm: (selectedChips) => {
+            clientOptions: existingClients,
+            requireClient: true,
+            onConfirm: ({ chips: selectedChips, client: clientTag }) => {
                 if (selectedChips.length === 0) return showToast('Nenhum chip selecionado', 'warning');
-                openInputModal('Nome do cliente', `${selectedChips.length} chip(s) serao importados. Informe o nome do cliente:`, '', (clientTag) => {
-                    fetch('/api/chips/import-warmed', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chipIds: selectedChips.map(c => c.id), clientTag })
-                    })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.success) {
-                            showToast(`${data.imported} chips importados para "${clientTag}"!`, 'success');
-                            loadChipsAquecidos();
-                        } else {
-                            showToast(data.error || 'Erro', 'danger');
-                        }
-                    });
+                if (!clientTag) return showToast('Informe o cliente', 'warning');
+                fetch('/api/chips/import-warmed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chipIds: selectedChips.map(c => c.id), clientTag })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast(`${data.imported} chips importados para "${clientTag}"!`, 'success');
+                        loadChipsAquecidos();
+                    } else {
+                        showToast(data.error || 'Erro', 'danger');
+                    }
                 });
             }
         });
@@ -2680,17 +2682,30 @@ function importFromWarming() {
 }
 
 // ==================== CHIP PICKER MODAL ====================
-let _chipPickerState = { chips: [], selected: new Set(), onConfirm: null, filter: '' };
+let _chipPickerState = { chips: [], selected: new Set(), onConfirm: null, filter: '', requireClient: false };
 
-function openChipPicker({ title, desc, chips, onConfirm, preselect }) {
+function openChipPicker({ title, desc, chips, onConfirm, preselect, clientOptions, requireClient }) {
     _chipPickerState = {
         chips: chips.slice(),
         selected: new Set(preselect || []),
         onConfirm,
-        filter: ''
+        filter: '',
+        requireClient: !!requireClient
     };
     document.getElementById('chip-picker-title').textContent = title || 'Selecionar Chips';
     document.getElementById('chip-picker-desc').textContent = desc || '';
+
+    const clientRow = document.getElementById('chip-picker-client-row');
+    const clientInput = document.getElementById('chip-picker-client');
+    const clientList = document.getElementById('chip-picker-client-options');
+    if (requireClient) {
+        clientRow.style.display = '';
+        clientInput.value = '';
+        clientList.innerHTML = (clientOptions || []).map(c => `<option value="${escapeHtml(c)}">`).join('');
+    } else {
+        clientRow.style.display = 'none';
+    }
+
     const searchEl = document.getElementById('chip-picker-search');
     const allEl = document.getElementById('chip-picker-selectall');
     searchEl.value = '';
@@ -2760,9 +2775,18 @@ function closeChipPicker() {
 
 function confirmChipPicker() {
     const cb = _chipPickerState.onConfirm;
+    const requireClient = _chipPickerState.requireClient;
     const picked = _chipPickerState.chips.filter(c => _chipPickerState.selected.has(c.id));
+    let clientTag = '';
+    if (requireClient) {
+        clientTag = (document.getElementById('chip-picker-client').value || '').trim();
+        if (picked.length === 0) { showToast('Selecione ao menos um chip', 'warning'); return; }
+        if (!clientTag) { showToast('Informe o cliente', 'warning'); document.getElementById('chip-picker-client').focus(); return; }
+    }
     closeChipPicker();
-    if (cb) cb(picked);
+    if (!cb) return;
+    if (requireClient) cb({ chips: picked, client: clientTag });
+    else cb(picked);
 }
 
 function editOrigem(chipId, currentFornecedor) {

@@ -932,6 +932,11 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
         </div>
         <div class="chip-picker-list" id="chip-picker-list"></div>
         <div class="chip-picker-summary" id="chip-picker-summary">0 selecionados</div>
+        <div class="chip-picker-client-row" id="chip-picker-client-row" style="display:none">
+            <label for="chip-picker-client">Cliente:</label>
+            <input type="text" id="chip-picker-client" list="chip-picker-client-options" placeholder="Escolha existente ou digite um novo" autocomplete="off">
+            <datalist id="chip-picker-client-options"></datalist>
+        </div>
         <div class="modal-actions" style="margin-top:12px">
             <button class="btn btn-outline" onclick="closeChipPicker()">Cancelar</button>
             <button class="btn btn-primary" id="chip-picker-confirm" onclick="confirmChipPicker()">Confirmar</button>
@@ -943,6 +948,6 @@ socks5://user:pass@123.45.67.89:1080" style="width:100%;padding:10px 14px;backgr
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js?v=20260418a"></script>
+<script src="/js/app.js?v=20260418b"></script>
 </body>
 </html>
