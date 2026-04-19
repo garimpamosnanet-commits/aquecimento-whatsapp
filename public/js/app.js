@@ -2192,14 +2192,44 @@ function renderScanResults(data) {
         }
     }
 
+    // Aggregate per group: how many of OUR chips are in each group (as admin / as member)
+    const byGroup = new Map();
+    for (const g of (data.groups || [])) byGroup.set(g.id, { id: g.id, subject: g.subject, size: g.size || 0, admins: [], members: [] });
+    for (const chip of data.chips) {
+        if (chip.error) continue;
+        for (const g of (chip.groups || [])) {
+            const entry = byGroup.get(g.groupId);
+            if (!entry) continue;
+            if (g.isAdmin) entry.admins.push({ id: chip.chipId, name: chip.name });
+            else entry.members.push({ id: chip.chipId, name: chip.name });
+        }
+    }
+    const groupRows = Array.from(byGroup.values()).sort((a, b) => a.admins.length - b.admins.length);
+    // Save for toggle handlers
+    window._lastScanData = data;
+    window._lastGroupRows = groupRows;
+
+    const target = parseInt(document.getElementById('aq-scan-target')?.value) || 0;
+    const belowTarget = target > 0 ? groupRows.filter(g => g.admins.length < target).length : 0;
+
     let html = `
         <div class="scan-summary">
             <div class="scan-stat"><span class="scan-stat-value">${data.totalGroups}</span><span class="scan-stat-label">Grupos do ADM</span></div>
             <div class="scan-stat success"><span class="scan-stat-value">${data.chips.reduce((s, c) => s + c.asAdmin, 0)}</span><span class="scan-stat-label">Posicoes Admin</span></div>
             <div class="scan-stat warning"><span class="scan-stat-value">${data.chips.reduce((s, c) => s + c.asMember, 0)}</span><span class="scan-stat-label">So Membro</span></div>
             <div class="scan-stat danger"><span class="scan-stat-value">${allMissing.length}</span><span class="scan-stat-label">Faltantes</span></div>
+            ${target > 0 ? `<div class="scan-stat warning"><span class="scan-stat-value">${belowTarget}</span><span class="scan-stat-label">Grupos abaixo da meta (${target})</span></div>` : ''}
         </div>
 
+        <div class="scan-view-toggle">
+            <button class="btn btn-sm btn-outline scan-view-btn active" data-view="chip" onclick="switchScanView('chip')">Por Chip</button>
+            <button class="btn btn-sm btn-outline scan-view-btn" data-view="group" onclick="switchScanView('group')">Por Grupo</button>
+            <label class="scan-target-row">Meta de ADMs/grupo:
+                <input type="number" id="aq-scan-target" min="0" step="1" value="${target || ''}" placeholder="ex: 5" oninput="renderScanResults(window._lastScanData)">
+            </label>
+        </div>
+
+        <div id="scan-view-chip">
         <h4 style="margin:16px 0 8px">Resumo por Chip</h4>
         <div class="scan-chips">`;
 
@@ -2239,7 +2269,45 @@ function renderScanResults(data) {
             </div>`;
     }
 
-    html += `</div>`;
+    html += `</div></div>`; // close scan-chips + scan-view-chip
+
+    // View: per-group
+    html += `<div id="scan-view-group" style="display:none">
+        <h4 style="margin:16px 0 8px">Resumo por Grupo <span style="font-weight:400;color:var(--text-muted);font-size:12px">(ordenado do que tem menos admin pra mais)</span></h4>
+        <div class="scan-groups-table">
+            <div class="scan-groups-head">
+                <div>Grupo</div>
+                <div>Total membros</div>
+                <div>Nossos admins</div>
+                <div>Nossos so membro</div>
+                <div>Status</div>
+            </div>`;
+    for (const g of groupRows) {
+        const ourTotal = g.admins.length + g.members.length;
+        let statusLabel, statusColor;
+        if (target > 0) {
+            if (g.admins.length >= target) { statusLabel = '✅ OK'; statusColor = '#22c55e'; }
+            else if (g.admins.length >= Math.ceil(target / 2)) { statusLabel = '⚠️ Abaixo da meta'; statusColor = '#f59e0b'; }
+            else { statusLabel = '🔴 Falta MUITO'; statusColor = '#ef4444'; }
+        } else {
+            statusLabel = g.admins.length > 0 ? '✓' : '— sem admin nosso';
+            statusColor = g.admins.length > 0 ? '#22c55e' : '#9ca3af';
+        }
+        html += `<div class="scan-groups-row">
+            <div class="scan-group-subject" title="${escapeHtml(g.subject)}">${escapeHtml(g.subject)}</div>
+            <div>${g.size}</div>
+            <div><strong style="color:${g.admins.length > 0 ? '#16a34a' : '#ef4444'}">${g.admins.length}</strong>${target > 0 ? ` / ${target}` : ''}</div>
+            <div>${g.members.length}</div>
+            <div style="color:${statusColor};font-weight:600">${statusLabel}</div>
+        </div>`;
+        if (g.admins.length > 0 || g.members.length > 0) {
+            html += `<div class="scan-group-detail">
+                ${g.admins.length > 0 ? `<div><strong>👑 Admins:</strong> ${g.admins.map(a => `<span class="scan-tag admin">${escapeHtml(a.name)}</span>`).join('')}</div>` : ''}
+                ${g.members.length > 0 ? `<div><strong>👤 Membros:</strong> ${g.members.map(m => `<span class="scan-tag member">${escapeHtml(m.name)}</span>`).join('')}</div>` : ''}
+            </div>`;
+        }
+    }
+    html += `</div></div>`;
 
     if (allMissing.length > 0) {
         html += `<div style="margin-top:16px;text-align:center">
@@ -2250,8 +2318,15 @@ function renderScanResults(data) {
     }
 
     el.innerHTML = html;
-    // Store scan data for "Add Missing" action
     window._lastScanData = data;
+}
+
+function switchScanView(view) {
+    document.querySelectorAll('.scan-view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    const chipView = document.getElementById('scan-view-chip');
+    const groupView = document.getElementById('scan-view-group');
+    if (chipView) chipView.style.display = view === 'chip' ? '' : 'none';
+    if (groupView) groupView.style.display = view === 'group' ? '' : 'none';
 }
 
 function promoteMissingForChip(chipId) {

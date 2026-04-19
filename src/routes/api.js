@@ -991,21 +991,29 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             console.log(`[Scan] ADM groups (filtered "${groupFilter}"): ${admGroupList.length}`);
             const admGroupIds = new Set(admGroupList.map(g => g.id));
 
-            // Helper: fetch chip groups with timeout + retry
+            // Helper: fetch chip groups with timeout + retry. Maps common Baileys
+            // failures ("Connection Closed", "Timed Out") to friendlier messages
+            // so the scan report tells the operator the actionable cause instead
+            // of a generic stack trace.
             async function fetchChipGroups(chip, attempt) {
                 const sock = chip.session_id ? sessionManager.getSocket(chip.session_id) : null;
-                if (!sock?.user) throw new Error('Desconectado');
+                if (!sock?.user) throw new Error('Chip desconectado');
 
-                return new Promise(async (resolve, reject) => {
-                    const timer = setTimeout(() => reject(new Error('Timeout 20s')), 20000);
-                    try {
-                        const groups = await sock.groupFetchAllParticipating();
-                        clearTimeout(timer);
-                        resolve({ groups, sock });
-                    } catch (e) {
-                        clearTimeout(timer);
-                        reject(e);
-                    }
+                return new Promise((resolve, reject) => {
+                    const timer = setTimeout(() => reject(new Error('Timeout 20s (chip nao respondeu)')), 20000);
+                    sock.groupFetchAllParticipating()
+                        .then(groups => { clearTimeout(timer); resolve({ groups, sock }); })
+                        .catch(err => {
+                            clearTimeout(timer);
+                            const msg = String(err?.message || err);
+                            if (msg.includes('Connection Closed') || msg.includes('Stream Errored')) {
+                                reject(new Error('Conexao caiu durante a varredura (reconecte o chip)'));
+                            } else if (msg.includes('Timed Out') || msg.includes('timed out')) {
+                                reject(new Error('Timeout — WhatsApp nao respondeu'));
+                            } else {
+                                reject(err);
+                            }
+                        });
                 });
             }
 
