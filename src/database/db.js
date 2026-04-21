@@ -365,6 +365,24 @@ function deleteChip(id) {
     const data = loadDb();
     data.chips = data.chips.filter(c => c.id !== id);
     data.activity_log = data.activity_log.filter(a => a.chip_id !== id);
+    // Auto-release any proxy this chip was using
+
+    if (data.proxies) {
+
+        for (const p of data.proxies) {
+
+            if (p.assigned_chip_id === chipId) {
+
+                p.assigned_chip_id = null;
+
+                p.status = 'available';
+
+            }
+
+        }
+
+    }
+
     saveDb(data);
 }
 
