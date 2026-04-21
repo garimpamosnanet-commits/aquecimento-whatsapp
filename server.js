@@ -18,7 +18,35 @@ const apiRoutes = require('./src/routes/api');
 const setupWebSocket = require('./src/routes/websocket');
 
 const app = express();
-const server = http.createServer(app);
+const server = 
+// ==================== PERIODIC ORPHAN PROXY CLEANUP ====================
+const _dbForCleanup = require('./src/database/db');
+setInterval(() => {
+    try {
+        if (typeof _dbForCleanup.releaseOrphanProxies === 'function') {
+            const r = _dbForCleanup.releaseOrphanProxies();
+            if (r && r.released > 0) {
+                console.log('[ProxyCleanup] Released ' + r.released + ' orphan proxies (of ' + r.total + ')');
+            }
+        }
+    } catch (e) {
+        console.error('[ProxyCleanup] error:', e.message);
+    }
+}, 10 * 60 * 1000); // 10 minutes
+
+// Also run on startup (after 30s to let everything load)
+setTimeout(() => {
+    try {
+        if (typeof _dbForCleanup.releaseOrphanProxies === 'function') {
+            const r = _dbForCleanup.releaseOrphanProxies();
+            if (r && r.released > 0) {
+                console.log('[ProxyCleanup startup] Released ' + r.released + ' orphan proxies');
+            }
+        }
+    } catch (e) {}
+}, 30000);
+
+http.createServer(app);
 const io = new Server(server, {
     cors: { origin: '*' }
 });
