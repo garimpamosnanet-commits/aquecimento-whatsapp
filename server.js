@@ -286,3 +286,22 @@ try {
 } catch (e) {
     console.error('[ProxyCleanup setup] failed:', e.message);
 }
+
+
+// SOFT RECONNECT
+const _srCd = new Map();
+const _dbR = require("./src/database/db");
+setInterval(() => {
+  try {
+    if (!sessionManager || typeof sessionManager.isSocketHealthy !== "function") return;
+    const chips = _dbR.getAllChips();
+    const now = Date.now();
+    const cand = chips.filter(c => c.session_id && (c.status === "connected" || c.status === "warming") && !sessionManager.isSocketHealthy(c.session_id) && (_srCd.get(c.id) || 0) < now);
+    const batch = cand.slice(0, 3);
+    for (const c of batch) {
+      _srCd.set(c.id, now + 15*60*1000);
+      console.log("[SoftReconnect] " + (c.name || c.id));
+      sessionManager.connect(c.session_id).catch(e => console.log("[SoftReconnect] fail: " + e.message));
+    }
+  } catch(e) { console.error("[SoftReconnect]", e.message); }
+}, 5*60*1000);
