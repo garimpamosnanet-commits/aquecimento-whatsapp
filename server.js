@@ -18,35 +18,7 @@ const apiRoutes = require('./src/routes/api');
 const setupWebSocket = require('./src/routes/websocket');
 
 const app = express();
-const server = 
-// ==================== PERIODIC ORPHAN PROXY CLEANUP ====================
-const _dbForCleanup = require('./src/database/db');
-setInterval(() => {
-    try {
-        if (typeof _dbForCleanup.releaseOrphanProxies === 'function') {
-            const r = _dbForCleanup.releaseOrphanProxies();
-            if (r && r.released > 0) {
-                console.log('[ProxyCleanup] Released ' + r.released + ' orphan proxies (of ' + r.total + ')');
-            }
-        }
-    } catch (e) {
-        console.error('[ProxyCleanup] error:', e.message);
-    }
-}, 10 * 60 * 1000); // 10 minutes
-
-// Also run on startup (after 30s to let everything load)
-setTimeout(() => {
-    try {
-        if (typeof _dbForCleanup.releaseOrphanProxies === 'function') {
-            const r = _dbForCleanup.releaseOrphanProxies();
-            if (r && r.released > 0) {
-                console.log('[ProxyCleanup startup] Released ' + r.released + ' orphan proxies');
-            }
-        }
-    } catch (e) {}
-}, 30000);
-
-http.createServer(app);
+const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: '*' }
 });
@@ -286,3 +258,31 @@ process.on('SIGINT', async () => {
     await sessionManager.disconnectAll();
     process.exit(0);
 });
+
+
+// ==================== PERIODIC ORPHAN PROXY CLEANUP ====================
+try {
+    const _dbCleanup = require('./src/database/db');
+    // Startup cleanup (30s after boot)
+    setTimeout(() => {
+        try {
+            if (typeof _dbCleanup.releaseOrphanProxies === 'function') {
+                const r = _dbCleanup.releaseOrphanProxies();
+                if (r && r.released > 0) console.log('[ProxyCleanup startup] Released ' + r.released + ' orphans');
+            }
+        } catch (e) {}
+    }, 30000);
+    // Periodic cleanup every 10 minutes
+    setInterval(() => {
+        try {
+            if (typeof _dbCleanup.releaseOrphanProxies === 'function') {
+                const r = _dbCleanup.releaseOrphanProxies();
+                if (r && r.released > 0) console.log('[ProxyCleanup] Released ' + r.released + ' orphans');
+            }
+        } catch (e) {
+            console.error('[ProxyCleanup] error:', e.message);
+        }
+    }, 10 * 60 * 1000);
+} catch (e) {
+    console.error('[ProxyCleanup setup] failed:', e.message);
+}
