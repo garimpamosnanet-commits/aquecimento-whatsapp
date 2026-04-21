@@ -1699,5 +1699,60 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true, operationId: retryOp.id, retrying: items.length });
     });
 
+
+    // ==================== DETECT ADMINS AUTOMATICALLY ====================
+    router.post('/detect-admins', async (req, res) => {
+        try {
+            const allChips = db.getAllChips();
+            const candidates = allChips.filter(c =>
+                (c.instance_type || 'warming') === 'warming' &&
+                sessionManager.isConnected(c.session_id)
+            );
+
+            const detected = [];
+            const errors = [];
+
+            for (const chip of candidates) {
+                try {
+                    const sock = sessionManager.getSocket(chip.session_id);
+                    if (!sock || !sock.user) continue;
+
+                    const myNumber = String(sock.user.id).split(':')[0].split('@')[0];
+                    const groups = await sock.groupFetchAllParticipating();
+
+                    let adminCount = 0;
+                    for (const [gid, group] of Object.entries(groups)) {
+                        if (group.isCommunity) continue;
+                        const me = group.participants.find(p =>
+                            String(p.id).split(':')[0].split('@')[0] === myNumber
+                        );
+                        if (me && (me.admin === 'admin' || me.admin === 'superadmin')) {
+                            adminCount++;
+                        }
+                    }
+
+                    if (adminCount > 0) {
+                        db.setChipInstanceType(chip.id, 'admin');
+                        detected.push({
+                            id: chip.id,
+                            name: chip.name,
+                            phone: chip.phone,
+                            adminGroups: adminCount
+                        });
+                    }
+                } catch (e) {
+                    errors.push({ id: chip.id, name: chip.name, error: e.message });
+                    console.error('[detect-admins] chip', chip.id, ':', e.message);
+                }
+            }
+
+            emitUserAction(req, 'detect_admins', { detected: detected.length, total: candidates.length });
+            res.json({ detected, errors, total: candidates.length });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+
     return router;
 };
