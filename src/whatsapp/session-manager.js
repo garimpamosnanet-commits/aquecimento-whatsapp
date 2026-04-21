@@ -454,6 +454,32 @@ class SessionManager {
         return session?.socket?.user ? true : false;
     }
 
+    isSocketHealthy(sessionId) {
+        const sock = this.sessions.get(sessionId)?.socket;
+        if (!sock?.user) return false;
+        const ws = sock.ws;
+        if (!ws) return true;
+        if (typeof ws.readyState === 'number') return ws.readyState === 1;
+        if (typeof ws.isOpen === 'function') return ws.isOpen();
+        return true;
+    }
+
+    async ensureHealthySocket(sessionId, { maxWaitMs = 15000, triggerReconnect = true } = {}) {
+        const start = Date.now();
+        let reconnectStarted = false;
+        while (Date.now() - start < maxWaitMs) {
+            if (this.isSocketHealthy(sessionId)) {
+                return this.sessions.get(sessionId).socket;
+            }
+            if (triggerReconnect && !reconnectStarted) {
+                reconnectStarted = true;
+                this.connect(sessionId).catch(() => {});
+            }
+            await new Promise(r => setTimeout(r, 1500));
+        }
+        return null;
+    }
+
     emitChipUpdate(chipId) {
         const chip = db.getChipById(chipId);
         if (chip) {
