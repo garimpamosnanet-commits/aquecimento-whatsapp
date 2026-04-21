@@ -110,7 +110,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
     router.post('/chips/:id/warming/start', (req, res) => {
         const chip = db.getChipById(parseInt(req.params.id));
         if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
-        if (!sessionManager.isConnected(chip.session_id)) {
+        if (!sessionManager.isSocketHealthy(chip.session_id)) {
             return res.status(400).json({ error: 'Chip nao esta conectado' });
         }
 
@@ -132,7 +132,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const chips = db.getAllChips();
         let started = 0;
         for (const chip of chips) {
-            if (sessionManager.isConnected(chip.session_id) && chip.status !== 'warming') {
+            if (sessionManager.isSocketHealthy(chip.session_id) && chip.status !== 'warming') {
                 warmingEngine.startChip(chip.id);
                 started++;
             }
@@ -230,7 +230,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
     router.post('/test-message', async (req, res) => {
         try {
             const chips = db.getAllChips().filter(c => c.status === 'warming' || c.status === 'connected');
-            const connected = chips.filter(c => sessionManager.isConnected(c.session_id) && c.phone);
+            const connected = chips.filter(c => sessionManager.isSocketHealthy(c.session_id) && c.phone);
             if (connected.length < 2) {
                 return res.status(400).json({ error: 'Precisa de pelo menos 2 chips conectados com numero' });
             }
@@ -374,7 +374,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const rehabChip = db.enterRehabilitation(chipId, reason);
 
         // Start rehabilitation schedule if connected
-        if (sessionManager.isConnected(rehabChip.session_id)) {
+        if (sessionManager.isSocketHealthy(rehabChip.session_id)) {
             warmingEngine.startRehab(chipId);
         }
 
@@ -399,7 +399,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const resumed = db.exitRehabilitation(chipId, 3);
 
         // Restart normal warming
-        if (sessionManager.isConnected(resumed.session_id)) {
+        if (sessionManager.isSocketHealthy(resumed.session_id)) {
             warmingEngine.startChip(chipId);
         }
 
@@ -429,7 +429,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
     router.get('/admin-instances', (req, res) => {
         const admins = db.getAdminInstances().map(chip => ({
             ...chip,
-            is_connected: sessionManager.isConnected(chip.session_id)
+            is_connected: sessionManager.isSocketHealthy(chip.session_id)
         }));
         res.json(admins);
     });
@@ -452,7 +452,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const chipId = parseInt(req.params.id);
         const chip = db.getChipById(chipId);
         if (!chip) return res.status(404).json({ error: 'Instancia nao encontrada' });
-        if (!sessionManager.isConnected(chip.session_id)) {
+        if (!sessionManager.isSocketHealthy(chip.session_id)) {
             return res.status(400).json({ error: 'Instancia nao esta conectada' });
         }
         try {
@@ -956,7 +956,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
 
         const adminChip = db.getChipById(adminChipId);
-        if (!adminChip || !sessionManager.isConnected(adminChip.session_id)) {
+        if (!adminChip || !sessionManager.isSocketHealthy(adminChip.session_id)) {
             return res.status(400).json({ error: 'ADM nao conectado' });
         }
 
@@ -1122,7 +1122,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const chipId = parseInt(req.params.id);
         const chip = db.getChipById(chipId);
         if (!chip) return res.status(404).json({ error: 'Chip nao encontrado' });
-        if (!chip.session_id || !sessionManager.isConnected(chip.session_id)) {
+        if (!chip.session_id || !sessionManager.isSocketHealthy(chip.session_id)) {
             return res.status(400).json({ error: 'Chip nao conectado' });
         }
 
@@ -1227,7 +1227,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         for (const chipId of chipIds) {
             const chip = db.getChipById(chipId);
             if (!chip || !chip.phone) continue;
-            if (!sessionManager.isConnected(chip.session_id)) continue;
+            if (!sessionManager.isSocketHealthy(chip.session_id)) continue;
 
             // Set status to warming if connected
             if (chip.status === 'connected') {
@@ -1527,7 +1527,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const groupId = req.params.groupId;
         const chip = db.getChipById(chipId);
         if (!chip) return res.status(404).json({ error: 'Instancia nao encontrada' });
-        if (!sessionManager.isConnected(chip.session_id)) {
+        if (!sessionManager.isSocketHealthy(chip.session_id)) {
             return res.status(400).json({ error: 'Instancia nao esta conectada' });
         }
         try {
@@ -1544,7 +1544,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         const groupId = req.params.groupId;
         const chip = db.getChipById(chipId);
         if (!chip) return res.status(404).json({ error: 'Instancia nao encontrada' });
-        if (!sessionManager.isConnected(chip.session_id)) {
+        if (!sessionManager.isSocketHealthy(chip.session_id)) {
             return res.status(400).json({ error: 'Instancia nao esta conectada' });
         }
         try {
@@ -1706,7 +1706,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             const allChips = db.getAllChips();
             const candidates = allChips.filter(c =>
                 (c.instance_type || 'warming') === 'warming' &&
-                sessionManager.isConnected(c.session_id)
+                sessionManager.isSocketHealthy(c.session_id)
             );
 
             const detected = [];
