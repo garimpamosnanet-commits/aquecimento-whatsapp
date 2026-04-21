@@ -10,7 +10,7 @@ class AdminManager {
     constructor(sessionManager, io) {
         this.sessionManager = sessionManager;
         this.io = io;
-        this._currentOperation = null;
+        this._runningOperations = new Set(); // supports parallel/infinite operations
         this._paused = false;
         this._stopped = false;
         this._pauseResolve = null;
@@ -285,7 +285,7 @@ class AdminManager {
 
     forceReset() {
         console.log(`[AdminManager] Force reset: _currentOperation was ${this._currentOperation}`);
-        this._currentOperation = null;
+        this._runningOperations.delete(operationId);
         this._paused = false;
         this._stopped = false;
         this._retryCount = {};
@@ -300,7 +300,7 @@ class AdminManager {
         const operation = db.getAdminManageOperation(operationId);
         if (!operation) throw new Error('Operacao nao encontrada');
 
-        this._currentOperation = operationId;
+        this._runningOperations.add(operationId);
         this._paused = false;
         this._stopped = false;
         this._retryCount = {};
@@ -353,7 +353,7 @@ class AdminManager {
                     // Check pause/stop
                     if (this._stopped) {
                         this._finishOperation(operationId, 'stopped', demoteOk, demoteFail, removeOk, removeFail, skipCount);
-                        this._currentOperation = null;
+                        this._runningOperations.delete(operationId);
                         return;
                     }
 
@@ -554,7 +554,7 @@ class AdminManager {
             console.error('[AdminManager] Erro antes da execucao:', outerErr);
             this.io.emit('admin_manage_status', { operationId, status: 'failed', message: 'Erro: ' + outerErr.message });
         } finally {
-            this._currentOperation = null;
+            this._runningOperations.delete(operationId);
         }
     }
 
@@ -581,7 +581,7 @@ class AdminManager {
     }
 
     isRunning() {
-        return this._currentOperation !== null;
+        return false; // always allow parallel operations
     }
 
     // ==================== HELPERS ====================
