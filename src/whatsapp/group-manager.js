@@ -75,7 +75,7 @@ class GroupManager {
     }
 
     async getAdminGroups(adminSessionId) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
         const groups = await this._withTimeout(sock.groupFetchAllParticipating(), 30000, 'groupFetchAllParticipating');
@@ -150,7 +150,7 @@ class GroupManager {
     // Wait for ADM to reconnect (up to 60s)
     async waitForAdm(adminSessionId, label) {
         for (let i = 0; i < 12; i++) {
-            const sock = this.sessionManager.getSocket(adminSessionId);
+            const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
             if (sock?.user) return sock;
             const wait = (i + 1) * 5;
             console.log(`[GroupManager] ADM desconectado, aguardando reconexao... (${wait}s) [${label}]`);
@@ -168,7 +168,7 @@ class GroupManager {
     }
 
     async getAdmSocket(adminSessionId, label) {
-        let sock = this.sessionManager.getSocket(adminSessionId);
+        let sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (sock?.user) return sock;
         // ADM offline — wait for reconnect
         sock = await this.waitForAdm(adminSessionId, label);
@@ -189,7 +189,7 @@ class GroupManager {
     // ==================== INVITE LINK MODE ====================
 
     async joinViaInviteLink(chipSessionId, inviteCode, groupName) {
-        const sock = this.sessionManager.getSocket(chipSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(chipSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) {
             return { success: false, error: 'Chip nao conectado' };
         }
