@@ -303,7 +303,7 @@ class GroupManager {
 
             // Check if chip is already in this group (using chip's own socket)
             try {
-                const chipSock = this.sessionManager.getSocket(options.chipSessionId);
+                const chipSock = await this.sessionManager.ensureHealthySocket(options.chipSessionId, { maxWaitMs: 15000 });
                 if (chipSock?.user) {
                     const myGroups = await this._withTimeout(chipSock.groupFetchAllParticipating(), 30000, 'chip.groupFetchAllParticipating');
                     if (myGroups[groupId]) {
