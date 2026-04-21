@@ -1754,5 +1754,18 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
     });
 
 
+
+    // ==================== PROXIES: RELEASE ORPHANS ====================
+    router.post('/proxies/cleanup-orphans', (req, res) => {
+        try {
+            const result = db.releaseOrphanProxies();
+            emitUserAction(req, 'proxies_cleanup', result);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+
     return router;
 };
