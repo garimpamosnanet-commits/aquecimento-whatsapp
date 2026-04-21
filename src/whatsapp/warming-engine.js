@@ -178,7 +178,7 @@ class WarmingEngine {
             return;
         }
 
-        const socket = await this.sessionManager.ensureHealthySocket(chip.session_id, { maxWaitMs: 15000 });
+        const socket = this.sessionManager.getSocket(chip.session_id);
         if (!socket?.user) return;
 
         const partnerJid = partner.phone + '@s.whatsapp.net';
@@ -205,7 +205,7 @@ class WarmingEngine {
 
         // If flow has more steps, the partner responds
         if (flow.length > 1) {
-            const partnerSocket = await this.sessionManager.ensureHealthySocket(partner.session_id, { maxWaitMs: 15000 });
+            const partnerSocket = this.sessionManager.getSocket(partner.session_id);
             if (partnerSocket?.user) {
                 const chipJid = chip.phone + '@s.whatsapp.net';
                 for (let i = 1; i < flow.length; i++) {
@@ -249,7 +249,7 @@ class WarmingEngine {
         const partner = this.getRandomPartner(chip.id);
         if (!partner) return;
 
-        const socket = await this.sessionManager.ensureHealthySocket(chip.session_id, { maxWaitMs: 15000 });
+        const socket = this.sessionManager.getSocket(chip.session_id);
         if (!socket?.user) return;
 
         const partnerJid = partner.phone + '@s.whatsapp.net';
@@ -277,7 +277,7 @@ class WarmingEngine {
     }
 
     async doGroupChat(chip) {
-        const socket = await this.sessionManager.ensureHealthySocket(chip.session_id, { maxWaitMs: 15000 });
+        const socket = this.sessionManager.getSocket(chip.session_id);
         if (!socket?.user) return;
 
         // Try to find existing warming groups or create one
@@ -341,7 +341,7 @@ class WarmingEngine {
     }
 
     async doStatus(chip) {
-        const socket = await this.sessionManager.ensureHealthySocket(chip.session_id, { maxWaitMs: 15000 });
+        const socket = this.sessionManager.getSocket(chip.session_id);
         if (!socket?.user) return;
 
         const statusText = MessageFactory.getStatusText();
@@ -371,7 +371,7 @@ class WarmingEngine {
         const partner = this.getRandomPartner(chip.id);
         if (!partner) return;
 
-        const socket = await this.sessionManager.ensureHealthySocket(chip.session_id, { maxWaitMs: 15000 });
+        const socket = this.sessionManager.getSocket(chip.session_id);
         if (!socket?.user) return;
 
         const partnerJid = partner.phone + '@s.whatsapp.net';
@@ -397,7 +397,7 @@ class WarmingEngine {
         const partner = this.getRandomPartner(chip.id);
         if (!partner) return this.doPrivateChat(chip);
 
-        const socket = await this.sessionManager.ensureHealthySocket(chip.session_id, { maxWaitMs: 15000 });
+        const socket = this.sessionManager.getSocket(chip.session_id);
         if (!socket?.user) return;
 
         // Send a message first, then react from partner
@@ -408,7 +408,7 @@ class WarmingEngine {
         db.incrementMessagesSent(chip.id);
 
         // Partner reacts
-        const partnerSocket = await this.sessionManager.ensureHealthySocket(partner.session_id, { maxWaitMs: 15000 });
+        const partnerSocket = this.sessionManager.getSocket(partner.session_id);
         if (partnerSocket?.user) {
             await new Promise(r => setTimeout(r, 2000 + Math.random() * 5000));
             const emoji = MessageFactory.getRandomReaction();
@@ -433,7 +433,7 @@ class WarmingEngine {
         const partner = this.getRandomPartner(chip.id);
         if (!partner) return this.doPrivateChat(chip);
 
-        const socket = await this.sessionManager.ensureHealthySocket(chip.session_id, { maxWaitMs: 15000 });
+        const socket = this.sessionManager.getSocket(chip.session_id);
         if (!socket?.user) return;
 
         const partnerJid = partner.phone + '@s.whatsapp.net';
@@ -470,7 +470,7 @@ class WarmingEngine {
         const partner = this.getRandomPartner(chip.id);
         if (!partner) return;
 
-        const socket = await this.sessionManager.ensureHealthySocket(chip.session_id, { maxWaitMs: 15000 });
+        const socket = this.sessionManager.getSocket(chip.session_id);
         if (!socket?.user) return;
 
         const partnerJid = partner.phone + '@s.whatsapp.net';
