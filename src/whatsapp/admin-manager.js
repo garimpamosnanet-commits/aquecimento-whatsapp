@@ -41,7 +41,7 @@ class AdminManager {
     // ==================== RAW GROUP QUERY (shared) ====================
 
     async _getRawParticipants(adminSessionId, groupId) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
         const rawResult = await sock.query({
@@ -151,7 +151,7 @@ class AdminManager {
     }
 
     async getGroupInviteLink(adminSessionId, groupId) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
         const code = await sock.groupInviteCode(groupId);
@@ -191,7 +191,7 @@ class AdminManager {
             let retries = 0;
             while (!success && retries <= 4) {
                 try {
-                    const sock = this.sessionManager.getSocket(adminSessionId);
+                    const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
                     if (!sock || !sock.user) throw new Error('Desconectado');
                     const code = await sock.groupInviteCode(g.id);
                     if (code) {
@@ -229,7 +229,7 @@ class AdminManager {
     }
 
     async addToGroup(adminSessionId, groupId, jid) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
 
         try {
@@ -246,7 +246,7 @@ class AdminManager {
     }
 
     async promoteToAdmin(adminSessionId, groupId, jid) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
 
         try {
@@ -258,7 +258,7 @@ class AdminManager {
     }
 
     async demoteFromAdmin(adminSessionId, groupId, jid) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
 
         try {
@@ -270,7 +270,7 @@ class AdminManager {
     }
 
     async removeFromGroup(adminSessionId, groupId, jid) {
-        const sock = this.sessionManager.getSocket(adminSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) throw new Error('Socket ADM nao disponivel');
 
         try {
@@ -313,7 +313,7 @@ class AdminManager {
         if (!adminChip) throw new Error('Chip ADM nao encontrado');
 
         const adminSessionId = adminChip.session_id;
-        const sock = this.sessionManager.getSocket(adminSessionId);
+        const sock = await this.sessionManager.ensureHealthySocket(adminSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) throw new Error('Instancia ADM nao conectada');
 
         // Update operation status
