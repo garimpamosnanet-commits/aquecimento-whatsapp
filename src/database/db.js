@@ -3,9 +3,25 @@ const path = require('path');
 
 const DB_PATH = path.join(__dirname, '..', '..', 'data', 'warming.json');
 
+// ==================== IN-MEMORY CACHE ====================
+let _dbCache = null;
+let _dbCacheTime = 0;
+const _DB_CACHE_TTL_MS = 500;
+
 // ==================== JSON DATABASE ====================
 
 function loadDb() {
+    const now = Date.now();
+    if (_dbCache && (now - _dbCacheTime) < _DB_CACHE_TTL_MS) {
+        return _dbCache;
+    }
+    const fresh = _loadDbFromDisk();
+    _dbCache = fresh;
+    _dbCacheTime = now;
+    return fresh;
+}
+
+function _loadDbFromDisk() {
     if (!fs.existsSync(DB_PATH)) {
         const initial = {
             chips: [],
@@ -32,6 +48,8 @@ function saveDb(data) {
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    _dbCache = data;
+    _dbCacheTime = Date.now();
 }
 
 function getDb() {
