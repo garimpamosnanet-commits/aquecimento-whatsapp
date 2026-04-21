@@ -5614,3 +5614,47 @@ function loadAdminManageHistory() {
         </div>`;
     });
 }
+
+
+// ==================== DETECT ADMINS AUTOMATICALLY ====================
+async function detectAdmins() {
+    if (!confirm('Esta acao vai verificar TODOS os chips conectados e marcar como ADM do cliente os que ja sao admin em algum grupo do WhatsApp. Pode demorar 1-5 minutos. Continuar?')) return;
+    const btn = document.getElementById('aq-detect-admins-btn');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Detectando...'; }
+    try {
+        const r = await fetch('/api/detect-admins', { method: 'POST' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        const lines = ['Detectados ' + data.detected.length + ' novos ADMs (de ' + data.total + ' chips conectados verificados).'];
+        if (data.detected.length > 0) {
+            lines.push(''); lines.push('Chips marcados como ADM:');
+            data.detected.forEach(c => lines.push('- ' + (c.name || c.phone) + ' (admin em ' + c.adminGroups + ' grupos)'));
+        }
+        if (data.errors && data.errors.length > 0) lines.push('\n' + data.errors.length + ' chips com erro (veja console).');
+        alert(lines.join('\n'));
+        if (typeof loadScanAdmSelect === 'function') loadScanAdmSelect();
+    } catch (e) { alert('Erro: ' + e.message); }
+    finally { if (btn) { btn.disabled = false; btn.innerHTML = originalText; } }
+}
+window.detectAdmins = detectAdmins;
+
+(function injectDetectAdminsButton() {
+    const tryInject = () => {
+        const sel = document.getElementById('aq-scan-adm');
+        if (!sel) return false;
+        if (document.getElementById('aq-detect-admins-btn')) return true;
+        const btn = document.createElement('button');
+        btn.id = 'aq-detect-admins-btn';
+        btn.className = 'btn btn-outline btn-sm';
+        btn.type = 'button';
+        btn.title = 'Detecta automaticamente todos chips que ja sao admin em grupos e marca como ADM do cliente';
+        btn.textContent = 'Detectar ADMs';
+        btn.style.marginLeft = '8px';
+        btn.addEventListener('click', detectAdmins);
+        sel.parentElement.appendChild(btn);
+        return true;
+    };
+    const start = () => { if (tryInject()) return; const iv = setInterval(() => { if (tryInject()) clearInterval(iv); }, 500); setTimeout(() => clearInterval(iv), 15000); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
