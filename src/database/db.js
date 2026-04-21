@@ -579,6 +579,33 @@ function getProxyForChip(chipId) {
     return data.proxies.find(p => p.assigned_chip_id === chipId) || null;
 }
 
+function releaseOrphanProxies() {
+    const data = loadDb();
+    if (!data.proxies) return { released: 0, total: 0 };
+    const chipIds = new Set((data.chips || []).map(c => c.id));
+    let released = 0;
+    for (const p of data.proxies) {
+        if (p.assigned_chip_id && !chipIds.has(p.assigned_chip_id)) {
+            p.assigned_chip_id = null;
+            p.status = 'available';
+            released++;
+        }
+    }
+    // Also: proxies marked in_use but chip lost its proxy_id reference
+    for (const p of data.proxies) {
+        if (p.assigned_chip_id) {
+            const chip = data.chips.find(c => c.id === p.assigned_chip_id);
+            if (!chip || chip.proxy_id !== p.id) {
+                p.assigned_chip_id = null;
+                p.status = 'available';
+                released++;
+            }
+        }
+    }
+    if (released > 0) saveDb(data);
+    return { released, total: data.proxies.length };
+}
+
 function updateProxyUrl(id, newUrl) {
     const data = loadDb();
     const proxy = (data.proxies || []).find(p => p.id === id);
@@ -1027,7 +1054,7 @@ module.exports = {
     logActivity, getRecentActivity, getTodayMessageCount,
     createWarmingGroup, addGroupMember, getWarmingGroups, getGroupMembers,
     addProxy, addProxiesBulk, getAllProxies, deleteProxy, deleteAllProxies,
-    assignProxyToChip, releaseProxy, getProxyForChip, getProxyStats,
+    assignProxyToChip, releaseProxy, releaseOrphanProxies, getProxyForChip, getProxyStats,
     updateProxyUrl, updateProxyExpiry, markProxyRotated,
     createFolder, getAllFolders, updateFolder, deleteFolder, assignChipToFolder,
     enterRehabilitation, exitRehabilitation, markChipDiscarded, getChipsInRehab,
