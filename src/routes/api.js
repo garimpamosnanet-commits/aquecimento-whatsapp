@@ -33,6 +33,49 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ count: logs.length, logs });
     });
 
+    // Manual: dedupe + reconcile ghost qr_pending chips
+    router.post('/chips/cleanup-ghosts', async (req, res) => {
+        try {
+            const removed = typeof sessionManager._dedupeByPhone === 'function'
+                ? sessionManager._dedupeByPhone()
+                : 0;
+
+            const fs = require('fs');
+            const path = require('path');
+            const SESSIONS_DIR = path.join(__dirname, '..', '..', 'sessions');
+            const chips = db.getAllChips();
+            const reconciled = [];
+            const reconnected = [];
+            for (const c of chips) {
+                if (c.status !== 'qr_pending') continue;
+                if (!c.session_id) continue;
+                const credsPath = path.join(SESSIONS_DIR, c.session_id, 'creds.json');
+                if (!fs.existsSync(credsPath)) continue;
+                try {
+                    const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+                    if (creds.me && creds.me.id) {
+                        db.updateChipStatus(c.id, 'connected');
+                        if (!c.phone) {
+                            const phone = String(creds.me.id).split(':')[0].split('@')[0];
+                            db.updateChipPhone(c.id, phone);
+                        }
+                        reconciled.push(c.id);
+                        if (!sessionManager.sessions.has(c.session_id)) {
+                            try {
+                                await sessionManager.connect(c.session_id);
+                                reconnected.push(c.id);
+                            } catch (e) { /* best-effort */ }
+                            await new Promise(r => setTimeout(r, 800));
+                        }
+                    }
+                } catch (e) { /* best-effort */ }
+            }
+            res.json({ ok: true, removedDuplicates: removed, reconciled, reconnected });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // ==================== CHIPS ====================
 
     // List all chips (with proxy info)

@@ -51,29 +51,91 @@ class SessionManager {
         return _debugLogs.slice();
     }
 
+    // Deduplicate chips by phone number: same phone across multiple chips means the
+    // user re-paired (new QR scan) without the tool cleaning up the old chip row.
+    // Keep one winner per phone (connected > warming > rehab > qr_pending > disconnected);
+    // delete the losers together with their session directory.
+    _dedupeByPhone() {
+        const rank = (c) => {
+            if (c.status === 'connected') return 6;
+            if (c.status === 'warming') return 5;
+            if (c.status === 'rehabilitation') return 4;
+            if (c.status === 'qr_pending' && c.phone) return 3;
+            if (c.status === 'qr_pending') return 2;
+            if (c.status === 'disconnected') return 1;
+            return 0;
+        };
+        const chips = db.getAllChips();
+        const byPhone = new Map();
+        for (const c of chips) {
+            if (!c.phone) continue;
+            const list = byPhone.get(c.phone) || [];
+            list.push(c);
+            byPhone.set(c.phone, list);
+        }
+        let removed = 0;
+        for (const [phone, list] of byPhone) {
+            if (list.length < 2) continue;
+            list.sort((a, b) => {
+                const r = rank(b) - rank(a);
+                if (r !== 0) return r;
+                // Tie-breaker: newer session wins
+                return String(b.session_id || '').localeCompare(String(a.session_id || ''));
+            });
+            const [winner, ...losers] = list;
+            for (const l of losers) {
+                try {
+                    const sp = path.join(SESSIONS_DIR, l.session_id);
+                    if (fs.existsSync(sp)) fs.rmSync(sp, { recursive: true, force: true });
+                } catch (e) { /* best-effort */ }
+                try {
+                    db.releaseProxy(l.id);
+                } catch (e) { /* best-effort */ }
+                try {
+                    db.deleteChip(l.id);
+                    removed++;
+                    console.log(`[dedupe] Removido chip duplicado ${l.id} (${phone}) status=${l.status}, vencedor=${winner.id} status=${winner.status}`);
+                } catch (e) {
+                    console.log(`[dedupe] Falha ao remover ${l.id}: ${e.message}`);
+                }
+            }
+        }
+        if (removed > 0) {
+            console.log(`[dedupe] Total: ${removed} chip(s) duplicado(s) removido(s)`);
+        }
+        return removed;
+    }
+
     async initialize() {
         this._initializing = true;
-        // Reconnect all previously connected chips.
-        // Include qr_pending chips that have a saved creds.json — those are
-        // "ghost qr_pending" (user scanned, but status never updated due to old bugs).
+
+        // Step 1: deduplicate chips sharing the same phone number
+        try { this._dedupeByPhone(); } catch (e) { console.log('[dedupe] erro:', e.message); }
+
+        // Step 2: reconnect all chips that should be live.
+        // Includes qr_pending chips with a valid creds.json ("ghost qr_pending"
+        // chips from old bugs — user scanned but status never updated).
         const chips = db.getAllChips();
         for (const chip of chips) {
             if (!chip.session_id) continue;
             const sessionPath = path.join(SESSIONS_DIR, chip.session_id);
             if (!fs.existsSync(sessionPath)) continue;
 
+            const credsPath = path.join(sessionPath, 'creds.json');
+            const hasValidCreds = fs.existsSync(credsPath);
+
             const shouldReconnect =
                 chip.status === 'connected' ||
                 chip.status === 'warming' ||
                 chip.status === 'rehabilitation' ||
-                (chip.status === 'qr_pending' && fs.existsSync(path.join(sessionPath, 'creds.json')));
+                (chip.status === 'qr_pending' && hasValidCreds);
 
             if (!shouldReconnect) continue;
 
             // Ghost qr_pending with valid creds → bump to connected before reconnect
-            if (chip.status === 'qr_pending') {
+            if (chip.status === 'qr_pending' && hasValidCreds) {
                 try {
-                    const creds = JSON.parse(fs.readFileSync(path.join(sessionPath, 'creds.json'), 'utf-8'));
+                    const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
                     if (creds.me && creds.me.id) {
                         db.updateChipStatus(chip.id, 'connected');
                         if (!chip.phone) {
