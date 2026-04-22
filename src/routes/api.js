@@ -54,6 +54,7 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         try {
             const { name } = req.body || {};
             const chip = await sessionManager.createSession(name || '');
+        try { if (typeof db.assignProxyToChip === 'function') { const px = db.assignProxyToChip(chip.id); if (px) console.log('[auto-proxy] chip', chip.id, '->', px.id); } } catch(e) { console.error('[auto-proxy]', e.message); }
             res.json({ success: true, chip });
         } catch (err) {
             res.status(500).json({ error: err.message });
