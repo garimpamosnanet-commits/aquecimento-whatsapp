@@ -316,44 +316,76 @@ class SessionManager {
                     }
 
                     const allChips = db.getAllChips();
-                    const extChip = allChips.find(c =>
+                    // Find a peer chip with the same phone that should yield to this one.
+                    // Includes external_warmed pre-registered slots AND stale duplicates
+                    // (any non-connected chip in a folder / with client_tag / phase > 1).
+                    const isActive = (c) => c.status === 'connected' || c.status === 'warming' || c.status === 'rehabilitation';
+                    const peer = allChips.find(c =>
                         c.id !== chip.id &&
                         phonesMatch(c.phone, phoneNumber) &&
-                        c.origin === 'external_warmed'
+                        !isActive(c)
                     );
-                    if (extChip) {
-                        // If the user explicitly named this chip ("ADM - Mario", etc),
-                        // they are intentionally pairing the phone as a new chip and don't
-                        // want the pre-registered folder/name to win. Only auto-merge when
-                        // the chip still has no name or a default "Chip ###" placeholder.
+                    if (peer) {
+                        // If the user explicitly named the new chip (e.g. "ADM - Mario"),
+                        // they want it kept as-is, not merged into the peer's folder.
                         const currentChipFresh = db.getChipById(chip.id);
                         const userNamed = currentChipFresh && currentChipFresh.name &&
                             !/^Chip\s/i.test(currentChipFresh.name);
 
                         if (userNamed) {
-                            debugLog(`[SessionManager] Match com external_warmed ${extChip.id}, mas chip ${chip.id} tem nome customizado ("${currentChipFresh.name}") — mantendo em Sem Pasta`);
-                            // Skip name/folder merge; keep user intent intact.
-                            // Do not delete the pre-registered external_warmed slot either —
-                            // it stays for whenever the real chip is paired later.
-                        } else {
-                            debugLog(`[SessionManager] Merge: chip ${chip.id} matched external_warmed chip ${extChip.id} (${phoneNumber})`);
-                            // Transfer metadata from registered chip to connected chip
-                            if (extChip.client_tag) db.setChipClientTag(chip.id, extChip.client_tag);
-
-                            // Set chip name from folder name (priority) or client_tag
-                            const last4 = phoneNumber.slice(-4);
-                            let label = extChip.client_tag || '';
-                            if (extChip.folder_id) {
-                                const folder = db.getAllFolders().find(f => f.id === extChip.folder_id);
-                                if (folder) label = folder.name;
+                            debugLog(`[SessionManager] Chip ${chip.id} tem nome customizado ("${currentChipFresh.name}") — peer ${peer.id} nao sera mesclado`);
+                            // But the stale peer is still a duplicate with the same phone.
+                            // Delete it so the UI is not polluted with a permanently-offline row.
+                            try {
+                                if (peer.session_id) {
+                                    const peerPath = path.join(SESSIONS_DIR, peer.session_id);
+                                    if (fs.existsSync(peerPath)) fs.rmSync(peerPath, { recursive: true, force: true });
+                                }
+                                db.releaseProxy(peer.id);
+                                db.deleteChip(peer.id);
+                                debugLog(`[SessionManager] Peer duplicado ${peer.id} removido (phone colidindo com chip ativo ${chip.id})`);
+                            } catch (e) {
+                                debugLog(`[SessionManager] Falha ao remover peer duplicado: ${e.message}`);
                             }
-                            if (label) db.updateChipName(chip.id, `${label} - ${last4}`);
-                            if (extChip.fornecedor) db.updateChipField(chip.id, 'fornecedor', extChip.fornecedor);
-                            if (extChip.folder_id) db.assignChipToFolder(chip.id, extChip.folder_id);
-                            db.updateChipField(chip.id, 'origin', 'external_warmed');
-                            // Delete the orphan registered chip
-                            db.deleteChip(extChip.id);
-                            debugLog(`[SessionManager] Merge completo: chip ${extChip.id} removido, metadata transferida para ${chip.id}`);
+                        } else {
+                            debugLog(`[SessionManager] Merge: chip ativo ${chip.id} assume identidade do peer ${peer.id} (${phoneNumber}, peer.status=${peer.status})`);
+                            // Transfer metadata from the stale peer to the live chip.
+                            if (peer.client_tag) db.setChipClientTag(chip.id, peer.client_tag);
+
+                            // Preserve the peer's name when it looks user-assigned
+                            // ("Jonathan Januario - 5316"), otherwise derive from folder.
+                            const peerNameIsUser = peer.name && !/^Chip\s/i.test(peer.name);
+                            if (peerNameIsUser) {
+                                db.updateChipName(chip.id, peer.name);
+                            } else if (peer.folder_id) {
+                                const folder = db.getAllFolders().find(f => f.id === peer.folder_id);
+                                if (folder) {
+                                    const last4 = phoneNumber.slice(-4);
+                                    db.updateChipName(chip.id, `${folder.name} - ${last4}`);
+                                }
+                            }
+                            if (peer.fornecedor) db.updateChipField(chip.id, 'fornecedor', peer.fornecedor);
+                            if (peer.folder_id) db.assignChipToFolder(chip.id, peer.folder_id);
+                            // Only mark origin=external_warmed when that was the peer's origin —
+                            // we don't want to overwrite legitimate origins ("Paloma" etc).
+                            if (peer.origin === 'external_warmed') {
+                                db.updateChipField(chip.id, 'origin', 'external_warmed');
+                            } else if (peer.origin) {
+                                db.updateChipField(chip.id, 'origin', peer.origin);
+                            }
+                            // Delete the stale peer + its session dir so only ONE chip per
+                            // phone remains in the UI.
+                            try {
+                                if (peer.session_id && peer.session_id !== sessionId) {
+                                    const peerPath = path.join(SESSIONS_DIR, peer.session_id);
+                                    if (fs.existsSync(peerPath)) fs.rmSync(peerPath, { recursive: true, force: true });
+                                }
+                                db.releaseProxy(peer.id);
+                                db.deleteChip(peer.id);
+                            } catch (e) {
+                                debugLog(`[SessionManager] Falha ao remover peer ${peer.id}: ${e.message}`);
+                            }
+                            debugLog(`[SessionManager] Merge completo: peer ${peer.id} removido, metadata em ${chip.id}`);
                         }
                     }
                 }
