@@ -191,7 +191,24 @@ class GroupManager {
     async joinViaInviteLink(chipSessionId, inviteCode, groupName) {
         const sock = await this.sessionManager.ensureHealthySocket(chipSessionId, { maxWaitMs: 15000 });
         if (!sock || !sock.user) {
-            return { success: false, error: 'Chip nao conectado' };
+            // Socket zombie: UI said Conectado but WhatsApp severed the session.
+            // Flip the DB status to 'disconnected' so the badge matches reality and
+            // kick off a full disconnect+reconnect cycle in the background. Next
+            // invite-link attempt for this chip will use the fresh socket.
+            try {
+                const chip = db.getChipBySession(chipSessionId);
+                if (chip) {
+                    db.updateChipStatus(chip.id, 'disconnected');
+                    if (this.sessionManager.emitChipUpdate) this.sessionManager.emitChipUpdate(chip.id);
+                }
+            } catch (_) {}
+            (async () => {
+                try { await this.sessionManager.disconnect(chipSessionId); } catch (_) {}
+                await new Promise(r => setTimeout(r, 2000));
+                try { await this.sessionManager.connect(chipSessionId); }
+                catch (err) { console.log(`[GroupManager] reconexao pos-invite falhou: ${err.message}`); }
+            })();
+            return { success: false, error: 'Chip caiu (reconectando em background)' };
         }
         try {
             console.log(`[GroupManager] joinViaInviteLink: chip=${chipSessionId}, code=${inviteCode}`);
