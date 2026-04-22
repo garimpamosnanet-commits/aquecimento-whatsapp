@@ -7,11 +7,14 @@ class ProxyRotator {
     }
 
     start() {
-        // Check every 30 min
+        // Full rotation/swap check every 30 min (gated by rotation settings)
         this.timer = setInterval(() => this.check(), 30 * 60 * 1000);
-        // Also run immediately on start to assign missing proxies
+        // Auto-assign proxies to chips that don't have one runs INDEPENDENTLY
+        // of the rotation setting — a connected chip without a proxy is a bug,
+        // not a rotation decision.
+        this.assignTimer = setInterval(() => this.autoAssignMissing(), 2 * 60 * 1000);
         setTimeout(() => this.autoAssignMissing(), 10000);
-        console.log('[ProxyRotator] Ativo — check a cada 30min');
+        console.log('[ProxyRotator] Ativo — rotation check 30min, auto-assign 2min');
     }
 
     // ==================== AUTO-ASSIGN ====================

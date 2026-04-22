@@ -489,6 +489,20 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true });
     });
 
+    // Trigger auto-assign for connected chips missing a proxy NOW
+    router.post('/proxies/auto-assign', (req, res) => {
+        try {
+            const proxyRotator = req.app.get('proxyRotator');
+            if (!proxyRotator) return res.status(500).json({ error: 'ProxyRotator nao inicializado' });
+            const before = db.getAllChips().filter(c => ['connected','warming','rehabilitation'].includes(c.status) && !c.proxy_id).length;
+            proxyRotator.autoAssignMissing();
+            const after = db.getAllChips().filter(c => ['connected','warming','rehabilitation'].includes(c.status) && !c.proxy_id).length;
+            res.json({ ok: true, semProxyAntes: before, semProxyDepois: after, atribuidos: before - after });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // Force rotate all proxies NOW
     router.post('/proxies/force-rotate', async (req, res) => {
         try {
