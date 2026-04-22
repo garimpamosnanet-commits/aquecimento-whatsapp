@@ -489,15 +489,30 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ success: true });
     });
 
-    // Trigger auto-assign for connected chips missing a proxy NOW
+    // Trigger auto-assign for connected chips missing a proxy NOW.
+    // Implemented inline (not via proxyRotator) so it works even before the
+    // rotator has finished initializing.
     router.post('/proxies/auto-assign', (req, res) => {
         try {
-            const proxyRotator = req.app.get('proxyRotator');
-            if (!proxyRotator) return res.status(500).json({ error: 'ProxyRotator nao inicializado' });
-            const before = db.getAllChips().filter(c => ['connected','warming','rehabilitation'].includes(c.status) && !c.proxy_id).length;
-            proxyRotator.autoAssignMissing();
-            const after = db.getAllChips().filter(c => ['connected','warming','rehabilitation'].includes(c.status) && !c.proxy_id).length;
-            res.json({ ok: true, semProxyAntes: before, semProxyDepois: after, atribuidos: before - after });
+            const chipsNeeding = db.getAllChips().filter(c =>
+                ['connected', 'warming', 'rehabilitation'].includes(c.status) && !c.proxy_id
+            );
+            const assigned = [];
+            const skipped = [];
+            for (const chip of chipsNeeding) {
+                const proxy = db.assignProxyToChip(chip.id);
+                if (proxy) {
+                    assigned.push({ chipId: chip.id, name: chip.name, proxyIp: (proxy.url || '').replace(/.*@/, '').replace(/:.*/, '') });
+                } else {
+                    skipped.push({ chipId: chip.id, name: chip.name, reason: 'sem proxy disponivel' });
+                    break;
+                }
+            }
+            try { sessionManager.emitStats(); } catch (_) {}
+            for (const a of assigned) {
+                try { sessionManager.emitChipUpdate(a.chipId); } catch (_) {}
+            }
+            res.json({ ok: true, totalPrecisando: chipsNeeding.length, atribuidos: assigned.length, chips: assigned, skipped });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
