@@ -402,31 +402,52 @@ class SessionManager {
                     // Pairing succeeded, Baileys asked for socket restart with saved creds.
                     // Pre-emptively mark as connected so UI updates immediately; the new
                     // socket opening will confirm and fill in phone/name.
-                    debugLog(`[SM] ${sessionId} pairing OK (515 restartRequired), reiniciando socket...`);
-                    try {
+                    debugLog(`[SM] ${sessionId} pairing OK (515 restartRequired), pre-marcando connected...`);
+
+                    // saveCreds (from 'creds.update') is async — retry a few times to
+                    // let the write finish before we try to read.
+                    const _markConnectedFromCreds = async () => {
                         const sessionPath = path.join(SESSIONS_DIR, sessionId);
                         const credsPath = path.join(sessionPath, 'creds.json');
-                        if (fs.existsSync(credsPath)) {
-                            const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
-                            if (creds.me && creds.me.id) {
-                                const phone = String(creds.me.id).split(':')[0].split('@')[0];
-                                db.updateChipStatus(chip.id, 'connected');
-                                if (phone) db.updateChipPhone(chip.id, phone);
-                                this.emitChipUpdate(chip.id);
-                                this.emitStats();
-                                if (!this._initializing) {
-                                    this.io.emit('connected', { sessionId, chipId: chip.id, phone });
+                        for (let attempt = 0; attempt < 8; attempt++) {
+                            try {
+                                if (fs.existsSync(credsPath)) {
+                                    const raw = fs.readFileSync(credsPath, 'utf-8');
+                                    const creds = JSON.parse(raw);
+                                    if (creds.me && creds.me.id) {
+                                        const phone = String(creds.me.id).split(':')[0].split('@')[0];
+                                        db.updateChipStatus(chip.id, 'connected');
+                                        if (phone) db.updateChipPhone(chip.id, phone);
+                                        this.emitChipUpdate(chip.id);
+                                        this.emitStats();
+                                        if (!this._initializing) {
+                                            this.io.emit('connected', { sessionId, chipId: chip.id, phone });
+                                        }
+                                        debugLog(`[SM] ${sessionId} marcado connected via creds.json (tentativa ${attempt + 1}): ${phone}`);
+                                        return true;
+                                    }
                                 }
+                            } catch (e) {
+                                debugLog(`[SM] creds.json read tentativa ${attempt + 1} falhou: ${e.message}`);
                             }
+                            await new Promise(r => setTimeout(r, 200));
                         }
-                    } catch (e) {
-                        debugLog(`[SM] pairing pre-mark falhou: ${e.message}`);
-                    }
+                        debugLog(`[SM] ${sessionId} pre-mark falhou apos 8 tentativas — aguardando 'open' do novo socket`);
+                        return false;
+                    };
+
                     this.sessions.delete(sessionId);
-                    const timer = setTimeout(() => {
-                        this.connect(sessionId).catch(e => debugLog(`[SM] restart reconnect fail: ${e.message}`));
-                    }, 500);
-                    this.reconnectTimers.set(sessionId, timer);
+                    // Kick off the pre-mark + socket restart in parallel-ish order:
+                    // pre-mark first (uses creds on disk), then restart socket so 'open'
+                    // fires and fills remaining details (profile pic, push name).
+                    (async () => {
+                        await _markConnectedFromCreds();
+                        try {
+                            await this.connect(sessionId);
+                        } catch (e) {
+                            debugLog(`[SM] restart reconnect fail: ${e.message}`);
+                        }
+                    })();
                 } else if (wasInQRPhase) {
                     // QR actually expired without scan (408 / QR refs ended) — rotate QR
                     debugLog(`[SM] ${sessionId} QR expirou (code=${statusCode}), auto-reconectando em 3s...`);
