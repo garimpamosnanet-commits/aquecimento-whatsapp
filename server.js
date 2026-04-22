@@ -308,7 +308,8 @@ setInterval(() => {
 
 
 // ==================== CHIP STATUS SYNC (reconcile ghost qr_pending) ====================
-// chip-status-sync: a cada 2 min, compara creds.json com status do DB
+// A cada 2 min: se um chip está em qr_pending/disconnected mas já tem creds.json
+// válido, reconcilia o status no DB e aciona reconexão real do socket.
 const _fsSync = require('fs');
 const _pathSync = require('path');
 const _dbSync = require('./src/database/db');
@@ -316,6 +317,7 @@ const _sessionsRoot = _pathSync.join(__dirname, 'sessions');
 setInterval(() => {
     try {
         const data = _dbSync._loadDb();
+        const reconnect = [];
         let fixed = 0;
         for (const c of data.chips) {
             if (c.status !== 'qr_pending' && c.status !== 'disconnected') continue;
@@ -327,6 +329,7 @@ setInterval(() => {
                     if (creds.me && creds.me.id) {
                         c.status = 'connected';
                         if (!c.phone) c.phone = String(creds.me.id).split(':')[0].split('@')[0];
+                        reconnect.push(c.session_id);
                         fixed++;
                     }
                 }
@@ -334,7 +337,22 @@ setInterval(() => {
         }
         if (fixed > 0) {
             _dbSync._saveDb(data);
-            console.log('[chip-status-sync] Reconciliado(s) ' + fixed + ' chip(s) com creds vlido para status=connected');
+            console.log(`[chip-status-sync] Reconciliados ${fixed} chip(s). Reconectando sockets...`);
+            // Fire socket reconnections (serialized, 1s apart, non-blocking)
+            (async () => {
+                for (const sid of reconnect) {
+                    try {
+                        if (!sessionManager.sessions.has(sid)) {
+                            await sessionManager.connect(sid);
+                        }
+                    } catch (e) {
+                        console.log(`[chip-status-sync] reconnect ${sid} falhou: ${e.message}`);
+                    }
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                // Notify UI of the changes
+                try { io.emit('stats', _dbSync.getChipStats ? _dbSync.getChipStats() : {}); } catch(e) {}
+            })();
         }
     } catch (e) {
         console.error('[chip-status-sync] erro:', e.message);

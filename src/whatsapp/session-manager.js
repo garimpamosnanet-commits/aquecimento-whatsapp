@@ -53,18 +53,48 @@ class SessionManager {
 
     async initialize() {
         this._initializing = true;
-        // Reconnect all previously connected chips
+        // Reconnect all previously connected chips.
+        // Include qr_pending chips that have a saved creds.json — those are
+        // "ghost qr_pending" (user scanned, but status never updated due to old bugs).
         const chips = db.getAllChips();
         for (const chip of chips) {
-            if (chip.status === 'connected' || chip.status === 'warming' || chip.status === 'rehabilitation') {
-                const sessionPath = path.join(SESSIONS_DIR, chip.session_id);
-                if (fs.existsSync(sessionPath)) {
-                    console.log(`[SessionManager] Reconectando ${chip.session_id} (${chip.phone || 'sem numero'})...`);
-                    await this.connect(chip.session_id);
-                    // Small delay between reconnections to avoid overwhelming
-                    await new Promise(r => setTimeout(r, 2000));
+            if (!chip.session_id) continue;
+            const sessionPath = path.join(SESSIONS_DIR, chip.session_id);
+            if (!fs.existsSync(sessionPath)) continue;
+
+            const shouldReconnect =
+                chip.status === 'connected' ||
+                chip.status === 'warming' ||
+                chip.status === 'rehabilitation' ||
+                (chip.status === 'qr_pending' && fs.existsSync(path.join(sessionPath, 'creds.json')));
+
+            if (!shouldReconnect) continue;
+
+            // Ghost qr_pending with valid creds → bump to connected before reconnect
+            if (chip.status === 'qr_pending') {
+                try {
+                    const creds = JSON.parse(fs.readFileSync(path.join(sessionPath, 'creds.json'), 'utf-8'));
+                    if (creds.me && creds.me.id) {
+                        db.updateChipStatus(chip.id, 'connected');
+                        if (!chip.phone) {
+                            const phone = String(creds.me.id).split(':')[0].split('@')[0];
+                            db.updateChipPhone(chip.id, phone);
+                        }
+                        console.log(`[SessionManager] Ghost qr_pending reconciliado: ${chip.session_id} (${creds.me.id})`);
+                    }
+                } catch (e) {
+                    console.log(`[SessionManager] Falha ao ler creds de ${chip.session_id}: ${e.message}`);
                 }
             }
+
+            console.log(`[SessionManager] Reconectando ${chip.session_id} (${chip.phone || 'sem numero'})...`);
+            try {
+                await this.connect(chip.session_id);
+            } catch (e) {
+                console.log(`[SessionManager] Erro reconectando ${chip.session_id}: ${e.message}`);
+            }
+            // Small delay between reconnections to avoid overwhelming
+            await new Promise(r => setTimeout(r, 2000));
         }
         this._initializing = false;
         console.log('[SessionManager] Inicializacao completa — eventos connected ativados');
@@ -306,11 +336,42 @@ class SessionManager {
                             this.notifier.chipDisconnected(name);
                         }
                     }
-                } else if (wasInQRPhase) {
-                    // QR phase — auto-reconnect after short delay (keeps QR rotating)
-                    debugLog(`[SM] ${sessionId} QR expirou, auto-reconectando em 3s...`);
+                } else if (statusCode === reason.restartRequired) {
+                    // Pairing succeeded, Baileys asked for socket restart with saved creds.
+                    // Pre-emptively mark as connected so UI updates immediately; the new
+                    // socket opening will confirm and fill in phone/name.
+                    debugLog(`[SM] ${sessionId} pairing OK (515 restartRequired), reiniciando socket...`);
+                    try {
+                        const sessionPath = path.join(SESSIONS_DIR, sessionId);
+                        const credsPath = path.join(sessionPath, 'creds.json');
+                        if (fs.existsSync(credsPath)) {
+                            const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+                            if (creds.me && creds.me.id) {
+                                const phone = String(creds.me.id).split(':')[0].split('@')[0];
+                                db.updateChipStatus(chip.id, 'connected');
+                                if (phone) db.updateChipPhone(chip.id, phone);
+                                this.emitChipUpdate(chip.id);
+                                this.emitStats();
+                                if (!this._initializing) {
+                                    this.io.emit('connected', { sessionId, chipId: chip.id, phone });
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        debugLog(`[SM] pairing pre-mark falhou: ${e.message}`);
+                    }
                     this.sessions.delete(sessionId);
-                    const timer = setTimeout(() => this.connect(sessionId), 3000);
+                    const timer = setTimeout(() => {
+                        this.connect(sessionId).catch(e => debugLog(`[SM] restart reconnect fail: ${e.message}`));
+                    }, 500);
+                    this.reconnectTimers.set(sessionId, timer);
+                } else if (wasInQRPhase) {
+                    // QR actually expired without scan (408 / QR refs ended) — rotate QR
+                    debugLog(`[SM] ${sessionId} QR expirou (code=${statusCode}), auto-reconectando em 3s...`);
+                    this.sessions.delete(sessionId);
+                    const timer = setTimeout(() => {
+                        this.connect(sessionId).catch(e => debugLog(`[SM] QR reconnect fail: ${e.message}`));
+                    }, 3000);
                     this.reconnectTimers.set(sessionId, timer);
                 } else if (statusCode !== reason.connectionClosed) {
                     const errorMsg = lastDisconnect?.error?.message || '';
