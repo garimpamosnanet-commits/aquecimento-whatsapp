@@ -108,6 +108,26 @@ app.post('/api/logout', (req, res) => {
     res.json({ ok: true });
 });
 
+// Each container start gets a fresh build token so browsers re-fetch JS/CSS
+// after a deploy. Injected into index.html where `{{BV}}` appears in the
+// `?v=` query of /js/app.js and /css/style.css.
+const BUILD_TOKEN = `${BUILD_VERSION}-${Date.now()}`;
+
+// Serve index.html with build token substituted so cache-busting works
+// automatically on every deploy (no more hand-editing the version string).
+const fs_html = require('fs');
+app.get(['/', '/index.html'], (req, res) => {
+    try {
+        let html = fs_html.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf-8');
+        html = html.replace(/\{\{BV\}\}/g, encodeURIComponent(BUILD_TOKEN));
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(html);
+    } catch (e) {
+        res.status(500).send('Erro ao carregar pagina');
+    }
+});
+
 // Static files (after auth middleware) — no cache for JS/CSS
 app.use(express.static(path.join(__dirname, 'public'), {
     setHeaders: (res, filePath) => {
