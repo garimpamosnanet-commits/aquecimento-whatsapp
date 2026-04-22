@@ -305,3 +305,38 @@ setInterval(() => {
     }
   } catch(e) { console.error("[SoftReconnect]", e.message); }
 }, 5*60*1000);
+
+
+// ==================== CHIP STATUS SYNC (reconcile ghost qr_pending) ====================
+// chip-status-sync: a cada 2 min, compara creds.json com status do DB
+const _fsSync = require('fs');
+const _pathSync = require('path');
+const _dbSync = require('./src/database/db');
+const _sessionsRoot = _pathSync.join(__dirname, 'sessions');
+setInterval(() => {
+    try {
+        const data = _dbSync._loadDb();
+        let fixed = 0;
+        for (const c of data.chips) {
+            if (c.status !== 'qr_pending' && c.status !== 'disconnected') continue;
+            if (!c.session_id) continue;
+            const credsPath = _pathSync.join(_sessionsRoot, c.session_id, 'creds.json');
+            try {
+                if (_fsSync.existsSync(credsPath)) {
+                    const creds = JSON.parse(_fsSync.readFileSync(credsPath, 'utf-8'));
+                    if (creds.me && creds.me.id) {
+                        c.status = 'connected';
+                        if (!c.phone) c.phone = String(creds.me.id).split(':')[0].split('@')[0];
+                        fixed++;
+                    }
+                }
+            } catch(e) {}
+        }
+        if (fixed > 0) {
+            _dbSync._saveDb(data);
+            console.log('[chip-status-sync] Reconciliado(s) ' + fixed + ' chip(s) com creds vlido para status=connected');
+        }
+    } catch (e) {
+        console.error('[chip-status-sync] erro:', e.message);
+    }
+}, 2 * 60 * 1000);
