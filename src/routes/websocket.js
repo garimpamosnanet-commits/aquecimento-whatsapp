@@ -46,7 +46,15 @@ module.exports = function(io, sessionManager, warmingEngine, groupManager, admin
                 const { name } = data || {};
                 console.log(`[WS] request_qr recebido (nome: ${name || 'vazio'})`);
                 broadcastUserAction(userName, 'connect_chip', `Conectando chip "${name || 'novo'}"`);
-                await sessionManager.createSession(name || '');
+                const chip = await sessionManager.createSession(name || '');
+                // Tell the requesting client which sessionId is theirs so their modal
+                // can filter subsequent broadcast 'qr' events to only this session.
+                if (chip && chip.session_id) {
+                    socket.emit('qr_session_created', {
+                        sessionId: chip.session_id,
+                        chipId: chip.id,
+                    });
+                }
             } catch (err) {
                 console.log(`[WS] request_qr ERRO: ${err.message}`);
                 socket.emit('error', { message: err.message });

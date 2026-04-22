@@ -142,11 +142,32 @@ socket.on('chip_deleted', ({ chipId }) => {
     renderChips();
 });
 
+// Server confirms which sessionId belongs to THIS client's modal, so we can
+// filter broadcast 'qr' events and ignore QRs from background reconnects of
+// other chips (ghost qr_pending, etc).
+socket.on('qr_session_created', ({ sessionId, chipId }) => {
+    console.log('[KS] qr_session_created: sessionId =', sessionId, 'chipId =', chipId);
+    const modal = document.getElementById('qr-modal');
+    const modalIsOpen = modal && modal.classList.contains('active');
+    if (modalIsOpen) {
+        currentQRSessionId = sessionId;
+    }
+});
+
 socket.on('qr', ({ sessionId, chipId, qr }) => {
     console.log('[KS] QR recebido! sessionId:', sessionId, 'chipId:', chipId);
-    currentQRSessionId = sessionId;
-    clearTimeout(_qrTimeoutTimer); // QR arrived, clear timeout
-    // Show scan step with QR
+    // Only update the modal for the session we explicitly asked for.
+    // Other chips' QRs (background reconnects) must not hijack the modal.
+    const modal = document.getElementById('qr-modal');
+    const modalIsOpen = modal && modal.classList.contains('active');
+    if (!modalIsOpen) return;
+    if (currentQRSessionId && currentQRSessionId !== sessionId) {
+        console.log('[KS] QR ignorado (outro sessionId):', sessionId, '!=', currentQRSessionId);
+        return;
+    }
+    // If we don't yet know our sessionId (qr_session_created hasn't fired), adopt the first one
+    if (!currentQRSessionId) currentQRSessionId = sessionId;
+    clearTimeout(_qrTimeoutTimer);
     document.getElementById('qr-step-name').style.display = 'none';
     document.getElementById('qr-step-scan').style.display = 'block';
     const chipName = document.getElementById('chip-name-input')?.value?.trim() || '';
@@ -194,7 +215,9 @@ socket.on('pairing_code', ({ sessionId, chipId, code }) => {
 
 socket.on('connected', ({ sessionId, chipId, phone }) => {
     clearTimeout(_qrTimeoutTimer);
-    if (currentQRSessionId === sessionId) {
+    const modal = document.getElementById('qr-modal');
+    const modalIsOpen = modal && modal.classList.contains('active');
+    if (modalIsOpen && currentQRSessionId === sessionId) {
         const successHtml = _pendingAdmConnect
             ? `<div style="color:#8B5CF6;font-size:48px">👤</div><div style="margin-top:8px;color:#666;font-size:14px">ADM Conectado!<br><small>${phone || ''}</small></div>`
             : `<div style="color:#22C55E;font-size:48px">✓</div><div style="margin-top:8px;color:#666;font-size:14px">Conectado!<br><small>${phone || ''}</small></div>`;
@@ -210,6 +233,15 @@ socket.on('connected', ({ sessionId, chipId, phone }) => {
             qrImage.innerHTML = successHtml;
             document.getElementById('btn-next-qr').style.display = 'inline-flex';
         }
+        // Auto-close the modal after 2.5s so the user sees the success flash
+        // without having to hit Next. Also clears state for the next connect.
+        setTimeout(() => {
+            if (modal && modal.classList.contains('active')) {
+                modal.classList.remove('active');
+            }
+            currentQRSessionId = null;
+            _connectMode = 'qr';
+        }, 2500);
     }
     // Auto-mark as ADM if connected via "Adicionar aos Grupos" flow
     if (_pendingAdmConnect && chipId) {
