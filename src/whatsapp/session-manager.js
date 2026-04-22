@@ -322,24 +322,39 @@ class SessionManager {
                         c.origin === 'external_warmed'
                     );
                     if (extChip) {
-                        debugLog(`[SessionManager] Merge: chip ${chip.id} matched external_warmed chip ${extChip.id} (${phoneNumber})`);
-                        // Transfer metadata from registered chip to connected chip
-                        if (extChip.client_tag) db.setChipClientTag(chip.id, extChip.client_tag);
+                        // If the user explicitly named this chip ("ADM - Mario", etc),
+                        // they are intentionally pairing the phone as a new chip and don't
+                        // want the pre-registered folder/name to win. Only auto-merge when
+                        // the chip still has no name or a default "Chip ###" placeholder.
+                        const currentChipFresh = db.getChipById(chip.id);
+                        const userNamed = currentChipFresh && currentChipFresh.name &&
+                            !/^Chip\s/i.test(currentChipFresh.name);
 
-                        // Set chip name from folder name (priority) or client_tag
-                        const last4 = phoneNumber.slice(-4);
-                        let label = extChip.client_tag || '';
-                        if (extChip.folder_id) {
-                            const folder = db.getAllFolders().find(f => f.id === extChip.folder_id);
-                            if (folder) label = folder.name;
+                        if (userNamed) {
+                            debugLog(`[SessionManager] Match com external_warmed ${extChip.id}, mas chip ${chip.id} tem nome customizado ("${currentChipFresh.name}") — mantendo em Sem Pasta`);
+                            // Skip name/folder merge; keep user intent intact.
+                            // Do not delete the pre-registered external_warmed slot either —
+                            // it stays for whenever the real chip is paired later.
+                        } else {
+                            debugLog(`[SessionManager] Merge: chip ${chip.id} matched external_warmed chip ${extChip.id} (${phoneNumber})`);
+                            // Transfer metadata from registered chip to connected chip
+                            if (extChip.client_tag) db.setChipClientTag(chip.id, extChip.client_tag);
+
+                            // Set chip name from folder name (priority) or client_tag
+                            const last4 = phoneNumber.slice(-4);
+                            let label = extChip.client_tag || '';
+                            if (extChip.folder_id) {
+                                const folder = db.getAllFolders().find(f => f.id === extChip.folder_id);
+                                if (folder) label = folder.name;
+                            }
+                            if (label) db.updateChipName(chip.id, `${label} - ${last4}`);
+                            if (extChip.fornecedor) db.updateChipField(chip.id, 'fornecedor', extChip.fornecedor);
+                            if (extChip.folder_id) db.assignChipToFolder(chip.id, extChip.folder_id);
+                            db.updateChipField(chip.id, 'origin', 'external_warmed');
+                            // Delete the orphan registered chip
+                            db.deleteChip(extChip.id);
+                            debugLog(`[SessionManager] Merge completo: chip ${extChip.id} removido, metadata transferida para ${chip.id}`);
                         }
-                        if (label) db.updateChipName(chip.id, `${label} - ${last4}`);
-                        if (extChip.fornecedor) db.updateChipField(chip.id, 'fornecedor', extChip.fornecedor);
-                        if (extChip.folder_id) db.assignChipToFolder(chip.id, extChip.folder_id);
-                        db.updateChipField(chip.id, 'origin', 'external_warmed');
-                        // Delete the orphan registered chip
-                        db.deleteChip(extChip.id);
-                        debugLog(`[SessionManager] Merge completo: chip ${extChip.id} removido, metadata transferida para ${chip.id}`);
                     }
                 }
 
