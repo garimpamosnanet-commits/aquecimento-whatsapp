@@ -33,7 +33,9 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         res.json({ count: logs.length, logs });
     });
 
-    // Manual: dedupe + reconcile ghost qr_pending chips
+    // Manual: dedupe + reconcile ghost qr_pending chips + mark zombies
+    // (chips with a phone but no creds.json) as disconnected so they're visible
+    // as "broken" instead of silently stuck on "Aguardando QR".
     router.post('/chips/cleanup-ghosts', async (req, res) => {
         try {
             const removed = typeof sessionManager._dedupeByPhone === 'function'
@@ -46,31 +48,44 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             const chips = db.getAllChips();
             const reconciled = [];
             const reconnected = [];
+            const zombiesMarked = [];
             for (const c of chips) {
                 if (c.status !== 'qr_pending') continue;
                 if (!c.session_id) continue;
                 const credsPath = path.join(SESSIONS_DIR, c.session_id, 'creds.json');
-                if (!fs.existsSync(credsPath)) continue;
-                try {
-                    const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
-                    if (creds.me && creds.me.id) {
-                        db.updateChipStatus(c.id, 'connected');
-                        if (!c.phone) {
-                            const phone = String(creds.me.id).split(':')[0].split('@')[0];
-                            db.updateChipPhone(c.id, phone);
+                if (fs.existsSync(credsPath)) {
+                    try {
+                        const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+                        if (creds.me && creds.me.id) {
+                            db.updateChipStatus(c.id, 'connected');
+                            if (!c.phone) {
+                                const phone = String(creds.me.id).split(':')[0].split('@')[0];
+                                db.updateChipPhone(c.id, phone);
+                            }
+                            reconciled.push(c.id);
+                            if (!sessionManager.sessions.has(c.session_id)) {
+                                try {
+                                    await sessionManager.connect(c.session_id);
+                                    reconnected.push(c.id);
+                                } catch (e) { /* best-effort */ }
+                                await new Promise(r => setTimeout(r, 800));
+                            }
                         }
-                        reconciled.push(c.id);
-                        if (!sessionManager.sessions.has(c.session_id)) {
-                            try {
-                                await sessionManager.connect(c.session_id);
-                                reconnected.push(c.id);
-                            } catch (e) { /* best-effort */ }
-                            await new Promise(r => setTimeout(r, 800));
-                        }
-                    }
-                } catch (e) { /* best-effort */ }
+                    } catch (e) { /* best-effort */ }
+                } else if (c.phone) {
+                    // Has a phone but no creds — broken zombie. Mark disconnected
+                    // so the user can delete it or re-pair intentionally.
+                    db.updateChipStatus(c.id, 'disconnected');
+                    zombiesMarked.push(c.id);
+                }
             }
-            res.json({ ok: true, removedDuplicates: removed, reconciled, reconnected });
+            res.json({
+                ok: true,
+                removedDuplicates: removed,
+                reconciled,
+                reconnected,
+                zombiesMarkedDisconnected: zombiesMarked,
+            });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
