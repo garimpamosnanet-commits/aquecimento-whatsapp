@@ -401,6 +401,19 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
     });
 
+    // Cross-swap: shuffle the entire proxy pool so no chip keeps its IP
+    router.post('/proxies/swap-rotate', async (req, res) => {
+        try {
+            const proxyRotator = req.app.get('proxyRotator');
+            if (!proxyRotator) return res.status(500).json({ error: 'ProxyRotator nao inicializado' });
+            const result = await proxyRotator.swapRotateAll();
+            emitUserAction(req, 'proxy_swap_rotate', `Swap: ${result.rotated}/${result.total} chips`);
+            res.json({ success: true, ...result });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // ==================== REHABILITATION ====================
 
     // Get chips in rehabilitation

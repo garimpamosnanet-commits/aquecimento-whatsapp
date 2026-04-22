@@ -39,7 +39,7 @@ class ProxyRotator {
     }
 
     // ==================== ROTATION ====================
-    check() {
+    async check() {
         const settings = db.getSettings();
         const config = settings.proxy_rotation;
         if (!config || !config.enabled) return;
@@ -52,7 +52,20 @@ class ProxyRotator {
         const proxies = db.getAllProxies();
         const available = proxies.filter(p => p.status === 'available');
 
-        // Only rotate if there are spare proxies
+        // SWAP mode: every `intervalMs`, shuffle the entire proxy pool across
+        // all active chips so no chip keeps its IP across cycles.
+        if (config.mode === 'swap') {
+            const lastSwap = this._lastSwapAt || 0;
+            if (now - lastSwap >= intervalMs) {
+                console.log('[ProxyRotator] Swap cycle disparado');
+                this._lastSwapAt = now;
+                try { await this.swapRotateAll(); } catch (e) { console.log('[ProxyRotator] swap erro:', e.message); }
+            }
+            return;
+        }
+
+        // LEGACY mode: rotate from spare pool only when the assigned proxy has
+        // been in place for >= intervalMs
         if (available.length === 0) {
             console.log('[ProxyRotator] Sem proxies disponiveis para rotacao');
             return;
@@ -152,6 +165,81 @@ class ProxyRotator {
         }
 
         console.log(`[ProxyRotator] Rotacao forcada: ${rotated} chips rotacionados`);
+        return { rotated, total: chips.length };
+    }
+
+    // ==================== SWAP ROTATION ====================
+    // Cross-rotation: redistribute the full proxy pool (in_use + available) across
+    // every active chip so nobody keeps the same IP. Each chip gets a proxy that
+    // was not its previous one. Reconnects are staggered to avoid a thundering herd.
+    async swapRotateAll() {
+        const allProxies = db.getAllProxies();
+        const chips = db.getAllChips().filter(c =>
+            ['connected', 'warming'].includes(c.status)
+        );
+        if (chips.length === 0) return { rotated: 0, reason: 'Sem chips ativos' };
+        if (allProxies.length === 0) return { rotated: 0, reason: 'Sem proxies cadastrados' };
+
+        // Shuffle the proxy pool
+        const pool = [...allProxies];
+        for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+
+        // Plan: every chip -> a proxy different from its current proxy_id
+        const plan = new Map(); // chipId -> new proxyId
+        const used = new Set();
+        for (const chip of chips) {
+            const candidate = pool.find(p => !used.has(p.id) && p.id !== chip.proxy_id);
+            if (candidate) {
+                plan.set(chip.id, candidate.id);
+                used.add(candidate.id);
+            }
+        }
+        // Any chip without a match (usually when pool < chips or all remaining are its own)
+        // gets the first free proxy even if it's the same (rare, only when pool size is tight)
+        for (const chip of chips) {
+            if (plan.has(chip.id)) continue;
+            const any = pool.find(p => !used.has(p.id));
+            if (any) {
+                plan.set(chip.id, any.id);
+                used.add(any.id);
+            }
+        }
+
+        // Apply the plan: release all, then assign per plan, then reconnect sequentially
+        for (const chip of chips) {
+            if (!plan.has(chip.id)) continue;
+            db.releaseProxy(chip.id);
+        }
+        let rotated = 0;
+        const reconnects = [];
+        for (const chip of chips) {
+            const newProxyId = plan.get(chip.id);
+            if (!newProxyId) continue;
+            const assigned = db.assignProxyToChip(chip.id, newProxyId);
+            if (assigned) {
+                db.markProxyRotated(assigned.id);
+                rotated++;
+                if (this.sessionManager && chip.session_id) {
+                    reconnects.push({ sessionId: chip.session_id, chipId: chip.id });
+                }
+            }
+        }
+
+        // Stagger reconnects — 2 per second max to avoid proxy burst
+        (async () => {
+            for (const r of reconnects) {
+                try {
+                    await this._reconnectWithNewProxy(r.sessionId, r.chipId);
+                } catch (e) { /* best-effort */ }
+                await new Promise(res => setTimeout(res, 500));
+            }
+            console.log(`[ProxyRotator] Swap rotate: ${reconnects.length} reconexoes concluidas`);
+        })();
+
+        console.log(`[ProxyRotator] Swap rotate: ${rotated}/${chips.length} chips com proxy novo`);
         return { rotated, total: chips.length };
     }
 
