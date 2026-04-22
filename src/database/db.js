@@ -371,7 +371,7 @@ function deleteChip(id) {
 
         for (const p of data.proxies) {
 
-            if (p.assigned_chip_id === chipId) {
+            if (p.assigned_chip_id === id) {
 
                 p.assigned_chip_id = null;
 
