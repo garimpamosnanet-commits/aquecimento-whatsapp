@@ -1260,11 +1260,6 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
             }
             const filterLower = (groupFilter || '').toLowerCase();
             const admGroupList = [];
-            // Keep the full group object (with participants) so we can derive each
-            // chip's membership from the ADM's single fetch — avoiding one
-            // groupFetchAllParticipating per chip (the main source of
-            // "Conexao caiu durante a varredura" errors).
-            const admGroupFull = new Map(); // gid -> { subject, size, participants }
             for (const [gid, g] of Object.entries(allGroups)) {
                 if (g.isCommunity) continue;
                 if (filterLower && !(g.subject || '').toLowerCase().includes(filterLower)) continue;
@@ -1273,66 +1268,98 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
                     subject: g.subject || 'Sem nome',
                     size: g.participants?.length || 0,
                 });
-                admGroupFull.set(gid, {
-                    subject: g.subject || 'Sem nome',
-                    size: g.participants?.length || 0,
-                    participants: g.participants || [],
-                });
             }
 
             console.log(`[Scan] ADM groups (filtered "${groupFilter}"): ${admGroupList.length}`);
 
-            // Normalize a phone/id to plain digits so we can compare DB phones
-            // (e.g. "554396862936") against participant JIDs ("554396862936@s.whatsapp.net"
-            // or "554396862936:0@s.whatsapp.net" or LID variants).
-            const normalizePhone = (s) => String(s || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+            // Per-chip fetch: each chip asks WA for its own groups using its own
+            // socket, so we get the chip's JID/LID pair correctly matched against
+            // participants. Going via the ADM's participant list failed in
+            // multi-device mode because participants appear as LIDs, not phones.
+            async function fetchChipGroups(chip) {
+                const sock = chip.session_id ? sessionManager.getSocket(chip.session_id) : null;
+                if (!sock?.user) throw new Error('Chip desconectado');
+                return new Promise((resolve, reject) => {
+                    const timer = setTimeout(() => reject(new Error('Timeout 20s (chip nao respondeu)')), 20000);
+                    sock.groupFetchAllParticipating()
+                        .then(groups => { clearTimeout(timer); resolve({ groups, sock }); })
+                        .catch(err => {
+                            clearTimeout(timer);
+                            const msg = String(err?.message || err);
+                            if (msg.includes('Connection Closed') || msg.includes('Stream Errored')) {
+                                reject(new Error('Conexao caiu durante a varredura (reconectando em background)'));
+                            } else if (msg.includes('Timed Out') || msg.includes('timed out')) {
+                                reject(new Error('Timeout — WhatsApp nao respondeu'));
+                            } else {
+                                reject(err);
+                            }
+                        });
+                });
+            }
 
-            // BR phone match: handles the 9th-digit quirk (5521966678678 vs 552166678678).
-            const phoneMatches = (a, b) => {
-                const na = normalizePhone(a);
-                const nb = normalizePhone(b);
-                if (!na || !nb) return false;
-                if (na === nb) return true;
-                const stripBR = (p) => (p.startsWith('55') && p.length >= 12 ? p.slice(2) : p);
-                const xa = stripBR(na);
-                const xb = stripBR(nb);
-                if (xa === xb) return true;
-                if (xa.length === 11 && xb.length === 10) return xa.slice(0, 2) + xa.slice(3) === xb.slice(0, 2) + xb.slice(2);
-                if (xb.length === 11 && xa.length === 10) return xb.slice(0, 2) + xb.slice(3) === xa.slice(0, 2) + xa.slice(2);
-                return false;
-            };
-
-            // 2. For each chip, derive membership from the ADM's already-fetched
-            // participants list. No network call per chip = no "conexao caiu"
-            // during the scan. Trade-off: a chip in a group where ADM is NOT will
-            // not show — but that is exactly the group we could not have scanned
-            // the chip on anyway from an authorization standpoint.
             const results = [];
-            for (const chipId of chipIds) {
-                const chip = db.getChipById(chipId);
+            for (let ci = 0; ci < chipIds.length; ci++) {
+                const chip = db.getChipById(chipIds[ci]);
                 if (!chip || !chip.phone) continue;
 
-                const chipGroupIds = new Set();
-                const chipAdminGroups = new Set();
-                const chipGroupNames = new Map();
+                let chipGroupIds = new Set();
+                let chipAdminGroups = new Set();
+                let chipGroupNames = new Map();
+                let scanError = null;
 
-                for (const [gid, g] of admGroupFull.entries()) {
-                    const me = (g.participants || []).find(p => phoneMatches(p.id, chip.phone));
-                    if (!me) continue;
-                    chipGroupIds.add(gid);
-                    chipGroupNames.set(gid, g.subject);
-                    if (me.admin === 'admin' || me.admin === 'superadmin') {
-                        chipAdminGroups.add(gid);
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                    try {
+                        const { groups: chipGroups, sock } = await fetchChipGroups(chip);
+                        const myId = sock.user.id.split(':')[0].split('@')[0];
+                        const myLid = sock.user.lid ? sock.user.lid.split(':')[0].split('@')[0] : null;
+
+                        chipGroupIds = new Set();
+                        chipAdminGroups = new Set();
+                        chipGroupNames = new Map();
+
+                        for (const [gid, g] of Object.entries(chipGroups)) {
+                            if (g.isCommunity) continue;
+                            if (filterLower && !(g.subject || '').toLowerCase().includes(filterLower)) continue;
+                            chipGroupIds.add(gid);
+                            chipGroupNames.set(gid, g.subject || 'Grupo');
+
+                            const me = (g.participants || []).find(p => {
+                                const pid = p.id.split(':')[0];
+                                const pClean = p.id.split('@')[0];
+                                return pid === myId || pid === myLid || pClean === myId || pClean === myLid;
+                            });
+                            if (me?.admin === 'admin' || me?.admin === 'superadmin') {
+                                chipAdminGroups.add(gid);
+                            }
+                        }
+
+                        scanError = null;
+                        console.log(`[Scan] ${chip.name || chip.phone}: ${chipGroupIds.size}/${admGroupList.length} grupos (${chipAdminGroups.size} admin) [tent ${attempt}]`);
+                        break;
+                    } catch (e) {
+                        scanError = e.message;
+                        console.log(`[Scan] ${chip.name} tent ${attempt} falhou: ${e.message}`);
+                        const isDead = /Conexao caiu|Chip desconectado|Stream Errored|Connection Closed|Timeout/i.test(e.message || '');
+                        if (isDead && chip.session_id) {
+                            try { db.updateChipStatus(chip.id, 'disconnected'); } catch (_) {}
+                            try { sessionManager.emitChipUpdate(chip.id); } catch (_) {}
+                            (async () => {
+                                try { await sessionManager.disconnect(chip.session_id); } catch (_) {}
+                                await new Promise(r => setTimeout(r, 2000));
+                                try { await sessionManager.connect(chip.session_id); }
+                                catch (err) { console.log(`[Scan] reconnect ${chip.name}: ${err.message}`); }
+                            })();
+                        }
+                        if (attempt < 2) await new Promise(r => setTimeout(r, 3000));
                     }
                 }
-                console.log(`[Scan] ${chip.name || chip.phone}: ${chipGroupIds.size}/${admGroupList.length} grupos (${chipAdminGroups.size} admin) via ADM`);
 
                 const inGroups = [];
                 const missingGroups = [];
 
                 for (const gid of chipGroupIds) {
                     const isAdmin = chipAdminGroups.has(gid);
-                    const subject = chipGroupNames.get(gid) || admGroupFull.get(gid)?.subject || 'Grupo';
+                    const subject = chipGroupNames.get(gid) || admGroupList.find(g => g.id === gid)?.subject || 'Grupo';
                     inGroups.push({ groupId: gid, subject, isAdmin, status: isAdmin ? 'admin' : 'member' });
                 }
                 for (const g of admGroupList) {
@@ -1346,8 +1373,11 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
                     inGroups: inGroups.length, asAdmin: inGroups.filter(g => g.isAdmin).length,
                     asMember: inGroups.filter(g => !g.isAdmin).length,
                     missing: missingGroups.length, totalGroups: admGroupList.length,
-                    groups: inGroups, missingGroups, error: null,
+                    groups: inGroups, missingGroups, error: scanError,
                 });
+
+                // Small delay to avoid hammering; sequential is fine here.
+                if (ci < chipIds.length - 1) await new Promise(r => setTimeout(r, 1000));
             }
 
             // 3. Summary
