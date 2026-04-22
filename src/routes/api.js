@@ -36,6 +36,42 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
     // Manual: dedupe + reconcile ghost qr_pending chips + mark zombies
     // (chips with a phone but no creds.json) as disconnected so they're visible
     // as "broken" instead of silently stuck on "Aguardando QR".
+    // Bulk-delete dead chips: chips that have no phone OR are disconnected+no creds.
+    // Safely skips anything currently connected/warming/rehab. Returns deleted IDs.
+    router.post('/chips/delete-dead', async (req, res) => {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const SESSIONS_DIR = path.join(__dirname, '..', '..', 'sessions');
+            const chips = db.getAllChips();
+            const deleted = [];
+            for (const c of chips) {
+                if (['connected', 'warming', 'rehabilitation'].includes(c.status)) continue;
+                // Skip chips with a valid session (might still be recoverable)
+                if (c.session_id) {
+                    const credsPath = path.join(SESSIONS_DIR, c.session_id, 'creds.json');
+                    if (fs.existsSync(credsPath)) continue;
+                }
+                // Dead: no phone OR (disconnected/qr_pending + no creds)
+                try {
+                    if (c.session_id) {
+                        const sp = path.join(SESSIONS_DIR, c.session_id);
+                        if (fs.existsSync(sp)) fs.rmSync(sp, { recursive: true, force: true });
+                    }
+                    db.releaseProxy(c.id);
+                    db.deleteChip(c.id);
+                    deleted.push(c.id);
+                } catch (e) { /* best-effort */ }
+            }
+            if (deleted.length > 0) {
+                try { sessionManager.emitStats(); } catch (e) {}
+            }
+            res.json({ ok: true, deleted, count: deleted.length });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     router.post('/chips/cleanup-ghosts', async (req, res) => {
         try {
             const removed = typeof sessionManager._dedupeByPhone === 'function'
