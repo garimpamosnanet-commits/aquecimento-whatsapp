@@ -474,8 +474,21 @@ class SessionManager {
                 } else if (statusCode !== reason.connectionClosed) {
                     const errorMsg = lastDisconnect?.error?.message || '';
                     const isProxyError = errorMsg.includes('proxy rejected') || errorMsg.includes('Socks5') || errorMsg.includes('SOCKS');
+                    const isForbidden = statusCode === reason.forbidden || statusCode === 403;
                     const attempts = (this.reconnectAttempts.get(sessionId) || 0) + 1;
                     this.reconnectAttempts.set(sessionId, attempts);
+
+                    // Track per-proxy failures so we can auto-blacklist repeat offenders
+                    if ((isProxyError || isForbidden) && chip.proxy_id) {
+                        try {
+                            const n = db.incrementProxyFailures(chip.proxy_id, isForbidden ? 'wa_403' : 'proxy_rejected');
+                            if (n >= 5) {
+                                db.disableProxy(chip.proxy_id);
+                                db.releaseProxy(chip.id);
+                                debugLog(`[SessionManager] Proxy ${chip.proxy_id} desativado (${n} falhas, ultima: ${isForbidden ? 'WA 403' : 'proxy rejected'})`);
+                            }
+                        } catch (_) {}
+                    }
 
                     if (isProxyError && attempts >= 3) {
                         // Proxy is dead — disconnect and stop retrying

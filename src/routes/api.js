@@ -515,6 +515,86 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
         }
     });
 
+    // List proxy health (for the user to see who is failing)
+    router.get('/proxies/health', (req, res) => {
+        try {
+            const proxies = db.getAllProxies();
+            const ranked = proxies
+                .map(p => ({
+                    id: p.id,
+                    url: p.url ? p.url.replace(/\/\/(.*?)@/, '//***@') : '',
+                    ip: p.url ? p.url.replace(/.*@/, '').replace(/:.*/, '') : null,
+                    status: p.status,
+                    failures: p.failure_count || 0,
+                    last_failure_reason: p.last_failure_reason || null,
+                    last_failure_at: p.last_failure_at || null,
+                    assigned_chip_id: p.assigned_chip_id || null,
+                }))
+                .sort((a, b) => (b.failures || 0) - (a.failures || 0));
+            res.json({ total: ranked.length, proxies: ranked });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Auto-disable proxies with failures >= threshold (default 3)
+    router.post('/proxies/blacklist-bad', async (req, res) => {
+        try {
+            const threshold = Math.max(1, parseInt(req.body?.threshold) || 3);
+            const proxies = db.getAllProxies();
+            const disabled = [];
+            for (const p of proxies) {
+                if (p.status === 'disabled') continue;
+                if ((p.failure_count || 0) >= threshold) {
+                    if (p.assigned_chip_id) {
+                        try { db.releaseProxy(p.assigned_chip_id); } catch (_) {}
+                    }
+                    db.disableProxy(p.id);
+                    disabled.push({
+                        id: p.id,
+                        ip: p.url ? p.url.replace(/.*@/, '').replace(/:.*/, '') : null,
+                        failures: p.failure_count || 0,
+                        reason: p.last_failure_reason || null,
+                    });
+                }
+            }
+            emitUserAction(req, 'proxy_blacklist', `Desativados ${disabled.length} proxies com falhas >= ${threshold}`);
+            res.json({ success: true, disabled, count: disabled.length });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Manually disable / enable a specific proxy
+    router.post('/proxies/:id/disable', (req, res) => {
+        try {
+            const id = req.params.id;
+            const proxies = db.getAllProxies();
+            const p = proxies.find(x => x.id == id);
+            if (!p) return res.status(404).json({ error: 'Proxy nao encontrado' });
+            if (p.assigned_chip_id) {
+                try { db.releaseProxy(p.assigned_chip_id); } catch (_) {}
+            }
+            db.disableProxy(p.id);
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    router.post('/proxies/:id/enable', (req, res) => {
+        try {
+            const id = req.params.id;
+            const proxies = db.getAllProxies();
+            const p = proxies.find(x => x.id == id);
+            if (!p) return res.status(404).json({ error: 'Proxy nao encontrado' });
+            db.enableProxy(p.id);
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // ==================== REHABILITATION ====================
 
     // Get chips in rehabilitation

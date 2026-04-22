@@ -560,13 +560,14 @@ function deleteAllProxies() {
 function assignProxyToChip(chipId, specificProxyId) {
     const data = loadDb();
     if (!data.proxies || data.proxies.length === 0) return null;
-    // Find specific proxy or first available
+    // Find specific proxy or first available — skip disabled ones
+    const isUsable = (p) => !p.assigned_chip_id && p.status !== 'disabled';
     let proxy;
     if (specificProxyId) {
-        proxy = data.proxies.find(p => p.id === specificProxyId && !p.assigned_chip_id);
+        proxy = data.proxies.find(p => p.id === specificProxyId && isUsable(p));
     }
     if (!proxy) {
-        proxy = data.proxies.find(p => !p.assigned_chip_id);
+        proxy = data.proxies.find(isUsable);
     }
     if (!proxy) return null;
     proxy.assigned_chip_id = chipId;
@@ -576,6 +577,50 @@ function assignProxyToChip(chipId, specificProxyId) {
     if (chip) chip.proxy_id = proxy.id;
     saveDb(data);
     return proxy;
+}
+
+// Track a failure against a proxy and return the current count
+function incrementProxyFailures(proxyId, reason) {
+    const data = loadDb();
+    const proxy = (data.proxies || []).find(p => p.id === proxyId);
+    if (!proxy) return 0;
+    proxy.failure_count = (proxy.failure_count || 0) + 1;
+    proxy.last_failure_reason = reason || 'unknown';
+    proxy.last_failure_at = new Date().toISOString();
+    saveDb(data);
+    return proxy.failure_count;
+}
+
+function resetProxyFailures(proxyId) {
+    const data = loadDb();
+    const proxy = (data.proxies || []).find(p => p.id === proxyId);
+    if (!proxy) return;
+    proxy.failure_count = 0;
+    delete proxy.last_failure_reason;
+    delete proxy.last_failure_at;
+    saveDb(data);
+}
+
+function disableProxy(proxyId) {
+    const data = loadDb();
+    const proxy = (data.proxies || []).find(p => p.id === proxyId);
+    if (!proxy) return false;
+    proxy.status = 'disabled';
+    proxy.assigned_chip_id = null;
+    proxy.disabled_at = new Date().toISOString();
+    saveDb(data);
+    return true;
+}
+
+function enableProxy(proxyId) {
+    const data = loadDb();
+    const proxy = (data.proxies || []).find(p => p.id === proxyId);
+    if (!proxy) return false;
+    proxy.status = proxy.assigned_chip_id ? 'in_use' : 'available';
+    proxy.failure_count = 0;
+    delete proxy.disabled_at;
+    saveDb(data);
+    return true;
 }
 
 function releaseProxy(chipId) {
@@ -1074,6 +1119,7 @@ module.exports = {
     addProxy, addProxiesBulk, getAllProxies, deleteProxy, deleteAllProxies,
     assignProxyToChip, releaseProxy, releaseOrphanProxies, getProxyForChip, getProxyStats,
     updateProxyUrl, updateProxyExpiry, markProxyRotated,
+    incrementProxyFailures, resetProxyFailures, disableProxy, enableProxy,
     createFolder, getAllFolders, updateFolder, deleteFolder, assignChipToFolder,
     enterRehabilitation, exitRehabilitation, markChipDiscarded, getChipsInRehab,
     setChipInstanceType, getAdminInstances, getWarmingChipsForAdd,
