@@ -283,6 +283,11 @@ class SessionManager {
             if (connection === 'open') {
                 debugLog(`[SessionManager] ${sessionId} conectado!`);
                 this.reconnectAttempts.delete(sessionId);
+                // Proxy handled the connection — reset its failure counter so
+                // previous blips don't accumulate toward a false blacklist.
+                if (chip.proxy_id) {
+                    try { db.resetProxyFailures(chip.proxy_id); } catch (_) {}
+                }
                 // Preserve warming/rehabilitation status on reconnect
                 const currentChip = db.getChipById(chip.id);
                 if (!currentChip || (currentChip.status !== 'warming' && currentChip.status !== 'rehabilitation')) {
@@ -510,18 +515,21 @@ class SessionManager {
                 } else if (statusCode !== reason.connectionClosed) {
                     const errorMsg = lastDisconnect?.error?.message || '';
                     const isProxyError = errorMsg.includes('proxy rejected') || errorMsg.includes('Socks5') || errorMsg.includes('SOCKS');
-                    const isForbidden = statusCode === reason.forbidden || statusCode === 403;
                     const attempts = (this.reconnectAttempts.get(sessionId) || 0) + 1;
                     this.reconnectAttempts.set(sessionId, attempts);
 
-                    // Track per-proxy failures so we can auto-blacklist repeat offenders
-                    if ((isProxyError || isForbidden) && chip.proxy_id) {
+                    // Track per-proxy failures so we can auto-blacklist repeat offenders.
+                    // IMPORTANT: only count genuinely proxy-level failures (SOCKS/proxy reject).
+                    // WA 403 happens to specific chips (banned number) too, so counting it
+                    // against the proxy punishes the wrong thing and burns the pool fast.
+                    // Threshold is raised to 20 so normal transient blips don't nuke proxies.
+                    if (isProxyError && chip.proxy_id) {
                         try {
-                            const n = db.incrementProxyFailures(chip.proxy_id, isForbidden ? 'wa_403' : 'proxy_rejected');
-                            if (n >= 5) {
+                            const n = db.incrementProxyFailures(chip.proxy_id, 'proxy_rejected');
+                            if (n >= 20) {
                                 db.disableProxy(chip.proxy_id);
                                 db.releaseProxy(chip.id);
-                                debugLog(`[SessionManager] Proxy ${chip.proxy_id} desativado (${n} falhas, ultima: ${isForbidden ? 'WA 403' : 'proxy rejected'})`);
+                                debugLog(`[SessionManager] Proxy ${chip.proxy_id} desativado (${n} falhas SOCKS)`);
                             }
                         } catch (_) {}
                     }
