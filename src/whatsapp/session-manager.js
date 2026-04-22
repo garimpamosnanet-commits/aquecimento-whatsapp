@@ -343,6 +343,7 @@ class SessionManager {
                                 }
                                 db.releaseProxy(peer.id);
                                 db.deleteChip(peer.id);
+                                this.io.emit('chip_deleted', { chipId: peer.id });
                                 debugLog(`[SessionManager] Peer duplicado ${peer.id} removido (phone colidindo com chip ativo ${chip.id})`);
                             } catch (e) {
                                 debugLog(`[SessionManager] Falha ao remover peer duplicado: ${e.message}`);
@@ -382,6 +383,9 @@ class SessionManager {
                                 }
                                 db.releaseProxy(peer.id);
                                 db.deleteChip(peer.id);
+                                // Tell every open UI to drop the deleted peer's card so the
+                                // user doesn't need to F5 to see the merge result.
+                                this.io.emit('chip_deleted', { chipId: peer.id });
                             } catch (e) {
                                 debugLog(`[SessionManager] Falha ao remover peer ${peer.id}: ${e.message}`);
                             }
