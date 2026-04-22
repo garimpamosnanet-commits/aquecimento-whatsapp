@@ -1238,6 +1238,29 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
                     } catch (e) {
                         scanError = e.message;
                         console.log(`[Scan] ${chip.name} tentativa ${attempt} falhou: ${e.message}`);
+                        // A "Connection Closed" / "Stream Errored" / "Chip desconectado" means the
+                        // socket thinks it's alive but WhatsApp severed the session. The UI badge
+                        // saying "Conectado" is misleading. Force a reconnect so the socket is
+                        // rebuilt from disk creds and the status ends up matching reality.
+                        const isDead = /Conexao caiu|Chip desconectado|Stream Errored|Connection Closed|Timeout/i.test(e.message || '');
+                        if (isDead && chip.session_id) {
+                            console.log(`[Scan] ${chip.name}: disparando reconexao (${e.message})`);
+                            try { db.updateChipStatus(chip.id, 'disconnected'); } catch (_) {}
+                            try { sessionManager.emitChipUpdate(chip.id); } catch (_) {}
+                            // Fire-and-forget reconnect — happens in background, chip will
+                            // return to 'connected' once the new socket opens.
+                            (async () => {
+                                try {
+                                    await sessionManager.disconnect(chip.session_id);
+                                } catch (_) {}
+                                await new Promise(r => setTimeout(r, 2000));
+                                try {
+                                    await sessionManager.connect(chip.session_id);
+                                } catch (err) {
+                                    console.log(`[Scan] reconexao falhou ${chip.name}: ${err.message}`);
+                                }
+                            })();
+                        }
                         if (attempt < 2) {
                             await new Promise(r => setTimeout(r, 3000)); // Wait 3s before retry
                         }
