@@ -38,6 +38,71 @@ module.exports = function(sessionManager, warmingEngine, groupManager, adminMana
     // as "broken" instead of silently stuck on "Aguardando QR".
     // Bulk-delete dead chips: chips that have no phone OR are disconnected+no creds.
     // Safely skips anything currently connected/warming/rehab. Returns deleted IDs.
+    // List DB backups
+    router.get('/backups', (req, res) => {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const BACKUP_DIR = path.join(__dirname, '..', '..', 'data', 'backups');
+            if (!fs.existsSync(BACKUP_DIR)) return res.json({ backups: [] });
+            const files = fs.readdirSync(BACKUP_DIR)
+                .filter(f => f.startsWith('warming-') && f.endsWith('.json'))
+                .sort()
+                .reverse()
+                .map(name => {
+                    const st = fs.statSync(path.join(BACKUP_DIR, name));
+                    return { name, size: st.size, mtime: st.mtime };
+                });
+            res.json({ backups: files });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Diff: chips present in a backup but NOT in current DB (deleted ones)
+    router.get('/backups/:name/deleted-chips', (req, res) => {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const BACKUP_DIR = path.join(__dirname, '..', '..', 'data', 'backups');
+            const backupPath = path.join(BACKUP_DIR, req.params.name);
+            if (!fs.existsSync(backupPath)) return res.status(404).json({ error: 'Backup nao encontrado' });
+            const backup = JSON.parse(fs.readFileSync(backupPath, 'utf-8'));
+            const currentChips = db.getAllChips();
+            const currentIds = new Set(currentChips.map(c => c.id));
+            const folders = db.getAllFolders();
+            const folderMap = Object.fromEntries(folders.map(f => [f.id, f.name]));
+            const backupFolders = backup.folders || [];
+            const backupFolderMap = Object.fromEntries(backupFolders.map(f => [f.id, f.name]));
+
+            const deleted = (backup.chips || [])
+                .filter(c => !currentIds.has(c.id))
+                .map(c => ({
+                    id: c.id,
+                    phone: c.phone || null,
+                    name: c.name || null,
+                    status: c.status,
+                    folder_id: c.folder_id || null,
+                    folder: c.folder_id
+                        ? (folderMap[c.folder_id] || backupFolderMap[c.folder_id] || 'pasta removida')
+                        : 'Sem Pasta',
+                    client_tag: c.client_tag || null,
+                    session_id: c.session_id,
+                    origin: c.origin || null,
+                    created_at: c.created_at,
+                }));
+            res.json({
+                backup: req.params.name,
+                currentCount: currentChips.length,
+                backupCount: (backup.chips || []).length,
+                deletedCount: deleted.length,
+                deleted,
+            });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     router.post('/chips/delete-dead', async (req, res) => {
         try {
             const fs = require('fs');
