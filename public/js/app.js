@@ -1226,7 +1226,7 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
     const tabs = document.querySelectorAll('.tab');
-    const tabMap = { 'chips': 0, 'lista': 1, 'activity': 2, 'config': 3, 'rehab': 4, 'proxies': 5, 'aquecidos': 6, 'groupadd': 7, 'adminmanage': 8 };
+    const tabMap = { 'chips': 0, 'lista': 1, 'activity': 2, 'config': 3, 'rehab': 4, 'proxies': 5, 'aquecidos': 6, 'groupadd': 7, 'adminmanage': 8, 'organize': 9 };
     tabs[tabMap[tabName]].classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
 
@@ -1238,6 +1238,319 @@ function switchTab(tabName) {
     if (tabName === 'adminmanage') loadAdminManageTab();
     if (tabName === 'lista') renderListTab();
     if (tabName === 'aquecidos') loadChipsAquecidos();
+    if (tabName === 'organize') loadOrganizeTab();
+}
+
+// ==================== ORGANIZAR NUMEROS ====================
+const ORG_STORAGE_KEY = 'organizeNumbers_v1';
+let orgState = { clients: [], selectedClientId: null, selectedFolderId: null };
+
+function orgLoad() {
+    try {
+        const raw = localStorage.getItem(ORG_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            orgState.clients = parsed.clients || [];
+        }
+    } catch (e) { console.error('orgLoad error:', e); }
+}
+
+function orgSave() {
+    try {
+        localStorage.setItem(ORG_STORAGE_KEY, JSON.stringify({ clients: orgState.clients }));
+    } catch (e) { console.error('orgSave error:', e); }
+}
+
+function loadOrganizeTab() {
+    orgLoad();
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgNumbers();
+}
+
+function renderOrgClients() {
+    const container = document.getElementById('org-clients-list');
+    if (!container) return;
+    if (orgState.clients.length === 0) {
+        container.innerHTML = '<div class="org-empty">Nenhum cliente cadastrado.<br><small>Clique em "+ Novo"</small></div>';
+        return;
+    }
+    container.innerHTML = orgState.clients.map(c => {
+        const totalNumbers = (c.folders || []).reduce((sum, f) => sum + (f.numbers || []).length, 0);
+        const isActive = orgState.selectedClientId === c.id;
+        return `
+            <div class="org-item ${isActive ? 'active' : ''}" onclick="orgSelectClient('${c.id}')">
+                <span class="org-item-name">${escapeHtml(c.name)}</span>
+                <span class="org-item-count">${totalNumbers}</span>
+                <div class="org-item-actions">
+                    <button class="org-item-btn" onclick="event.stopPropagation();orgRenameClient('${c.id}')" title="Renomear">✏️</button>
+                    <button class="org-item-btn danger" onclick="event.stopPropagation();orgDeleteClient('${c.id}')" title="Excluir">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderOrgFolders() {
+    const container = document.getElementById('org-folders-list');
+    const titleEl = document.getElementById('org-folders-title');
+    const addBtn = document.getElementById('org-add-folder-btn');
+    if (!container) return;
+
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    if (!client) {
+        container.innerHTML = '<div class="org-empty">Selecione um cliente</div>';
+        if (titleEl) titleEl.textContent = 'Pastas';
+        if (addBtn) addBtn.disabled = true;
+        return;
+    }
+
+    if (titleEl) titleEl.textContent = `Pastas — ${client.name}`;
+    if (addBtn) addBtn.disabled = false;
+
+    const folders = client.folders || [];
+    if (folders.length === 0) {
+        container.innerHTML = '<div class="org-empty">Nenhuma pasta.<br><small>Clique em "+ Nova Pasta"</small></div>';
+        return;
+    }
+    container.innerHTML = folders.map(f => {
+        const isActive = orgState.selectedFolderId === f.id;
+        return `
+            <div class="org-item ${isActive ? 'active' : ''}" onclick="orgSelectFolder('${f.id}')">
+                <span class="org-item-name">${escapeHtml(f.name)}</span>
+                <span class="org-item-count">${(f.numbers || []).length}</span>
+                <div class="org-item-actions">
+                    <button class="org-item-btn" onclick="event.stopPropagation();orgRenameFolder('${f.id}')" title="Renomear">✏️</button>
+                    <button class="org-item-btn danger" onclick="event.stopPropagation();orgDeleteFolder('${f.id}')" title="Excluir">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderOrgNumbers() {
+    const container = document.getElementById('org-numbers-area');
+    const titleEl = document.getElementById('org-numbers-title');
+    const sortBtn = document.getElementById('org-sort-btn');
+    const dedupeBtn = document.getElementById('org-dedupe-btn');
+    const copyBtn = document.getElementById('org-copy-btn');
+    if (!container) return;
+
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    const folder = client ? (client.folders || []).find(f => f.id === orgState.selectedFolderId) : null;
+
+    if (!folder) {
+        container.innerHTML = '<div class="org-empty">Selecione uma pasta para organizar números</div>';
+        if (titleEl) titleEl.textContent = 'Números';
+        [sortBtn, dedupeBtn, copyBtn].forEach(b => { if (b) b.disabled = true; });
+        return;
+    }
+
+    if (titleEl) titleEl.textContent = `${client.name} → ${folder.name}`;
+    [sortBtn, dedupeBtn, copyBtn].forEach(b => { if (b) b.disabled = false; });
+
+    const numbersText = (folder.numbers || []).join('\n');
+    container.innerHTML = `
+        <div class="org-numbers-toolbar">
+            <span>Total: <strong id="org-num-count">${(folder.numbers || []).length}</strong> números</span>
+            <span style="flex:1"></span>
+            <small>Cole números abaixo (1 por linha, ou separados por vírgula). Salva automaticamente.</small>
+        </div>
+        <textarea id="org-numbers-textarea" class="org-numbers-textarea"
+            placeholder="Cole os números aqui, um por linha:&#10;5511999999999&#10;5511888888888&#10;..."
+            oninput="orgOnNumbersInput(this.value)">${escapeHtml(numbersText)}</textarea>
+    `;
+}
+
+function orgGenId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+function orgAddClient() {
+    const name = prompt('Nome do cliente:');
+    if (!name || !name.trim()) return;
+    orgState.clients.push({ id: orgGenId(), name: name.trim(), folders: [] });
+    orgSave();
+    renderOrgClients();
+}
+
+function orgSelectClient(id) {
+    orgState.selectedClientId = id;
+    orgState.selectedFolderId = null;
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgNumbers();
+}
+
+function orgRenameClient(id) {
+    const client = orgState.clients.find(c => c.id === id);
+    if (!client) return;
+    const name = prompt('Novo nome:', client.name);
+    if (!name || !name.trim()) return;
+    client.name = name.trim();
+    orgSave();
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgNumbers();
+}
+
+function orgDeleteClient(id) {
+    const client = orgState.clients.find(c => c.id === id);
+    if (!client) return;
+    if (!confirm(`Excluir "${client.name}" e todas as suas pastas?`)) return;
+    orgState.clients = orgState.clients.filter(c => c.id !== id);
+    if (orgState.selectedClientId === id) {
+        orgState.selectedClientId = null;
+        orgState.selectedFolderId = null;
+    }
+    orgSave();
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgNumbers();
+}
+
+function orgAddFolder() {
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    if (!client) return;
+    const name = prompt('Nome da pasta:');
+    if (!name || !name.trim()) return;
+    if (!client.folders) client.folders = [];
+    client.folders.push({ id: orgGenId(), name: name.trim(), numbers: [] });
+    orgSave();
+    renderOrgClients();
+    renderOrgFolders();
+}
+
+function orgSelectFolder(id) {
+    orgState.selectedFolderId = id;
+    renderOrgFolders();
+    renderOrgNumbers();
+}
+
+function orgRenameFolder(id) {
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    if (!client) return;
+    const folder = (client.folders || []).find(f => f.id === id);
+    if (!folder) return;
+    const name = prompt('Novo nome:', folder.name);
+    if (!name || !name.trim()) return;
+    folder.name = name.trim();
+    orgSave();
+    renderOrgFolders();
+    renderOrgNumbers();
+}
+
+function orgDeleteFolder(id) {
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    if (!client) return;
+    const folder = (client.folders || []).find(f => f.id === id);
+    if (!folder) return;
+    if (!confirm(`Excluir pasta "${folder.name}" com ${(folder.numbers || []).length} números?`)) return;
+    client.folders = client.folders.filter(f => f.id !== id);
+    if (orgState.selectedFolderId === id) orgState.selectedFolderId = null;
+    orgSave();
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgNumbers();
+}
+
+function orgNormalizeNumbers(text) {
+    if (!text) return [];
+    const lines = text.split(/[\n,;\s]+/).map(l => l.trim()).filter(l => l);
+    const out = [];
+    for (const line of lines) {
+        const digits = line.replace(/\D/g, '');
+        if (digits.length >= 8) out.push(digits);
+    }
+    return out;
+}
+
+function orgOnNumbersInput(text) {
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    const folder = client ? (client.folders || []).find(f => f.id === orgState.selectedFolderId) : null;
+    if (!folder) return;
+    folder.numbers = orgNormalizeNumbers(text);
+    orgSave();
+    const countEl = document.getElementById('org-num-count');
+    if (countEl) countEl.textContent = folder.numbers.length;
+    renderOrgClients();
+    renderOrgFolders();
+}
+
+function orgSortNumbers() {
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    const folder = client ? (client.folders || []).find(f => f.id === orgState.selectedFolderId) : null;
+    if (!folder) return;
+    folder.numbers = [...(folder.numbers || [])].sort();
+    orgSave();
+    renderOrgNumbers();
+    showToast('Números ordenados', 'success');
+}
+
+function orgDedupeNumbers() {
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    const folder = client ? (client.folders || []).find(f => f.id === orgState.selectedFolderId) : null;
+    if (!folder) return;
+    const before = (folder.numbers || []).length;
+    folder.numbers = [...new Set(folder.numbers || [])];
+    const removed = before - folder.numbers.length;
+    orgSave();
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgNumbers();
+    showToast(removed > 0 ? `${removed} duplicados removidos` : 'Nenhum duplicado', 'success');
+}
+
+function orgCopyNumbers() {
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    const folder = client ? (client.folders || []).find(f => f.id === orgState.selectedFolderId) : null;
+    if (!folder) return;
+    const text = (folder.numbers || []).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        showToast(`${folder.numbers.length} números copiados`, 'success');
+    }).catch(() => showToast('Erro ao copiar', 'error'));
+}
+
+function exportOrganizeAll() {
+    const data = JSON.stringify({ clients: orgState.clients }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `organize_numeros_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exportado!', 'success');
+}
+
+function importOrganizeJSON() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const data = JSON.parse(evt.target.result);
+                if (!data.clients || !Array.isArray(data.clients)) throw new Error('Formato inválido');
+                if (!confirm(`Importar ${data.clients.length} clientes? (Substitui os atuais)`)) return;
+                orgState.clients = data.clients;
+                orgState.selectedClientId = null;
+                orgState.selectedFolderId = null;
+                orgSave();
+                renderOrgClients();
+                renderOrgFolders();
+                renderOrgNumbers();
+                showToast('Importado!', 'success');
+            } catch (err) {
+                showToast('Erro: ' + err.message, 'error');
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
 }
 
 // ==================== LISTA TAB ====================

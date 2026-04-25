@@ -140,6 +140,7 @@
             <div class="tab" onclick="switchTab('aquecidos')">Chips Aquecidos</div>
             <div class="tab" onclick="switchTab('groupadd')">Adicionar aos Grupos <span class="ga-badge" id="ga-badge" style="display:none">0</span></div>
             <div class="tab" onclick="switchTab('adminmanage')">Grupos</div>
+            <div class="tab" onclick="switchTab('organize')">Organizar Números</div>
         </div>
 
         <!-- TAB: CHIPS -->
@@ -697,6 +698,54 @@
 
             <!-- STEP 8: History -->
             <div id="am-history" class="ga-history" style="display:none"></div>
+        </div>
+
+        <!-- TAB: ORGANIZAR NÚMEROS -->
+        <div id="tab-organize" class="tab-content">
+            <div class="section-header">
+                <h2>📒 Organizar Números</h2>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-outline btn-sm" onclick="exportOrganizeAll()">📥 Exportar Tudo</button>
+                    <button class="btn btn-outline btn-sm" onclick="importOrganizeJSON()">📤 Importar</button>
+                </div>
+            </div>
+
+            <div class="org-layout">
+                <!-- COLUNA 1: CLIENTES -->
+                <div class="org-panel org-clients">
+                    <div class="org-panel-header">
+                        <span>Clientes</span>
+                        <button class="btn btn-primary btn-xs" onclick="orgAddClient()">+ Novo</button>
+                    </div>
+                    <div id="org-clients-list" class="org-list"></div>
+                </div>
+
+                <!-- COLUNA 2: PASTAS -->
+                <div class="org-panel org-folders">
+                    <div class="org-panel-header">
+                        <span id="org-folders-title">Pastas</span>
+                        <button class="btn btn-primary btn-xs" onclick="orgAddFolder()" id="org-add-folder-btn" disabled>+ Nova Pasta</button>
+                    </div>
+                    <div id="org-folders-list" class="org-list">
+                        <div class="org-empty">Selecione um cliente</div>
+                    </div>
+                </div>
+
+                <!-- COLUNA 3: NÚMEROS -->
+                <div class="org-panel org-numbers">
+                    <div class="org-panel-header">
+                        <span id="org-numbers-title">Números</span>
+                        <div style="display:flex;gap:6px">
+                            <button class="btn btn-outline btn-xs" onclick="orgSortNumbers()" id="org-sort-btn" disabled>🔤 Ordenar</button>
+                            <button class="btn btn-outline btn-xs" onclick="orgDedupeNumbers()" id="org-dedupe-btn" disabled>✨ Limpar dupes</button>
+                            <button class="btn btn-outline btn-xs" onclick="orgCopyNumbers()" id="org-copy-btn" disabled>📋 Copiar</button>
+                        </div>
+                    </div>
+                    <div id="org-numbers-area" class="org-numbers-area">
+                        <div class="org-empty">Selecione uma pasta</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- TAB: LISTA -->
