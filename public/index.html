@@ -710,12 +710,63 @@
                 </div>
             </div>
 
+            <!-- PAINEL: ADICIONAR EM MASSA -->
+            <div class="org-bulk-panel">
+                <div class="org-bulk-header">
+                    <span class="org-bulk-title">⚡ Adicionar em Massa</span>
+                    <small class="org-bulk-hint">Cole os números abaixo, escolha cliente e pasta (ou crie novos), e clique em "Adicionar".</small>
+                </div>
+                <div class="org-bulk-body">
+                    <div class="org-bulk-left">
+                        <label class="org-label">Números (1 por linha, vírgula ou espaço)</label>
+                        <textarea id="org-bulk-numbers" class="org-numbers-textarea" rows="6"
+                            placeholder="5511999999999&#10;5511888888888&#10;5511777777777"></textarea>
+                        <div class="org-bulk-counter">
+                            <span id="org-bulk-count">0</span> números detectados
+                        </div>
+                    </div>
+                    <div class="org-bulk-right">
+                        <label class="org-label">Cliente</label>
+                        <div class="org-input-row">
+                            <select id="org-bulk-client" class="org-select" onchange="orgBulkClientChange()"></select>
+                            <button class="btn btn-outline btn-xs" onclick="orgToggleNewClient()" type="button">+ Novo</button>
+                        </div>
+                        <div id="org-new-client-row" class="org-input-row" style="display:none;margin-top:6px">
+                            <input type="text" id="org-new-client-input" class="org-input" placeholder="Nome do cliente"
+                                onkeydown="if(event.key==='Enter')orgCreateClientInline()">
+                            <button class="btn btn-primary btn-xs" onclick="orgCreateClientInline()" type="button">Criar</button>
+                        </div>
+
+                        <label class="org-label" style="margin-top:12px">Pasta</label>
+                        <div class="org-input-row">
+                            <select id="org-bulk-folder" class="org-select"></select>
+                            <button class="btn btn-outline btn-xs" onclick="orgToggleNewFolder()" type="button">+ Nova</button>
+                        </div>
+                        <div id="org-new-folder-row" class="org-input-row" style="display:none;margin-top:6px">
+                            <input type="text" id="org-new-folder-input" class="org-input" placeholder="Nome da pasta"
+                                onkeydown="if(event.key==='Enter')orgCreateFolderInline()">
+                            <button class="btn btn-primary btn-xs" onclick="orgCreateFolderInline()" type="button">Criar</button>
+                        </div>
+
+                        <button class="btn btn-success btn-block" style="margin-top:16px" onclick="orgBulkAddSubmit()" type="button">
+                            ➕ Adicionar Números à Pasta
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div class="org-layout">
                 <!-- COLUNA 1: CLIENTES -->
                 <div class="org-panel org-clients">
                     <div class="org-panel-header">
                         <span>Clientes</span>
-                        <button class="btn btn-primary btn-xs" onclick="orgAddClient()">+ Novo</button>
+                        <button class="btn btn-primary btn-xs" onclick="orgToggleAddClientPanel()" type="button">+ Novo</button>
+                    </div>
+                    <div id="org-add-client-panel" class="org-add-row" style="display:none">
+                        <input type="text" id="org-client-name-input" class="org-input" placeholder="Nome do cliente"
+                            onkeydown="if(event.key==='Enter')orgConfirmAddClient();if(event.key==='Escape')orgToggleAddClientPanel()">
+                        <button class="btn btn-success btn-xs" onclick="orgConfirmAddClient()" type="button">OK</button>
+                        <button class="btn btn-outline btn-xs" onclick="orgToggleAddClientPanel()" type="button">✕</button>
                     </div>
                     <div id="org-clients-list" class="org-list"></div>
                 </div>
@@ -724,7 +775,13 @@
                 <div class="org-panel org-folders">
                     <div class="org-panel-header">
                         <span id="org-folders-title">Pastas</span>
-                        <button class="btn btn-primary btn-xs" onclick="orgAddFolder()" id="org-add-folder-btn" disabled>+ Nova Pasta</button>
+                        <button class="btn btn-primary btn-xs" onclick="orgToggleAddFolderPanel()" id="org-add-folder-btn" disabled type="button">+ Nova Pasta</button>
+                    </div>
+                    <div id="org-add-folder-panel" class="org-add-row" style="display:none">
+                        <input type="text" id="org-folder-name-input" class="org-input" placeholder="Nome da pasta"
+                            onkeydown="if(event.key==='Enter')orgConfirmAddFolder();if(event.key==='Escape')orgToggleAddFolderPanel()">
+                        <button class="btn btn-success btn-xs" onclick="orgConfirmAddFolder()" type="button">OK</button>
+                        <button class="btn btn-outline btn-xs" onclick="orgToggleAddFolderPanel()" type="button">✕</button>
                     </div>
                     <div id="org-folders-list" class="org-list">
                         <div class="org-empty">Selecione um cliente</div>
@@ -736,9 +793,9 @@
                     <div class="org-panel-header">
                         <span id="org-numbers-title">Números</span>
                         <div style="display:flex;gap:6px">
-                            <button class="btn btn-outline btn-xs" onclick="orgSortNumbers()" id="org-sort-btn" disabled>🔤 Ordenar</button>
-                            <button class="btn btn-outline btn-xs" onclick="orgDedupeNumbers()" id="org-dedupe-btn" disabled>✨ Limpar dupes</button>
-                            <button class="btn btn-outline btn-xs" onclick="orgCopyNumbers()" id="org-copy-btn" disabled>📋 Copiar</button>
+                            <button class="btn btn-outline btn-xs" onclick="orgSortNumbers()" id="org-sort-btn" disabled type="button">🔤 Ordenar</button>
+                            <button class="btn btn-outline btn-xs" onclick="orgDedupeNumbers()" id="org-dedupe-btn" disabled type="button">✨ Dupes</button>
+                            <button class="btn btn-outline btn-xs" onclick="orgCopyNumbers()" id="org-copy-btn" disabled type="button">📋 Copiar</button>
                         </div>
                     </div>
                     <div id="org-numbers-area" class="org-numbers-area">

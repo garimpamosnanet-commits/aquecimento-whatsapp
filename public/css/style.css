@@ -3966,3 +3966,94 @@ body::before {
         min-height: 200px;
     }
 }
+
+/* ==================== ORGANIZAR — BULK PANEL ==================== */
+.org-bulk-panel {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+.org-bulk-header {
+    padding: 14px 18px;
+    background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(168,85,247,0.04));
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.org-bulk-title {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-primary);
+}
+.org-bulk-hint {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+.org-bulk-body {
+    padding: 18px;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+}
+.org-bulk-left, .org-bulk-right {
+    display: flex;
+    flex-direction: column;
+}
+.org-bulk-counter {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.org-bulk-counter span {
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 14px;
+}
+.org-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.org-input-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.org-input, .org-select {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    min-width: 0;
+}
+.org-input:focus, .org-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+.btn-block { width: 100%; }
+
+.org-add-row {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+@media (max-width: 900px) {
+    .org-bulk-body { grid-template-columns: 1fr; }
+}

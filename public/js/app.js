@@ -1266,6 +1266,188 @@ function loadOrganizeTab() {
     renderOrgClients();
     renderOrgFolders();
     renderOrgNumbers();
+    renderOrgBulkSelectors();
+    const ta = document.getElementById('org-bulk-numbers');
+    if (ta && !ta._bound) {
+        ta.addEventListener('input', () => {
+            const c = orgNormalizeNumbers(ta.value).length;
+            const el = document.getElementById('org-bulk-count');
+            if (el) el.textContent = c;
+        });
+        ta._bound = true;
+    }
+}
+
+function renderOrgBulkSelectors() {
+    const clientSel = document.getElementById('org-bulk-client');
+    const folderSel = document.getElementById('org-bulk-folder');
+    if (!clientSel || !folderSel) return;
+
+    const prevClient = clientSel.value;
+    const prevFolder = folderSel.value;
+
+    clientSel.innerHTML = '<option value="">— Selecione cliente —</option>' +
+        orgState.clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    if (prevClient) clientSel.value = prevClient;
+
+    const selectedClient = orgState.clients.find(c => c.id === clientSel.value);
+    if (selectedClient && (selectedClient.folders || []).length > 0) {
+        folderSel.innerHTML = '<option value="">— Selecione pasta —</option>' +
+            selectedClient.folders.map(f => `<option value="${f.id}">${escapeHtml(f.name)} (${(f.numbers||[]).length})</option>`).join('');
+        folderSel.disabled = false;
+        if (prevFolder) folderSel.value = prevFolder;
+    } else {
+        folderSel.innerHTML = '<option value="">— Crie uma pasta —</option>';
+        folderSel.disabled = !selectedClient;
+    }
+}
+
+function orgBulkClientChange() {
+    renderOrgBulkSelectors();
+}
+
+function orgToggleNewClient() {
+    const row = document.getElementById('org-new-client-row');
+    if (!row) return;
+    const showing = row.style.display !== 'none';
+    row.style.display = showing ? 'none' : 'flex';
+    if (!showing) setTimeout(() => document.getElementById('org-new-client-input')?.focus(), 50);
+}
+
+function orgToggleNewFolder() {
+    if (!document.getElementById('org-bulk-client').value) {
+        showToast('Selecione um cliente primeiro', 'error');
+        return;
+    }
+    const row = document.getElementById('org-new-folder-row');
+    if (!row) return;
+    const showing = row.style.display !== 'none';
+    row.style.display = showing ? 'none' : 'flex';
+    if (!showing) setTimeout(() => document.getElementById('org-new-folder-input')?.focus(), 50);
+}
+
+function orgCreateClientInline() {
+    const input = document.getElementById('org-new-client-input');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) { showToast('Digite um nome', 'error'); return; }
+    const client = { id: orgGenId(), name, folders: [] };
+    orgState.clients.push(client);
+    orgSave();
+    input.value = '';
+    document.getElementById('org-new-client-row').style.display = 'none';
+    renderOrgClients();
+    renderOrgBulkSelectors();
+    document.getElementById('org-bulk-client').value = client.id;
+    renderOrgBulkSelectors();
+    showToast(`Cliente "${name}" criado`, 'success');
+}
+
+function orgCreateFolderInline() {
+    const clientId = document.getElementById('org-bulk-client').value;
+    if (!clientId) { showToast('Selecione um cliente primeiro', 'error'); return; }
+    const client = orgState.clients.find(c => c.id === clientId);
+    if (!client) return;
+    const input = document.getElementById('org-new-folder-input');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) { showToast('Digite um nome', 'error'); return; }
+    const folder = { id: orgGenId(), name, numbers: [] };
+    if (!client.folders) client.folders = [];
+    client.folders.push(folder);
+    orgSave();
+    input.value = '';
+    document.getElementById('org-new-folder-row').style.display = 'none';
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgBulkSelectors();
+    document.getElementById('org-bulk-folder').value = folder.id;
+    showToast(`Pasta "${name}" criada`, 'success');
+}
+
+function orgBulkAddSubmit() {
+    const clientId = document.getElementById('org-bulk-client').value;
+    const folderId = document.getElementById('org-bulk-folder').value;
+    const numbersText = document.getElementById('org-bulk-numbers').value;
+
+    if (!clientId) { showToast('Selecione ou crie um cliente', 'error'); return; }
+    if (!folderId) { showToast('Selecione ou crie uma pasta', 'error'); return; }
+
+    const numbers = orgNormalizeNumbers(numbersText);
+    if (numbers.length === 0) { showToast('Nenhum número válido', 'error'); return; }
+
+    const client = orgState.clients.find(c => c.id === clientId);
+    const folder = (client?.folders || []).find(f => f.id === folderId);
+    if (!folder) { showToast('Pasta não encontrada', 'error'); return; }
+
+    const before = (folder.numbers || []).length;
+    const merged = [...new Set([...(folder.numbers || []), ...numbers])];
+    folder.numbers = merged;
+    const added = merged.length - before;
+    orgSave();
+
+    document.getElementById('org-bulk-numbers').value = '';
+    document.getElementById('org-bulk-count').textContent = '0';
+
+    orgState.selectedClientId = clientId;
+    orgState.selectedFolderId = folderId;
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgNumbers();
+    renderOrgBulkSelectors();
+
+    const dupes = numbers.length - added;
+    showToast(`${added} adicionados a "${folder.name}"${dupes > 0 ? ` (${dupes} duplicados ignorados)` : ''}`, 'success');
+}
+
+// Inline panels for adding clients/folders in the columns
+function orgToggleAddClientPanel() {
+    const panel = document.getElementById('org-add-client-panel');
+    if (!panel) return;
+    const showing = panel.style.display !== 'none';
+    panel.style.display = showing ? 'none' : 'flex';
+    if (!showing) setTimeout(() => document.getElementById('org-client-name-input')?.focus(), 50);
+}
+
+function orgConfirmAddClient() {
+    const input = document.getElementById('org-client-name-input');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) { showToast('Digite um nome', 'error'); return; }
+    orgState.clients.push({ id: orgGenId(), name, folders: [] });
+    orgSave();
+    input.value = '';
+    document.getElementById('org-add-client-panel').style.display = 'none';
+    renderOrgClients();
+    renderOrgBulkSelectors();
+    showToast(`Cliente "${name}" criado`, 'success');
+}
+
+function orgToggleAddFolderPanel() {
+    if (!orgState.selectedClientId) { showToast('Selecione um cliente primeiro', 'error'); return; }
+    const panel = document.getElementById('org-add-folder-panel');
+    if (!panel) return;
+    const showing = panel.style.display !== 'none';
+    panel.style.display = showing ? 'none' : 'flex';
+    if (!showing) setTimeout(() => document.getElementById('org-folder-name-input')?.focus(), 50);
+}
+
+function orgConfirmAddFolder() {
+    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+    if (!client) return;
+    const input = document.getElementById('org-folder-name-input');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) { showToast('Digite um nome', 'error'); return; }
+    if (!client.folders) client.folders = [];
+    client.folders.push({ id: orgGenId(), name, numbers: [] });
+    orgSave();
+    input.value = '';
+    document.getElementById('org-add-folder-panel').style.display = 'none';
+    renderOrgClients();
+    renderOrgFolders();
+    renderOrgBulkSelectors();
+    showToast(`Pasta "${name}" criada`, 'success');
 }
 
 function renderOrgClients() {
