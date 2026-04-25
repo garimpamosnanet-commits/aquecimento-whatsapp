@@ -705,10 +705,13 @@
             <div class="section-header">
                 <h2>📒 Organizar Números</h2>
                 <div style="display:flex;gap:8px">
-                    <button class="btn btn-outline btn-sm" onclick="exportOrganizeAll()">📥 Exportar Tudo</button>
+                    <button class="btn btn-outline btn-sm" onclick="exportOrganizeAll()">📥 Exportar</button>
                     <button class="btn btn-outline btn-sm" onclick="importOrganizeJSON()">📤 Importar</button>
                 </div>
             </div>
+
+            <!-- STATS BAR -->
+            <div class="org-stats-bar" id="org-stats"></div>
 
             <!-- PAINEL: ADICIONAR EM MASSA -->
             <div class="org-bulk-panel">
@@ -768,6 +771,9 @@
                         <button class="btn btn-success btn-xs" onclick="orgConfirmAddClient()" type="button">OK</button>
                         <button class="btn btn-outline btn-xs" onclick="orgToggleAddClientPanel()" type="button">✕</button>
                     </div>
+                    <div class="org-search-row">
+                        <input type="text" id="org-clients-search" class="org-search-input" placeholder="🔍 Buscar cliente..." oninput="renderOrgClients()">
+                    </div>
                     <div id="org-clients-list" class="org-list"></div>
                 </div>
 
@@ -782,6 +788,9 @@
                             onkeydown="if(event.key==='Enter')orgConfirmAddFolder();if(event.key==='Escape')orgToggleAddFolderPanel()">
                         <button class="btn btn-success btn-xs" onclick="orgConfirmAddFolder()" type="button">OK</button>
                         <button class="btn btn-outline btn-xs" onclick="orgToggleAddFolderPanel()" type="button">✕</button>
+                    </div>
+                    <div class="org-search-row">
+                        <input type="text" id="org-folders-search" class="org-search-input" placeholder="🔍 Buscar pasta..." oninput="renderOrgFolders()">
                     </div>
                     <div id="org-folders-list" class="org-list">
                         <div class="org-empty">Selecione um cliente</div>

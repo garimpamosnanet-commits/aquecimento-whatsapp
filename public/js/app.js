@@ -1453,16 +1453,29 @@ function orgConfirmAddFolder() {
 function renderOrgClients() {
     const container = document.getElementById('org-clients-list');
     if (!container) return;
+
+    // Update stats
+    orgUpdateStats();
+
+    const filter = (document.getElementById('org-clients-search')?.value || '').toLowerCase();
+    const filtered = orgState.clients.filter(c => !filter || c.name.toLowerCase().includes(filter));
+
     if (orgState.clients.length === 0) {
-        container.innerHTML = '<div class="org-empty">Nenhum cliente cadastrado.<br><small>Clique em "+ Novo"</small></div>';
+        container.innerHTML = '<div class="org-empty">Nenhum cliente cadastrado.<br><small>Clique em "+ Novo" pra começar</small></div>';
         return;
     }
-    container.innerHTML = orgState.clients.map(c => {
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="org-empty">Nenhum resultado para o filtro</div>';
+        return;
+    }
+    container.innerHTML = filtered.map(c => {
         const totalNumbers = (c.folders || []).reduce((sum, f) => sum + (f.numbers || []).length, 0);
+        const folderCount = (c.folders || []).length;
         const isActive = orgState.selectedClientId === c.id;
         return `
-            <div class="org-item ${isActive ? 'active' : ''}" onclick="orgSelectClient('${c.id}')">
-                <span class="org-item-name">${escapeHtml(c.name)}</span>
+            <div class="org-item ${isActive ? 'active' : ''}" data-client-id="${c.id}" onclick="orgSelectClient('${c.id}')">
+                <span class="org-item-name" ondblclick="event.stopPropagation();orgRenameClient('${c.id}')" title="Duplo-clique pra renomear">${escapeHtml(c.name)}</span>
+                <span class="org-item-meta">${folderCount} pastas</span>
                 <span class="org-item-count">${totalNumbers}</span>
                 <div class="org-item-actions">
                     <button class="org-item-btn" onclick="event.stopPropagation();orgRenameClient('${c.id}')" title="Renomear">✏️</button>
@@ -1471,6 +1484,22 @@ function renderOrgClients() {
             </div>
         `;
     }).join('');
+}
+
+function orgUpdateStats() {
+    const el = document.getElementById('org-stats');
+    if (!el) return;
+    const clientCount = orgState.clients.length;
+    let folderCount = 0, numberCount = 0;
+    for (const c of orgState.clients) {
+        folderCount += (c.folders || []).length;
+        for (const f of (c.folders || [])) numberCount += (f.numbers || []).length;
+    }
+    el.innerHTML = `
+        <div class="org-stat"><span class="org-stat-num">${clientCount}</span><span class="org-stat-label">Clientes</span></div>
+        <div class="org-stat"><span class="org-stat-num">${folderCount}</span><span class="org-stat-label">Pastas</span></div>
+        <div class="org-stat"><span class="org-stat-num">${numberCount}</span><span class="org-stat-label">Números</span></div>
+    `;
 }
 
 function renderOrgFolders() {
@@ -1491,15 +1520,22 @@ function renderOrgFolders() {
     if (addBtn) addBtn.disabled = false;
 
     const folders = client.folders || [];
+    const filter = (document.getElementById('org-folders-search')?.value || '').toLowerCase();
+    const filtered = folders.filter(f => !filter || f.name.toLowerCase().includes(filter));
+
     if (folders.length === 0) {
         container.innerHTML = '<div class="org-empty">Nenhuma pasta.<br><small>Clique em "+ Nova Pasta"</small></div>';
         return;
     }
-    container.innerHTML = folders.map(f => {
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="org-empty">Nenhum resultado</div>';
+        return;
+    }
+    container.innerHTML = filtered.map(f => {
         const isActive = orgState.selectedFolderId === f.id;
         return `
-            <div class="org-item ${isActive ? 'active' : ''}" onclick="orgSelectFolder('${f.id}')">
-                <span class="org-item-name">${escapeHtml(f.name)}</span>
+            <div class="org-item ${isActive ? 'active' : ''}" data-folder-id="${f.id}" onclick="orgSelectFolder('${f.id}')">
+                <span class="org-item-name" ondblclick="event.stopPropagation();orgRenameFolder('${f.id}')" title="Duplo-clique pra renomear">${escapeHtml(f.name)}</span>
                 <span class="org-item-count">${(f.numbers || []).length}</span>
                 <div class="org-item-actions">
                     <button class="org-item-btn" onclick="event.stopPropagation();orgRenameFolder('${f.id}')" title="Renomear">✏️</button>
@@ -1565,15 +1601,53 @@ function orgSelectClient(id) {
 }
 
 function orgRenameClient(id) {
-    const client = orgState.clients.find(c => c.id === id);
-    if (!client) return;
-    const name = prompt('Novo nome:', client.name);
-    if (!name || !name.trim()) return;
-    client.name = name.trim();
+    orgStartInlineRename('client', id);
+}
+
+function orgRenameFolder(id) {
+    orgStartInlineRename('folder', id);
+}
+
+// Inline rename: replace label with input
+function orgStartInlineRename(type, id) {
+    const itemEl = document.querySelector(`.org-item[data-${type}-id="${id}"]`);
+    if (!itemEl) {
+        // fallback if data attr not present yet — re-render and try
+        if (type === 'client') renderOrgClients(); else renderOrgFolders();
+        setTimeout(() => orgStartInlineRename(type, id), 50);
+        return;
+    }
+    const nameEl = itemEl.querySelector('.org-item-name');
+    if (!nameEl) return;
+    const currentName = nameEl.textContent;
+    nameEl.outerHTML = `<input type="text" class="org-inline-edit" value="${escapeHtml(currentName)}"
+        onblur="orgFinishInlineRename('${type}','${id}',this.value)"
+        onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}">`;
+    const input = itemEl.querySelector('.org-inline-edit');
+    if (input) {
+        input.focus();
+        input.select();
+    }
+}
+
+function orgFinishInlineRename(type, id, value) {
+    const input = document.querySelector('.org-inline-edit');
+    const cancelled = input && input.dataset.cancel === '1';
+    const name = (value || '').trim();
+
+    if (type === 'client') {
+        const client = orgState.clients.find(c => c.id === id);
+        if (client && !cancelled && name) client.name = name;
+    } else if (type === 'folder') {
+        const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
+        const folder = client ? (client.folders || []).find(f => f.id === id) : null;
+        if (folder && !cancelled && name) folder.name = name;
+    }
     orgSave();
     renderOrgClients();
     renderOrgFolders();
     renderOrgNumbers();
+    renderOrgBulkSelectors();
 }
 
 function orgDeleteClient(id) {
@@ -1609,18 +1683,7 @@ function orgSelectFolder(id) {
     renderOrgNumbers();
 }
 
-function orgRenameFolder(id) {
-    const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
-    if (!client) return;
-    const folder = (client.folders || []).find(f => f.id === id);
-    if (!folder) return;
-    const name = prompt('Novo nome:', folder.name);
-    if (!name || !name.trim()) return;
-    folder.name = name.trim();
-    orgSave();
-    renderOrgFolders();
-    renderOrgNumbers();
-}
+// orgRenameFolder is now defined above (uses inline edit)
 
 function orgDeleteFolder(id) {
     const client = orgState.clients.find(c => c.id === orgState.selectedClientId);
