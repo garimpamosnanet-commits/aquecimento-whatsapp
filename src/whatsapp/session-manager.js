@@ -512,7 +512,13 @@ class SessionManager {
                         this.connect(sessionId).catch(e => debugLog(`[SM] QR reconnect fail: ${e.message}`));
                     }, 3000);
                     this.reconnectTimers.set(sessionId, timer);
-                } else if (statusCode !== reason.connectionClosed) {
+                } else {
+                    // BUGFIX 2026-05-03: previously this branch had `statusCode !== reason.connectionClosed`,
+                    // which made statusCode=428 (WhatsApp closed the connection) a NO-OP — the session stayed
+                    // in `this.sessions` map with a dead socket but `sock.user` still set. Subsequent calls to
+                    // `groupFetchAllParticipating`/etc returned "Connection Closed" while the dashboard still
+                    // showed "connected". Now we treat connectionClosed like any other recoverable disconnect:
+                    // delete the dead session and schedule a reconnect with backoff.
                     const errorMsg = lastDisconnect?.error?.message || '';
                     const isProxyError = errorMsg.includes('proxy rejected') || errorMsg.includes('Socks5') || errorMsg.includes('SOCKS');
                     const attempts = (this.reconnectAttempts.get(sessionId) || 0) + 1;
@@ -548,6 +554,13 @@ class SessionManager {
                         this.sessions.delete(sessionId);
                         this.reconnectAttempts.delete(sessionId);
                     } else {
+                        // BUGFIX 2026-05-03: clear dead session BEFORE scheduling reconnect.
+                        // Otherwise isConnected()/ensureHealthySocket return true on the stale
+                        // entry and routes (e.g. /admin-instances/:id/groups) hit "Connection
+                        // Closed" mid-query instead of failing fast with "nao esta conectada".
+                        db.updateChipStatus(chip.id, 'disconnected');
+                        this.sessions.delete(sessionId);
+
                         // Exponential backoff: 5s, 10s, 20s, 40s... max 5min
                         const baseDelay = 5000 * Math.pow(2, Math.min(attempts - 1, 6));
                         const delay = Math.min(baseDelay + Math.random() * 3000, 300000);
